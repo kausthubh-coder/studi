@@ -2,89 +2,128 @@
 
 Studi is an **agentic tutor** built with Next.js + Convex.
 
-The goal is to help learners master hard topics through active practice, personalized feedback, and artifact-based proof of skill (projects, labs, threads, code, and whiteboard work).
+The goal: make learning intuitive, interactive, and personalized so that by the end of a lesson you feel like you could have invented the concept yourself. Learning should never be passive.
 
-## Why Studi
+## The Bet
 
-Traditional learning paths are often passive and slow. Studi bets that AI tutors plus interactive environments can deliver:
+College is increasingly obsolete — the internet already gives you free knowledge. What it can't do is teach you directly. AI can. Over time, hiring will shift toward demonstrated skill rather than credentials. Studi is positioning to lead that shift: as learners learn, we generate artifacts and track real skills. Companies can hire directly through the platform.
 
-- Intuition-first teaching
-- Active learning loops (do, get feedback, improve)
-- Personalized pacing and support
-- Real, shareable outputs that demonstrate skill
+## Philosophy
 
-## Product Direction (v1)
+- **Intuition-first** — never just give the formula. Teach the *why* until the concept feels inevitable.
+- **Active learning** — instant feedback, early wins, and small victories at every step. No passive consumption.
+- **Personalized** — pacing, focus areas, and teaching style adapt to each learner.
+- **Meta-learning** — we study and implement what the research says about how people learn best.
 
-Core experience:
+## Core Experience
 
-- Topic-based chat threads
-- Two behaviors: `Learn` and `Review`
-- Agent controls via a plus menu
-- Milestone planning, checkpoints, and targeted remediation
+Chat is the primary interface. There is no mode picker upfront — you just talk.
 
-Tools orchestrated inside chat:
+A **`+` icon** opens the agent control panel, where you can explicitly trigger Learn, Review, and other actions.
 
-- Quizzes
-- Code snippets and code tests
-- Interactive components (HTML/CSS/JS)
-- Graphing (Desmos-style)
-- Shared whiteboard interactions
-- Linked labs for larger projects
+Additionally, if you type trigger words in the chat input — things like *"learn"*, *"teach me"*, *"step by step"*, or *"review"*, *"go over"*, *"practice"* — the app will prompt you to confirm and launch the appropriate mode automatically.
 
-## Primary Use Cases
+Each thread is scoped to a **specific topic** and a single intent: Learn or Review.
 
-- Learn a topic from scratch (for example: dynamic programming, calculus, React basics)
-- Review for exams/interviews via diagnostics and focus-area drills
-- Build small labs/projects tied to concepts
+### Learn mode
+
+1. Agent creates a **milestone plan** for the topic.
+2. Teaching is intuition-first with small wins baked in throughout.
+3. Major milestones unlock **checkpoints**: quizzes, coding challenges, or labs.
+4. Progress and artifacts are tracked as the learner advances.
+
+### Review mode
+
+1. Agent asks for a syllabus or specific topics to review.
+2. A **diagnostic** is generated to surface weak areas.
+3. Agent teaches and quizzes with heavier focus on areas where the learner scored low.
+
+## Agent Tools
+
+Tools the agent can invoke inside a thread:
+
+| Tool | Description |
+|---|---|
+| **Custom component** | Generate an interactive HTML/CSS/JS component to visualize or simulate a concept |
+| **Graphing** | Render 2D and 3D graphs via Desmos |
+| **Code snippet** | Display syntax-highlighted code examples |
+| **Code test** | Present a coding problem with an embedded input box; the learner submits a solution and gets instant feedback with optional hints |
+| **Quiz** | Multiple choice, open-ended, fill-in-the-blank, and more |
+| **Whiteboard** | Shared canvas — the agent can draw on it to explain, or ask the learner to draw and then review their work |
+| **Lab (link-out)** | Launch a full lab space (see below) |
+
+> **Future integrations**: Khan Academy and IXL — surfacing their problems and videos directly inside threads.
+
+## Labs
+
+Labs are standalone spaces linked from a thread. They're used for larger, hands-on projects that need their own environment.
+
+**Example flow** — Learning React:
+1. Cover fundamentals in the thread (components, props, state).
+2. Milestone checkpoint → launch a lab: *build a simple to-do app*.
+3. Return to the thread, continue with more concepts.
+4. Another milestone → back to the lab to extend the project.
+5. Repeat until the topic is complete.
+
+Labs give learners real artifacts — proof of what they built, not just what they watched.
 
 ## Repo Structure
 
 - `app/`, `components/`, `convex/`: active Studi app code
-- `examples/shru/`: older Studi version (reference)
+- `examples/shru/`: older Studi version (reference only)
 - `examples/agent-tldraw/`: tldraw agent whiteboard example
 - `examples/chat-tldraw/`: tldraw chat + whiteboard example
 
 ## Tech Stack
 
 - [Next.js](https://nextjs.org/) + React
-- [Convex](https://convex.dev/) for backend/database/functions
+- [Convex](https://convex.dev/) for backend / database / real-time functions
 - [Clerk](https://clerk.com/) for authentication
-- TypeScript + ESLint
+- TypeScript + ESLint + Tailwind CSS
 
 ## Getting Started
+
+0. Configure environment variables in `.env.local`:
+
+```bash
+OPENROUTER_API_KEY=...
+OPENROUTER_MODEL=anthropic/claude-sonnet-4.6
+```
 
 1. Install dependencies:
 
 ```bash
-npm install
+bun install
 ```
 
 2. Start local development (frontend + Convex):
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 3. Open the app:
 
-```text
+```
 http://localhost:3000
 ```
 
-## Current Scope Notes
+## Current Scope
 
-In scope right now:
+In scope:
 
+- Chat-first thread UI with `+` agent control panel
+- Trigger-word detection → mode prompt
 - Learn and Review thread flows
-- Milestones, diagnostics, and targeted practice
-- Quiz/code-test/whiteboard/lab orchestration
+- Milestone planning, diagnostics, and targeted practice
+- Quiz / code-test / custom component / graph / whiteboard / lab orchestration
 
 Out of scope for now:
 
 - Employer hiring dashboards
-- Full credential/portfolio system
+- Full credential / portfolio system
 - Complex multi-user collaboration
 
 ## Vision
 
-Studi is building toward a future where learning is interactive, adaptive, and measurable by demonstrated ability, not just credentials.
+A world where learning is interactive, adaptive, and measured by demonstrated ability — not credentials. Studi is the platform that gets you there.
