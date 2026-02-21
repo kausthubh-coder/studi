@@ -7,8 +7,11 @@ export default defineSchema({
     threadId: v.string(),
     title: v.optional(v.string()),
     lastMessageAt: v.optional(v.number()),
+    lastRequestId: v.optional(v.string()),
+    lastPromptMessageId: v.optional(v.string()),
   })
     .index("by_userId", ["userId"])
+    .index("by_userId_and_lastMessageAt", ["userId", "lastMessageAt"])
     .index("by_userId_and_threadId", ["userId", "threadId"]),
 
   attachments: defineTable({

@@ -1,7 +1,12 @@
-import { listUIMessages, syncStreams, vStreamArgs } from "@convex-dev/agent";
+import {
+  listUIMessages,
+  saveMessage,
+  syncStreams,
+  vStreamArgs,
+} from "@convex-dev/agent";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import {
   internalMutation,
   internalQuery,
@@ -31,6 +36,15 @@ const fileAttachmentForModelValidator = v.object({
   filename: v.optional(v.string()),
 });
 
+const queuedSendResultValidator = v.object({
+  promptMessageId: v.string(),
+  deduped: v.boolean(),
+});
+
+function truncateTitle(value: string): string {
+  return value.length > 60 ? `${value.slice(0, 60)}...` : value;
+}
+
 export const listThreads = query({
   args: {},
   returns: v.array(threadSummaryValidator),
@@ -40,9 +54,11 @@ export const listThreads = query({
 
     const threads = await ctx.db
       .query("userThreads")
-      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+      .withIndex("by_userId_and_lastMessageAt", (q) =>
+        q.eq("userId", identity.subject),
+      )
       .order("desc")
-      .collect();
+      .take(100);
 
     return threads.map((thread) => ({
       _id: thread._id,
@@ -51,6 +67,46 @@ export const listThreads = query({
       title: thread.title,
       lastMessageAt: thread.lastMessageAt,
     }));
+  },
+});
+
+export const backfillThreadActivityForCurrentUser = mutation({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.object({
+    scanned: v.number(),
+    patched: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const maxItems = Math.max(1, Math.min(args.limit ?? 200, 1000));
+    const threads = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+      .take(maxItems);
+
+    let scanned = 0;
+    let patched = 0;
+
+    for (const thread of threads) {
+      scanned += 1;
+
+      if (typeof thread.lastMessageAt === "number") {
+        continue;
+      }
+
+      await ctx.db.patch(thread._id, {
+        lastMessageAt: thread._creationTime,
+      });
+      patched += 1;
+    }
+
+    return { scanned, patched };
   },
 });
 
@@ -141,6 +197,116 @@ export const saveAttachment = mutation({
   },
 });
 
+export const sendMessage = mutation({
+  args: {
+    threadId: v.string(),
+    prompt: v.optional(v.string()),
+    attachmentIds: v.optional(v.array(v.id("attachments"))),
+    requestId: v.string(),
+  },
+  returns: queuedSendResultValidator,
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const prompt = args.prompt?.trim() ?? "";
+    const attachmentIds = args.attachmentIds ?? [];
+    if (!prompt && attachmentIds.length === 0) {
+      throw new Error("Message cannot be empty");
+    }
+
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", identity.subject).eq("threadId", args.threadId),
+      )
+      .unique();
+
+    if (!ownedThread) {
+      throw new Error("Thread not found");
+    }
+
+    if (
+      ownedThread.lastRequestId === args.requestId &&
+      typeof ownedThread.lastPromptMessageId === "string"
+    ) {
+      return {
+        promptMessageId: ownedThread.lastPromptMessageId,
+        deduped: true,
+      };
+    }
+
+    const attachments = await ctx.runQuery(internal.chat.resolveAttachments, {
+      userId: identity.subject,
+      attachmentIds,
+    });
+
+    const content: Array<
+      | { type: "text"; text: string }
+      | { type: "image"; image: string; mimeType: string }
+      | { type: "file"; data: string; mediaType: string; filename?: string }
+    > = [];
+
+    if (prompt) {
+      content.push({ type: "text", text: prompt });
+    }
+
+    for (const attachment of attachments) {
+      if (attachment.kind === "image") {
+        content.push({
+          type: "image",
+          image: attachment.url,
+          mimeType: attachment.mimeType,
+        });
+      } else {
+        content.push({
+          type: "file",
+          data: attachment.url,
+          mediaType: attachment.mimeType,
+          filename: attachment.filename,
+        });
+      }
+    }
+
+    const now = Date.now();
+    const { messageId } = await saveMessage(ctx, components.agent, {
+      threadId: args.threadId,
+      userId: identity.subject,
+      message: {
+        role: "user",
+        content,
+      },
+    });
+
+    await ctx.db.patch(ownedThread._id, {
+      lastMessageAt: now,
+      title:
+        prompt && (!ownedThread.title || ownedThread.title === "New Thread")
+          ? truncateTitle(prompt)
+          : ownedThread.title,
+      lastRequestId: args.requestId,
+      lastPromptMessageId: messageId,
+    });
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.chatActions.generateAssistantReply,
+      {
+        threadId: args.threadId,
+        userId: identity.subject,
+        promptMessageId: messageId,
+      },
+    );
+
+    return {
+      promptMessageId: messageId,
+      deduped: false,
+    };
+  },
+});
+
 export const createThreadRecord = internalMutation({
   args: {
     userId: v.string(),
@@ -150,11 +316,29 @@ export const createThreadRecord = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        title:
+          !existing.title && typeof args.title === "string"
+            ? args.title
+            : existing.title,
+        lastMessageAt: args.lastMessageAt ?? existing.lastMessageAt,
+      });
+      return null;
+    }
+
     await ctx.db.insert("userThreads", {
       userId: args.userId,
       threadId: args.threadId,
       title: args.title,
-      lastMessageAt: args.lastMessageAt,
+      lastMessageAt: args.lastMessageAt ?? Date.now(),
     });
     return null;
   },

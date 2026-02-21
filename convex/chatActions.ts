@@ -2,8 +2,8 @@
 
 import { v } from "convex/values";
 import type { ActionCtx } from "./_generated/server";
-import { action } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { action, internalAction } from "./_generated/server";
+import { api, internal } from "./_generated/api";
 import { studiAgent } from "./agent";
 
 async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
@@ -43,100 +43,53 @@ export const sendMessage = action({
     threadId: v.string(),
     prompt: v.optional(v.string()),
     attachmentIds: v.optional(v.array(v.id("attachments"))),
+    requestId: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const userId = await requireAuthenticatedUserId(ctx);
-    const prompt = args.prompt?.trim() ?? "";
-    const attachmentIds = args.attachmentIds ?? [];
+    const requestId = args.requestId ?? crypto.randomUUID();
 
-    if (!prompt && attachmentIds.length === 0) {
-      throw new Error("Message cannot be empty");
-    }
+    await ctx.runMutation(api.chat.sendMessage, {
+      threadId: args.threadId,
+      prompt: args.prompt,
+      attachmentIds: args.attachmentIds,
+      requestId,
+    });
 
+    return null;
+  },
+});
+
+export const generateAssistantReply = internalAction({
+  args: {
+    threadId: v.string(),
+    userId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
     await ctx.runQuery(internal.chat.assertThreadOwner, {
-      userId,
+      userId: args.userId,
       threadId: args.threadId,
     });
-
-    const attachments = await ctx.runQuery(internal.chat.resolveAttachments, {
-      userId,
-      attachmentIds,
-    });
-
-    await ctx.runMutation(internal.chat.touchThread, {
-      userId,
-      threadId: args.threadId,
-      lastMessageAt: Date.now(),
-    });
-
-    if (prompt) {
-      const title = prompt.length > 60 ? prompt.slice(0, 60) + "…" : prompt;
-      await ctx.runMutation(internal.chat.updateThreadTitle, {
-        userId,
-        threadId: args.threadId,
-        title,
-      });
-    }
 
     const { thread } = await studiAgent.continueThread(ctx, {
       threadId: args.threadId,
-      userId,
+      userId: args.userId,
     });
 
-    if (attachments.length === 0) {
-      await thread.streamText(
-        { prompt },
-        {
-          saveStreamDeltas: {
-            chunking: "line",
-            throttleMs: 120,
-          },
+    await thread.streamText(
+      { promptMessageId: args.promptMessageId },
+      {
+        saveStreamDeltas: {
+          chunking: "line",
+          throttleMs: 120,
         },
-      );
-    } else {
-      const content: Array<
-        | { type: "text"; text: string }
-        | { type: "image"; image: string; mimeType: string }
-        | { type: "file"; data: string; mediaType: string; filename?: string }
-      > = [];
-
-      if (prompt) {
-        content.push({ type: "text", text: prompt });
-      }
-
-      for (const attachment of attachments) {
-        if (attachment.kind === "image") {
-          content.push({
-            type: "image",
-            image: attachment.url,
-            mimeType: attachment.mimeType,
-          });
-        } else {
-          content.push({
-            type: "file",
-            data: attachment.url,
-            mediaType: attachment.mimeType,
-            filename: attachment.filename,
-          });
-        }
-      }
-
-      await thread.streamText(
-        {
-          messages: [{ role: "user", content }],
-        },
-        {
-          saveStreamDeltas: {
-            chunking: "line",
-            throttleMs: 120,
-          },
-        },
-      );
-    }
+      },
+    );
 
     await ctx.runMutation(internal.chat.touchThread, {
-      userId,
+      userId: args.userId,
       threadId: args.threadId,
       lastMessageAt: Date.now(),
     });
