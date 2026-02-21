@@ -1,0 +1,248 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+      @layer base {
+        :root {
+          --canvas-width: 800px;
+          --canvas-height: 420px;
+          --ground-level: 380px;
+        }
+      }
+    </style>
+  
+  </head>
+  <body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-4 font-sans">
+    <div class="bg-gray-800 p-6 rounded-lg shadow-lg max-w-4xl w-full">
+      <h1 class="text-3xl font-bold mb-4 text-center">Projectile Motion Explorer</h1>
+      <p class="text-gray-300 mb-6 text-center">Adjust the controls and click 'Launch' to see the projectile fly!</p>
+
+      <div class="flex flex-col md:flex-row gap-6">
+        <div class="flex-grow">
+          <canvas id="projectileCanvas" class="bg-gradient-to-b from-blue-900 to-indigo-950 border border-gray-600 rounded-md w-full" width="800" height="420"></canvas>
+        </div>
+
+        <div class="md:w-1/3 flex flex-col gap-4">
+          <div>
+            <label for="angle" class="block text-sm font-medium text-gray-300">Launch Angle (°): <span id="angleValue">45</span></label>
+            <input type="range" id="angle" min="0" max="90" value="45" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer mt-1">
+          </div>
+          <div>
+            <label for="speed" class="block text-sm font-medium text-gray-300">Initial Speed (m/s): <span id="speedValue">50</span></label>
+            <input type="range" id="speed" min="10" max="100" value="50" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer mt-1">
+          </div>
+          <div>
+            <label for="gravity" class="block text-sm font-medium text-gray-300">Gravity (m/s²): <span id="gravityValue">9.81</span></label>
+            <input type="range" id="gravity" min="1" max="20" step="0.1" value="9.81" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer mt-1">
+          </div>
+          <button id="launchBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-200 ease-in-out mt-2">Launch</button>
+          <button id="resetBtn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-200 ease-in-out">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById('projectileCanvas');
+      const ctx = canvas.getContext('2d');
+      const groundLevel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ground-level'));
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+
+      const angleInput = document.getElementById('angle');
+      const speedInput = document.getElementById('speed');
+      const gravityInput = document.getElementById('gravity');
+      const angleValueSpan = document.getElementById('angleValue');
+      const speedValueSpan = document.getElementById('speedValue');
+      const gravityValueSpan = document.getElementById('gravityValue');
+      const launchBtn = document.getElementById('launchBtn');
+      const resetBtn = document.getElementById('resetBtn');
+
+      let angle = parseFloat(angleInput.value);
+      let speed = parseFloat(speedInput.value);
+      let gravity = parseFloat(gravityInput.value);
+
+      let projectile = {
+        x: 50,
+        y: groundLevel - 10,
+        radius: 8,
+        color: 'rgba(255, 255, 0, 0.8)',
+        vx: 0,
+        vy: 0,
+        active: false,
+        trail: []
+      };
+
+      const cannon = {
+        x: 30,
+        y: groundLevel - 10,
+        width: 30,
+        height: 15,
+        color: '#6B7280'
+      };
+
+      function updateValues() {
+        angle = parseFloat(angleInput.value);
+        speed = parseFloat(speedInput.value);
+        gravity = parseFloat(gravityInput.value);
+        angleValueSpan.textContent = angle;
+        speedValueSpan.textContent = speed;
+        gravityValueSpan.textContent = gravity;
+        if (!projectile.active) draw(); // Redraw trajectory if not active
+      }
+
+      angleInput.addEventListener('input', updateValues);
+      speedInput.addEventListener('input', updateValues);
+      gravityInput.addEventListener('input', updateValues);
+
+      function drawGround() {
+        ctx.fillStyle = '#4B5563';
+        ctx.fillRect(0, groundLevel, canvasWidth, canvasHeight - groundLevel);
+        ctx.strokeStyle = '#9CA3AF';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, groundLevel);
+        ctx.lineTo(canvasWidth, groundLevel);
+        ctx.stroke();
+      }
+
+      function drawCannon() {
+        ctx.save();
+        ctx.translate(cannon.x, cannon.y);
+        ctx.rotate(-angle * Math.PI / 180);
+        ctx.fillStyle = cannon.color;
+        ctx.fillRect(0, -cannon.height / 2, cannon.width, cannon.height);
+        ctx.restore();
+      }
+
+      function drawProjectile() {
+        ctx.beginPath();
+        ctx.arc(projectile.x, projectile.y, projectile.radius, 0, Math.PI * 2);
+        ctx.fillStyle = projectile.color;
+        ctx.shadowColor = 'yellow';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Draw trail
+        if (projectile.trail.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(projectile.trail[0].x, projectile.trail[0].y);
+          for (let i = 1; i < projectile.trail.length; i++) {
+            ctx.lineTo(projectile.trail[i].x, projectile.trail[i].y);
+          }
+          ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+
+      function calculateTrajectoryPoints() {
+        const points = [];
+        const initialX = projectile.x;
+        const initialY = projectile.y;
+        const radAngle = angle * Math.PI / 180;
+        const initialVx = speed * Math.cos(radAngle);
+        const initialVy = -speed * Math.sin(radAngle); // Negative because canvas y-axis is inverted
+
+        for (let t = 0; t < 10; t += 0.1) { // Simulate for 10 seconds, 0.1s steps
+          let x = initialX + initialVx * t;
+          let y = initialY + initialVy * t + 0.5 * gravity * t * t;
+
+          if (y > groundLevel || x > canvasWidth) break; // Stop if hits ground or goes off screen
+          points.push({ x, y });
+        }
+        return points;
+      }
+
+      function drawPredictedTrajectory() {
+        const points = calculateTrajectoryPoints();
+        if (points.length === 0) return;
+
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        drawGround();
+        drawCannon();
+        if (!projectile.active) {
+          drawPredictedTrajectory();
+        }
+        drawProjectile();
+      }
+
+      let animationFrameId;
+      let lastTime = 0;
+      const timeStep = 1 / 60; // Fixed time step for simulation
+
+      function animate(currentTime) {
+        if (!projectile.active) return;
+
+        const deltaTime = (currentTime - lastTime) / 1000; // Convert to seconds
+        lastTime = currentTime;
+
+        // Update position using fixed time step for stability
+        projectile.x += projectile.vx * timeStep;
+        projectile.y += projectile.vy * timeStep;
+        projectile.vy += gravity * timeStep;
+
+        projectile.trail.push({ x: projectile.x, y: projectile.y });
+        if (projectile.trail.length > 50) {
+          projectile.trail.shift();
+        }
+
+        if (projectile.y >= groundLevel - projectile.radius || projectile.x > canvasWidth + projectile.radius) {
+          projectile.active = false;
+          projectile.trail = []; // Clear trail on impact
+          draw(); // Final draw to show impact point
+          return;
+        }
+
+        draw();
+        animationFrameId = requestAnimationFrame(animate);
+      }
+
+      launchBtn.addEventListener('click', () => {
+        if (projectile.active) return;
+
+        projectile.x = cannon.x + cannon.width * Math.cos(angle * Math.PI / 180);
+        projectile.y = cannon.y - cannon.width * Math.sin(angle * Math.PI / 180);
+        projectile.trail = [{ x: projectile.x, y: projectile.y }];
+
+        const radAngle = angle * Math.PI / 180;
+        projectile.vx = speed * Math.cos(radAngle);
+        projectile.vy = -speed * Math.sin(radAngle); // Negative for upward motion
+        projectile.active = true;
+        lastTime = performance.now();
+        animationFrameId = requestAnimationFrame(animate);
+      });
+
+      resetBtn.addEventListener('click', () => {
+        cancelAnimationFrame(animationFrameId);
+        projectile.active = false;
+        projectile.x = 50;
+        projectile.y = groundLevel - 10;
+        projectile.vx = 0;
+        projectile.vy = 0;
+        projectile.trail = [];
+        draw();
+      });
+
+      // Initial draw
+      updateValues();
+      draw();
+    </script>
+  </body>
+</html>

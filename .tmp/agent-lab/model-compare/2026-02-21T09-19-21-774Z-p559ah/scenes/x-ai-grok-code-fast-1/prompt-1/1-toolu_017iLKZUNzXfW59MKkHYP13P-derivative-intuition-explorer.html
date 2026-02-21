@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  
+  </head>
+  <body>
+    <div class="p-4 max-w-lg mx-auto">
+      <h1 class="text-xl font-bold mb-2">Derivative Intuition Explorer</h1>
+      <p class="mb-4">Drag the red point along the curve. Adjust Δx to see the secant line (green) approach the tangent line (blue).</p>
+      <div class="flex flex-col items-center">
+        <canvas id="canvas" width="400" height="400" class="border mb-4"></canvas>
+        <label for="dx-slider" class="mb-2">Δx: <span id="dx-value">1.00</span></label>
+        <input type="range" id="dx-slider" min="0.01" max="5" step="0.01" value="1" class="w-full max-w-xs">
+      </div>
+    </div>
+    <script>
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const slider = document.getElementById('dx-slider');
+      const valueSpan = document.getElementById('dx-value');
+      let pointX = 0;
+      let dx = 1;
+      let isDragging = false;
+
+      function toCanvasX(rx) { return 200 + rx * 20; }
+      function toCanvasY(ry) { return 200 - ry * 20; }
+
+      function drawGrid() {
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'black';
+        ctx.beginPath();
+        ctx.moveTo(0, 200); ctx.lineTo(400, 200);
+        ctx.moveTo(200, 0); ctx.lineTo(200, 400);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'lightgray';
+        for (let i = -10; i <= 10; i++) {
+          ctx.beginPath();
+          ctx.moveTo(toCanvasX(i), 0); ctx.lineTo(toCanvasX(i), 400);
+          ctx.moveTo(0, toCanvasY(i)); ctx.lineTo(400, toCanvasY(i));
+          ctx.stroke();
+          if (i !== 0) {
+            ctx.fillStyle = 'black';
+            ctx.font = '12px Arial';
+            ctx.fillText(i.toString(), toCanvasX(i) - 5, 215);
+            ctx.fillText(i.toString(), 205, toCanvasY(i) + 5);
+          }
+        }
+      }
+
+      function drawCurve() {
+        ctx.strokeStyle = 'black';
+        ctx.beginPath();
+        for (let rx = -10; rx <= 10; rx += 0.1) {
+          let ry = rx * rx;
+          let cx = toCanvasX(rx);
+          let cy = toCanvasY(ry);
+          if (rx === -10) ctx.moveTo(cx, cy);
+          else ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+      }
+
+      function drawPoint() {
+        ctx.fillStyle = 'red';
+        let cx = toCanvasX(pointX);
+        let cy = toCanvasY(pointX * pointX);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+
+      function drawTangent() {
+        let slope = 2 * pointX;
+        ctx.strokeStyle = 'blue';
+        ctx.beginPath();
+        let rx1 = pointX - 1;
+        let ry1 = pointX * pointX + slope * (rx1 - pointX);
+        let cx1 = toCanvasX(rx1);
+        let cy1 = toCanvasY(ry1);
+        let rx2 = pointX + 1;
+        let ry2 = pointX * pointX + slope * (rx2 - pointX);
+        let cx2 = toCanvasX(rx2);
+        let cy2 = toCanvasY(ry2);
+        ctx.moveTo(cx1, cy1);
+        ctx.lineTo(cx2, cy2);
+        ctx.stroke();
+      }
+
+      function drawSecant() {
+        ctx.strokeStyle = 'green';
+        ctx.beginPath();
+        let cx1 = toCanvasX(pointX);
+        let cy1 = toCanvasY(pointX * pointX);
+        let rx2 = pointX + dx;
+        let ry2 = rx2 * rx2;
+        let cx2 = toCanvasX(rx2);
+        let cy2 = toCanvasY(ry2);
+        ctx.moveTo(cx1, cy1);
+        ctx.lineTo(cx2, cy2);
+        ctx.stroke();
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, 400, 400);
+        drawGrid();
+        drawCurve();
+        drawTangent();
+        drawSecant();
+        drawPoint();
+      }
+
+      canvas.addEventListener('pointerdown', (e) => {
+        let rect = canvas.getBoundingClientRect();
+        let mx = e.clientX - rect.left;
+        let my = e.clientY - rect.top;
+        let closestX = 0;
+        let minDist = Infinity;
+        for (let rx = -10; rx <= 10; rx += 0.1) {
+          let ry = rx * rx;
+          let cx = toCanvasX(rx);
+          let cy = toCanvasY(ry);
+          let dist = (mx - cx) ** 2 + (my - cy) ** 2;
+          if (dist < minDist) {
+            minDist = dist;
+            closestX = rx;
+          }
+        }
+        if (minDist < 100) {
+          pointX = closestX;
+          isDragging = true;
+          draw();
+        }
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        let rect = canvas.getBoundingClientRect();
+        let mx = e.clientX - rect.left;
+        let rx = (mx - 200) / 20;
+        rx = Math.max(-10, Math.min(10, rx));
+        pointX = rx;
+        draw();
+      });
+
+      canvas.addEventListener('pointerup', () => {
+        isDragging = false;
+      });
+
+      slider.addEventListener('input', () => {
+        dx = parseFloat(slider.value);
+        valueSpan.textContent = dx.toFixed(2);
+        draw();
+      });
+
+      draw();
+    </script>
+  </body>
+</html>

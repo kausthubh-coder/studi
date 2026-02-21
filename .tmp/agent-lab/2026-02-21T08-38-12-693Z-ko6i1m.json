@@ -1,0 +1,292 @@
+{
+  "runId": "2026-02-21T08-38-12-693Z-ko6i1m",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --newThread --debugRaw --context --prompt Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+  "userId": "dev-user",
+  "threadId": "m57ans85ersdmeajs0xjq808yh81kgtn",
+  "agentName": "studi",
+  "prompt": "Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+  "promptHash": "6fb340b382fd9faf",
+  "startedAt": 1771663092693,
+  "endedAt": 1771663127468,
+  "totalDurationMs": 34775,
+  "firstAssistantEventMs": 34775,
+  "actionResultText": "The Spark couldn't be generated this time, but here's how you can build this yourself in **Desmos** in just a few steps:\n\n---\n\n### 📊 Step-by-Step: Table + Best-Fit Line in Desmos\n\n**1. Enter your data as a table**\n- Click the **+** button → select **Table**\n- Fill in your $x_1$ and $y_1$ values, for example:\n\n| $x_1$ | $y_1$ |\n|--------|--------|\n| 1 | 2.1 |\n| 2 | 3.9 |\n| 3 | 6.2 |\n| 4 | 7.8 |\n| 5 | 10.1 |\n\n**2. Add a linear regression line**\n- In a new expression line, type:\n\n$$y_1 \\sim mx_1 + b$$\n\n- Desmos will automatically **calculate** the best-fit values of $m$ (slope) and $b$ (intercept) and **draw the line**.\n\n**3. Read your results**\n- Below the expression, Desmos shows the fitted values, e.g.:\n  - $m \\approx 2.0$\n  - $b \\approx 0.1$\n- So your best-fit line is roughly $y = 2x + 0.1$\n\n---\n\n### 💡 Tips\n- Use **~** (tilde), not **=**, to tell Desmos you want a regression fit.\n- You can try other fits too, like quadratic: $y_1 \\sim ax_1^2 + bx_1 + c$\n- The **residuals** (how far each point is from the line) are stored automatically as a list.\n\nWould you like me to walk through a specific dataset or a different type of regression (quadratic, exponential, etc.)?",
+  "actionResultTextHash": "85925129b85f3500",
+  "messageCount": 4,
+  "newMessageCount": 4,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "toolu_01LDAhZhnMTxnUDzVh5yvxas",
+      "toolName": "create_spark",
+      "startedAt": 1771663092693,
+      "endedAt": 1771663113627.6543,
+      "durationMs": 20934.654296875,
+      "durationEstimated": true,
+      "status": "error",
+      "sparkStatus": "failed",
+      "error": "Provider fault: name=SparkWorkerError | message=Spark worker timed out after 20000ms (model: z-ai/glm-5)."
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1771663089686.226,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks7cprh4s0ndsaa6jfwz1va9h181k7bh",
+      "kind": "user",
+      "detail": "Create a desmos_graph spark with a table of x and y values and a best-fit line."
+    },
+    {
+      "at": 1771663113627.6543,
+      "relativeMs": 20934.654296875,
+      "order": 0,
+      "stepOrder": 2,
+      "messageId": "ks7fayzr5j2g7tf6y8t3xj43dh81jpw9",
+      "kind": "tool_result",
+      "detail": "Spark failed: Provider fault: name=SparkWorkerError | message=Spark worker timed out after 20000ms (model: z-ai/glm-5).",
+      "toolName": "create_spark",
+      "toolCallId": "toolu_01LDAhZhnMTxnUDzVh5yvxas",
+      "status": "error"
+    },
+    {
+      "at": 1771663127468,
+      "relativeMs": 34775,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "The Spark couldn't be generated this time, but here's how you can build this yourself in **Desmos** in just a few steps..."
+    }
+  ],
+  "spark": {
+    "calls": 1,
+    "failures": 1,
+    "totalDurationMs": 20934.654296875
+  },
+  "rawMessages": [
+    {
+      "_creationTime": 1771663089686.226,
+      "_id": "ks7cprh4s0ndsaa6jfwz1va9h181k7bh",
+      "message": {
+        "content": "Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+        "role": "user"
+      },
+      "order": 0,
+      "status": "success",
+      "stepOrder": 0,
+      "text": "Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+      "threadId": "m57ans85ersdmeajs0xjq808yh81kgtn",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771663089686.2263,
+      "_id": "ks7b66sxgphcsnq8hze3sq497981jny1",
+      "message": {
+        "content": [],
+        "role": "assistant"
+      },
+      "order": 0,
+      "status": "pending",
+      "stepOrder": 1,
+      "threadId": "m57ans85ersdmeajs0xjq808yh81kgtn",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771663113627.6543,
+      "_id": "ks7fayzr5j2g7tf6y8t3xj43dh81jpw9",
+      "agentName": "studi",
+      "message": {
+        "content": [
+          {
+            "output": {
+              "type": "text",
+              "value": "Spark failed: Provider fault: name=SparkWorkerError | message=Spark worker timed out after 20000ms (model: z-ai/glm-5)."
+            },
+            "toolCallId": "toolu_01LDAhZhnMTxnUDzVh5yvxas",
+            "toolName": "create_spark",
+            "type": "tool-result"
+          }
+        ],
+        "role": "tool"
+      },
+      "order": 0,
+      "sources": [],
+      "status": "success",
+      "stepOrder": 2,
+      "threadId": "m57ans85ersdmeajs0xjq808yh81kgtn",
+      "tool": true,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771663113627.6545,
+      "_id": "ks701fwq1fqzbnc2ppdk52c2c181kqma",
+      "agentName": "studi",
+      "message": {
+        "content": [],
+        "role": "assistant"
+      },
+      "order": 0,
+      "status": "pending",
+      "stepOrder": 3,
+      "threadId": "m57ans85ersdmeajs0xjq808yh81kgtn",
+      "tool": false,
+      "userId": "dev-user"
+    }
+  ],
+  "context": [
+    {
+      "_creationTime": 1771663089686.226,
+      "_id": "ks7cprh4s0ndsaa6jfwz1va9h181k7bh",
+      "message": {
+        "content": "Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+        "role": "user"
+      },
+      "order": 0,
+      "status": "success",
+      "stepOrder": 0,
+      "text": "Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+      "threadId": "m57ans85ersdmeajs0xjq808yh81kgtn",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771663089686.2263,
+      "_id": "ks7b66sxgphcsnq8hze3sq497981jny1",
+      "agentName": "studi",
+      "finishReason": "tool-calls",
+      "message": {
+        "content": [
+          {
+            "args": {
+              "context": "Display a table of x and y data points (e.g., x: 1,2,3,4,5 and y: 2.1, 3.9, 6.2, 7.8, 10.1) plotted as scatter points, along with a best-fit linear regression line calculated from the data. Label the regression line with its equation. Show the line extending across the graph.",
+              "sparkId": "desmos_graph",
+              "summary": "Interactive table of data points with a linear regression best-fit line.",
+              "title": "Scatter Plot with Best-Fit Line"
+            },
+            "toolCallId": "toolu_01LDAhZhnMTxnUDzVh5yvxas",
+            "toolName": "create_spark",
+            "type": "tool-call"
+          }
+        ],
+        "role": "assistant"
+      },
+      "model": "anthropic/claude-sonnet-4.6",
+      "order": 0,
+      "provider": "openrouter",
+      "providerMetadata": {
+        "openrouter": {
+          "provider": "Anthropic",
+          "usage": {
+            "completionTokens": 218,
+            "completionTokensDetails": {
+              "reasoningTokens": 0
+            },
+            "cost": 0.006549,
+            "promptTokens": 1093,
+            "promptTokensDetails": {
+              "cachedTokens": 0
+            },
+            "totalTokens": 1311
+          }
+        }
+      },
+      "reasoningDetails": [],
+      "status": "success",
+      "stepOrder": 1,
+      "threadId": "m57ans85ersdmeajs0xjq808yh81kgtn",
+      "tool": true,
+      "usage": {
+        "cachedInputTokens": 0,
+        "completionTokens": 218,
+        "promptTokens": 1093,
+        "reasoningTokens": 0,
+        "totalTokens": 1311
+      },
+      "userId": "dev-user",
+      "warnings": []
+    },
+    {
+      "_creationTime": 1771663113627.6543,
+      "_id": "ks7fayzr5j2g7tf6y8t3xj43dh81jpw9",
+      "agentName": "studi",
+      "message": {
+        "content": [
+          {
+            "output": {
+              "type": "text",
+              "value": "Spark failed: Provider fault: name=SparkWorkerError | message=Spark worker timed out after 20000ms (model: z-ai/glm-5)."
+            },
+            "toolCallId": "toolu_01LDAhZhnMTxnUDzVh5yvxas",
+            "toolName": "create_spark",
+            "type": "tool-result"
+          }
+        ],
+        "role": "tool"
+      },
+      "order": 0,
+      "sources": [],
+      "status": "success",
+      "stepOrder": 2,
+      "threadId": "m57ans85ersdmeajs0xjq808yh81kgtn",
+      "tool": true,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771663113627.6545,
+      "_id": "ks701fwq1fqzbnc2ppdk52c2c181kqma",
+      "agentName": "studi",
+      "finishReason": "stop",
+      "message": {
+        "content": [
+          {
+            "text": "The Spark couldn't be generated this time, but here's how you can build this yourself in **Desmos** in just a few steps:\n\n---\n\n### 📊 Step-by-Step: Table + Best-Fit Line in Desmos\n\n**1. Enter your data as a table**\n- Click the **+** button → select **Table**\n- Fill in your $x_1$ and $y_1$ values, for example:\n\n| $x_1$ | $y_1$ |\n|--------|--------|\n| 1 | 2.1 |\n| 2 | 3.9 |\n| 3 | 6.2 |\n| 4 | 7.8 |\n| 5 | 10.1 |\n\n**2. Add a linear regression line**\n- In a new expression line, type:\n\n$$y_1 \\sim mx_1 + b$$\n\n- Desmos will automatically **calculate** the best-fit values of $m$ (slope) and $b$ (intercept) and **draw the line**.\n\n**3. Read your results**\n- Below the expression, Desmos shows the fitted values, e.g.:\n  - $m \\approx 2.0$\n  - $b \\approx 0.1$\n- So your best-fit line is roughly $y = 2x + 0.1$\n\n---\n\n### 💡 Tips\n- Use **~** (tilde), not **=**, to tell Desmos you want a regression fit.\n- You can try other fits too, like quadratic: $y_1 \\sim ax_1^2 + bx_1 + c$\n- The **residuals** (how far each point is from the line) are stored automatically as a list.\n\nWould you like me to walk through a specific dataset or a different type of regression (quadratic, exponential, etc.)?",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      "model": "anthropic/claude-sonnet-4.6",
+      "order": 0,
+      "provider": "openrouter",
+      "providerMetadata": {
+        "openrouter": {
+          "provider": "Anthropic",
+          "usage": {
+            "completionTokens": 449,
+            "completionTokensDetails": {
+              "reasoningTokens": 0
+            },
+            "cost": 0.010824,
+            "promptTokens": 1363,
+            "promptTokensDetails": {
+              "cachedTokens": 0
+            },
+            "totalTokens": 1812
+          }
+        }
+      },
+      "reasoningDetails": [],
+      "sources": [],
+      "status": "success",
+      "stepOrder": 3,
+      "text": "The Spark couldn't be generated this time, but here's how you can build this yourself in **Desmos** in just a few steps:\n\n---\n\n### 📊 Step-by-Step: Table + Best-Fit Line in Desmos\n\n**1. Enter your data as a table**\n- Click the **+** button → select **Table**\n- Fill in your $x_1$ and $y_1$ values, for example:\n\n| $x_1$ | $y_1$ |\n|--------|--------|\n| 1 | 2.1 |\n| 2 | 3.9 |\n| 3 | 6.2 |\n| 4 | 7.8 |\n| 5 | 10.1 |\n\n**2. Add a linear regression line**\n- In a new expression line, type:\n\n$$y_1 \\sim mx_1 + b$$\n\n- Desmos will automatically **calculate** the best-fit values of $m$ (slope) and $b$ (intercept) and **draw the line**.\n\n**3. Read your results**\n- Below the expression, Desmos shows the fitted values, e.g.:\n  - $m \\approx 2.0$\n  - $b \\approx 0.1$\n- So your best-fit line is roughly $y = 2x + 0.1$\n\n---\n\n### 💡 Tips\n- Use **~** (tilde), not **=**, to tell Desmos you want a regression fit.\n- You can try other fits too, like quadratic: $y_1 \\sim ax_1^2 + bx_1 + c$\n- The **residuals** (how far each point is from the line) are stored automatically as a list.\n\nWould you like me to walk through a specific dataset or a different type of regression (quadratic, exponential, etc.)?",
+      "threadId": "m57ans85ersdmeajs0xjq808yh81kgtn",
+      "tool": false,
+      "usage": {
+        "cachedInputTokens": 0,
+        "completionTokens": 449,
+        "promptTokens": 1363,
+        "reasoningTokens": 0,
+        "totalTokens": 1812
+      },
+      "userId": "dev-user",
+      "warnings": []
+    }
+  ]
+}

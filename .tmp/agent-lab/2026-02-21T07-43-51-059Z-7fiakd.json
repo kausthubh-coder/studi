@@ -1,0 +1,142 @@
+{
+  "runId": "2026-02-21T07-43-51-059Z-7fiakd",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --newThread --debugRaw --prompt Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+  "userId": "dev-user",
+  "threadId": "m57d9qdvh1dkwfgwtmcszgab7h81j54t",
+  "agentName": "studi",
+  "prompt": "Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+  "promptHash": "6fb340b382fd9faf",
+  "startedAt": 1771659831059,
+  "endedAt": 1771659862695,
+  "totalDurationMs": 31636,
+  "firstAssistantEventMs": 31636,
+  "actionResultText": "The Spark couldn't be generated this time, but here's how you can set this up manually in Desmos — or I can retry!\n\n---\n\n### 📊 How to Build This in Desmos\n\n#### Step 1 — Enter a Data Table\nClick **\"+\"** → **Table**, then enter your data:\n\n| $x_1$ | $y_1$ |\n|--------|--------|\n| 1 | 2 |\n| 2 | 3.5 |\n| 3 | 4 |\n| 4 | 5.5 |\n| 5 | 7 |\n| 6 | 7.5 |\n\nThis plots the points as a **scatter plot** automatically.\n\n---\n\n#### Step 2 — Add the Best-Fit Line\nIn a new expression line, type:\n\n$$y_1 \\sim mx_1 + b$$\n\nDesmos will:\n- **Compute** the least-squares regression line\n- **Display** the values of $m$ (slope) and $b$ (y-intercept)\n- **Draw** the line over your scatter plot\n\n---\n\n#### Step 3 — Read the Results\nDesmos shows the fitted values, e.g.:\n$$m \\approx 1.11, \\quad b \\approx 0.97$$\n\nSo the best-fit line is approximately:\n$$y = 1.11x + 0.97$$\n\n---\n\nWould you like me to **retry generating the Spark**, or dive deeper into how linear regression is calculated? 📈",
+  "actionResultTextHash": "f9fe2084484560e9",
+  "messageCount": 4,
+  "newMessageCount": 4,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "toolu_01D2mtShaNhbqGyXUa62AfeC",
+      "toolName": "create_spark",
+      "startedAt": 1771659831059,
+      "endedAt": 1771659852205.8564,
+      "durationMs": 21146.8564453125,
+      "durationEstimated": true,
+      "status": "error",
+      "sparkStatus": "failed",
+      "error": "name=SparkWorkerError | message=Spark worker timed out after 20000ms (model: z-ai/glm-5)."
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1771659828409.9065,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks77hft6e3p82e6851aed8s8md81jzxk",
+      "kind": "user",
+      "detail": "Create a desmos_graph spark with a table of x and y values and a best-fit line."
+    },
+    {
+      "at": 1771659852205.8564,
+      "relativeMs": 21146.8564453125,
+      "order": 0,
+      "stepOrder": 2,
+      "messageId": "ks78z623pc88px43ps9v8t2a4581k51r",
+      "kind": "tool_result",
+      "detail": "Spark failed: name=SparkWorkerError | message=Spark worker timed out after 20000ms (model: z-ai/glm-5).",
+      "toolName": "create_spark",
+      "toolCallId": "toolu_01D2mtShaNhbqGyXUa62AfeC",
+      "status": "error"
+    },
+    {
+      "at": 1771659862695,
+      "relativeMs": 31636,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "The Spark couldn't be generated this time, but here's how you can set this up manually in Desmos — or I can retry!\n\n---..."
+    }
+  ],
+  "spark": {
+    "calls": 1,
+    "failures": 1,
+    "totalDurationMs": 21146.8564453125
+  },
+  "rawMessages": [
+    {
+      "_creationTime": 1771659828409.9065,
+      "_id": "ks77hft6e3p82e6851aed8s8md81jzxk",
+      "message": {
+        "content": "Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+        "role": "user"
+      },
+      "order": 0,
+      "status": "success",
+      "stepOrder": 0,
+      "text": "Create a desmos_graph spark with a table of x and y values and a best-fit line.",
+      "threadId": "m57d9qdvh1dkwfgwtmcszgab7h81j54t",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771659828409.9067,
+      "_id": "ks76vvk9pvqcrv6kcr1exgm1ms81j1z2",
+      "message": {
+        "content": [],
+        "role": "assistant"
+      },
+      "order": 0,
+      "status": "pending",
+      "stepOrder": 1,
+      "threadId": "m57d9qdvh1dkwfgwtmcszgab7h81j54t",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771659852205.8564,
+      "_id": "ks78z623pc88px43ps9v8t2a4581k51r",
+      "agentName": "studi",
+      "message": {
+        "content": [
+          {
+            "output": {
+              "type": "text",
+              "value": "Spark failed: name=SparkWorkerError | message=Spark worker timed out after 20000ms (model: z-ai/glm-5)."
+            },
+            "toolCallId": "toolu_01D2mtShaNhbqGyXUa62AfeC",
+            "toolName": "create_spark",
+            "type": "tool-result"
+          }
+        ],
+        "role": "tool"
+      },
+      "order": 0,
+      "sources": [],
+      "status": "success",
+      "stepOrder": 2,
+      "threadId": "m57d9qdvh1dkwfgwtmcszgab7h81j54t",
+      "tool": true,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771659852205.8567,
+      "_id": "ks7acbk41gzbxrsn7jcffzdesh81kvyn",
+      "agentName": "studi",
+      "message": {
+        "content": [],
+        "role": "assistant"
+      },
+      "order": 0,
+      "status": "pending",
+      "stepOrder": 3,
+      "threadId": "m57d9qdvh1dkwfgwtmcszgab7h81j54t",
+      "tool": false,
+      "userId": "dev-user"
+    }
+  ]
+}

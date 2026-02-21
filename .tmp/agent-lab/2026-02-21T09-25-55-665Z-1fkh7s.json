@@ -1,0 +1,78 @@
+{
+  "runId": "2026-02-21T09-25-55-665Z-1fkh7s",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId model-compare-user --newThread --saveSceneHtml --sceneOutDir C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-19-21-774Z-p559ah\\scenes\\google-gemini-2-5-flash\\prompt-1 --modelLabel google/gemini-2.5-flash --pollMs 250 --prompt Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory.",
+  "userId": "model-compare-user",
+  "threadId": "m57d11r5aa0k2bypadq9zn14ah81jt8s",
+  "agentName": "studi",
+  "prompt": "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory.",
+  "promptHash": "e683f9fb49460645",
+  "modelLabel": "google/gemini-2.5-flash",
+  "startedAt": 1771665955665,
+  "endedAt": 1771665985129,
+  "totalDurationMs": 29464,
+  "firstAssistantEventMs": 29464,
+  "actionResultText": "Here's your **Projectile Motion Explorer**! 🚀\n\n### How to use it:\n\n| Control | What it does |\n|---|---|\n| **Launch Angle** slider | Rotates the trajectory arc from 0° (flat) to 90° (straight up) |\n| **Launch Speed** slider | Sets the initial velocity from 10 to 100 m/s |\n| **Gravity** slider | Adjusts gravitational acceleration (try 1.6 m/s² for the Moon!) |\n| **Launch** button | Fires the projectile and draws the live trail |\n| **Reset** button | Clears the canvas for a fresh attempt |\n\n### Key physics at a glance:\n\nThe motion is governed by two equations:\n\n$$x(t) = v_0 \\cos(\\theta)\\cdot t$$\n$$y(t) = v_0 \\sin(\\theta)\\cdot t - \\frac{1}{2}g t^2$$\n\n**Things to try:**\n- 🎯 **45°** always gives the **maximum range** on flat ground — verify it!\n- 📉 Lower gravity → longer, higher arcs\n- ⚡ Compare **30° vs 60°** — they produce the **same range** (complementary angles)",
+  "actionResultTextHash": "c6baaed25015e6fa",
+  "messageCount": 4,
+  "newMessageCount": 4,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "toolu_01792e46USvSghECrdoZQGFu",
+      "toolName": "create_spark",
+      "startedAt": 1771665955665,
+      "endedAt": 1771665973391.7498,
+      "durationMs": 17726.749755859375,
+      "durationEstimated": true,
+      "status": "success",
+      "sparkStatus": "success"
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1771665952434.521,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks748y91hyqgwmsb4xenm23krx81j792",
+      "kind": "user",
+      "detail": "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory."
+    },
+    {
+      "at": 1771665973391.7498,
+      "relativeMs": 17726.749755859375,
+      "order": 0,
+      "stepOrder": 2,
+      "messageId": "ks7evyjwpym10t82x83t7fzjhn81jh05",
+      "kind": "tool_result",
+      "detail": "{\"artifact\":{\"kind\":\"spark_scene\",\"mode\":\"readonly\",\"payload\":{\"html\":\"<!doctype html>\\n<html>\\n  <head>\\n    <meta cha...",
+      "toolName": "create_spark",
+      "toolCallId": "toolu_01792e46USvSghECrdoZQGFu",
+      "status": "success"
+    },
+    {
+      "at": 1771665985129,
+      "relativeMs": 29464,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "Here's your **Projectile Motion Explorer**! 🚀\n\n### How to use it:\n\n| Control | What it does |\n|---|---|\n| **Launch Ang..."
+    }
+  ],
+  "spark": {
+    "calls": 1,
+    "failures": 0,
+    "totalDurationMs": 17726.749755859375
+  },
+  "sceneFiles": [
+    {
+      "toolCallId": "toolu_01792e46USvSghECrdoZQGFu",
+      "filePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-19-21-774Z-p559ah\\scenes\\google-gemini-2-5-flash\\prompt-1\\1-toolu_01792e46USvSghECrdoZQGFu-projectile-motion-explorer.html",
+      "title": "Projectile Motion Explorer",
+      "summary": "Interactive projectile motion with angle, speed, and gravity controls plus live trajectory."
+    }
+  ]
+}

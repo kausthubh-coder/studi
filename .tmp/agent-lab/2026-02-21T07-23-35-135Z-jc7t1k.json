@@ -1,0 +1,38 @@
+{
+  "runId": "2026-02-21T07-23-35-135Z-jc7t1k",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --prompt Say hi in one sentence --verbose --newThread",
+  "userId": "dev-user",
+  "threadId": "m5784abre8yebmk1q16pcjmrw581jvrj",
+  "agentName": "studi",
+  "prompt": "Say hi in one sentence",
+  "promptHash": "63922e71ccfc0757",
+  "startedAt": 1771658615135,
+  "endedAt": 1771658617641,
+  "totalDurationMs": 2506,
+  "actionResultText": "Hi there! 👋 I'm Studi, your intuition-first tutor — ready to help you learn anything, step by step!",
+  "actionResultTextHash": "efdcd6078609e8ea",
+  "messageCount": 2,
+  "newMessageCount": 2,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [],
+  "timeline": [
+    {
+      "at": 1771658612570.2234,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks77sty17tft9r0pa75v09hjy981j2pk",
+      "kind": "user",
+      "detail": "Say hi in one sentence"
+    }
+  ],
+  "spark": {
+    "calls": 0,
+    "failures": 0,
+    "totalDurationMs": 0
+  }
+}

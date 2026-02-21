@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  
+  </head>
+  <body>
+    <div class="bg-slate-900 text-white min-h-screen p-4">
+      <h1 class="text-2xl mb-4">Projectile Motion Explorer</h1>
+      <p class="mb-4">Adjust the sliders to change launch angle, speed, and gravity. The trajectory and stats will update live. Click Launch to animate the projectile.</p>
+      <canvas id="canvas" width="700" height="350" class="border border-gray-600 block mx-auto"></canvas>
+      <div class="flex flex-wrap justify-center mt-4 gap-4">
+        <div>
+          <label>Launch Angle: <span id="angleVal">45</span>°</label>
+          <input type="range" id="angle" min="0" max="90" value="45" class="w-full">
+        </div>
+        <div>
+          <label>Launch Speed: <span id="speedVal">50</span> m/s</label>
+          <input type="range" id="speed" min="10" max="100" value="50" class="w-full">
+        </div>
+        <div>
+          <label>Gravity: <span id="gravityVal">9.8</span> m/s²</label>
+          <input type="range" id="gravity" min="1" max="20" value="9.8" step="0.1" class="w-full">
+        </div>
+      </div>
+      <div class="mt-4 text-center">
+        <p>Range: <span id="range">0</span> m</p>
+        <p>Max Height: <span id="maxHeight">0</span> m</p>
+        <p>Time of Flight: <span id="timeOfFlight">0</span> s</p>
+      </div>
+      <button id="launch" class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded block mx-auto">Launch</button>
+    </div>
+    <script>
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const angleSlider = document.getElementById('angle');
+      const speedSlider = document.getElementById('speed');
+      const gravitySlider = document.getElementById('gravity');
+      const angleVal = document.getElementById('angleVal');
+      const speedVal = document.getElementById('speedVal');
+      const gravityVal = document.getElementById('gravityVal');
+      const rangeDisp = document.getElementById('range');
+      const maxHeightDisp = document.getElementById('maxHeight');
+      const timeDisp = document.getElementById('timeOfFlight');
+      const launchBtn = document.getElementById('launch');
+      let animating = false;
+      let startTime;
+      function update() {
+        const theta = angleSlider.value * Math.PI / 180;
+        const v0 = parseFloat(speedSlider.value);
+        const g = parseFloat(gravitySlider.value);
+        const sinTheta = Math.sin(theta);
+        const cosTheta = Math.cos(theta);
+        const timeOfFlight = 2 * v0 * sinTheta / g;
+        const range = v0 * cosTheta * timeOfFlight;
+        const maxHeight = (v0 * sinTheta) ** 2 / (2 * g);
+        angleVal.textContent = angleSlider.value;
+        speedVal.textContent = speedSlider.value;
+        gravityVal.textContent = gravitySlider.value;
+        rangeDisp.textContent = range.toFixed(2);
+        maxHeightDisp.textContent = maxHeight.toFixed(2);
+        timeDisp.textContent = timeOfFlight.toFixed(2);
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const scaleX = canvas.width / range || 1;
+        const scaleY = canvas.height / maxHeight || 1;
+        for (let t = 0; t <= timeOfFlight; t += 0.1) {
+          const x = v0 * cosTheta * t;
+          const y = v0 * sinTheta * t - 0.5 * g * t * t;
+          const cx = x * scaleX;
+          const cy = canvas.height - y * scaleY;
+          if (t === 0) ctx.moveTo(cx, cy);
+          else ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+      }
+      angleSlider.addEventListener('input', update);
+      speedSlider.addEventListener('input', update);
+      gravitySlider.addEventListener('input', update);
+      launchBtn.addEventListener('click', () => {
+        if (animating) return;
+        animating = true;
+        const theta = angleSlider.value * Math.PI / 180;
+        const v0 = parseFloat(speedSlider.value);
+        const g = parseFloat(gravitySlider.value);
+        const sinTheta = Math.sin(theta);
+        const cosTheta = Math.cos(theta);
+        const timeOfFlight = 2 * v0 * sinTheta / g;
+        const range = v0 * cosTheta * timeOfFlight;
+        const maxHeight = (v0 * sinTheta) ** 2 / (2 * g);
+        const scaleX = canvas.width / range || 1;
+        const scaleY = canvas.height / maxHeight || 1;
+        startTime = performance.now();
+        function animate(now) {
+          const elapsed = (now - startTime) / 1000;
+          if (elapsed > timeOfFlight) {
+            animating = false;
+            return;
+          }
+          const t = elapsed;
+          const x = v0 * cosTheta * t;
+          const y = v0 * sinTheta * t - 0.5 * g * t * t;
+          const cx = x * scaleX;
+          const cy = canvas.height - y * scaleY;
+          ctx.clearRect(0,0,canvas.width,canvas.height);
+          ctx.strokeStyle = 'white';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          for (let tt = 0; tt <= timeOfFlight; tt += 0.1) {
+            const xx = v0 * cosTheta * tt;
+            const yy = v0 * sinTheta * tt - 0.5 * g * tt * tt;
+            const cxx = xx * scaleX;
+            const cyy = canvas.height - yy * scaleY;
+            if (tt === 0) ctx.moveTo(cxx, cyy);
+            else ctx.lineTo(cxx, cyy);
+          }
+          ctx.stroke();
+          ctx.fillStyle = 'red';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 5, 0, 2*Math.PI);
+          ctx.fill();
+          requestAnimationFrame(animate);
+        }
+        requestAnimationFrame(animate);
+      });
+      update();
+    </script>
+  </body>
+</html>

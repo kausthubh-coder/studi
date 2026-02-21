@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head><body class="bg-gray-100 min-h-screen flex flex-col items-center py-4 px-2"><div class="bg-white rounded-2xl shadow-lg p-4 w-full max-w-2xl"><h1 class="text-xl font-bold text-center text-blue-700 mb-1">Projectile Motion Explorer</h1><p class="text-xs text-center text-gray-500 mb-3">Adjust sliders to see the trajectory update live. Hit <strong>Launch!</strong> to animate.</p><canvas id="c" width="700" height="350" class="w-full rounded-xl border border-gray-200" style="background:#e0f2fe"></canvas><div class="mt-3 grid grid-cols-1 gap-2"><div class="flex items-center gap-2"><label class="w-36 text-sm font-medium text-gray-700">Angle: <span id="aVal" class="text-blue-600 font-bold">45</span>°</label><input id="angle" type="range" min="0" max="90" value="45" class="flex-1 accent-blue-500"/></div><div class="flex items-center gap-2"><label class="w-36 text-sm font-medium text-gray-700">Speed: <span id="sVal" class="text-green-600 font-bold">50</span> m/s</label><input id="speed" type="range" min="10" max="100" value="50" class="flex-1 accent-green-500"/></div><div class="flex items-center gap-2"><label class="w-36 text-sm font-medium text-gray-700">Gravity: <span id="gVal" class="text-red-500 font-bold">9.8</span> m/s²</label><input id="grav" type="range" min="10" max="200" value="98" class="flex-1 accent-red-400"/></div></div><div class="flex gap-3 mt-3 items-center justify-between flex-wrap"><button id="btn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-xl text-sm shadow">🚀 Launch!</button><div id="stats" class="text-xs text-gray-600 flex gap-4 flex-wrap"><span>Range: <strong id="rng">—</strong> m</span><span>Max Height: <strong id="mh">—</strong> m</span><span>Time: <strong id="tm">—</strong> s</span></div></div></div><script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=700,H=350,GY=H-30,OX=40,OY=GY;
+let animId=null,animT=0,animDur=0,animPts=[];
+function getParams(){const a=+document.getElementById('angle').value*Math.PI/180,v=+document.getElementById('speed').value,g=+document.getElementById('grav').value/10;return{a,v,g};}
+function calcPoints(a,v,g){const T=2*v*Math.sin(a)/g,R=v*Math.cos(a)*T,maxH=v*v*Math.sin(a)*Math.sin(a)/(2*g);const pts=[];const steps=120;for(let i=0;i<=steps;i++){const t=T*i/steps;const x=v*Math.cos(a)*t;const y=v*Math.sin(a)*t-0.5*g*t*t;pts.push({x,y,t});}return{pts,T,R,maxH};}
+function worldToCanvas(x,y,R,maxH){const scaleX=(W-OX-20)/Math.max(R,1);const scaleY=(GY-20)/Math.max(maxH,1);const scale=Math.min(scaleX,scaleY,8);return{cx:OX+x*scale,cy:OY-y*scale};}
+function drawScene(pts,R,maxH,progress){ctx.clearRect(0,0,W,H);
+// sky gradient
+const sky=ctx.createLinearGradient(0,0,0,GY);sky.addColorStop(0,'#bae6fd');sky.addColorStop(1,'#e0f2fe');ctx.fillStyle=sky;ctx.fillRect(0,0,W,GY);
+// ground
+ctx.fillStyle='#4ade80';ctx.fillRect(0,GY,W,H-GY);
+ctx.fillStyle='#166534';ctx.fillRect(0,GY,W,3);
+// cannon
+const a=+document.getElementById('angle').value*Math.PI/180;
+ctx.save();ctx.translate(OX,OY);ctx.fillStyle='#374151';ctx.beginPath();ctx.arc(0,0,12,0,Math.PI*2);ctx.fill();
+ctx.rotate(-a);ctx.fillStyle='#1f2937';ctx.fillRect(0,-6,32,12);ctx.restore();
+if(!pts.length)return;
+const end=Math.floor(pts.length*Math.min(progress,1));
+ctx.beginPath();ctx.strokeStyle='rgba(59,130,246,0.85)';ctx.lineWidth=2.5;ctx.setLineDash([6,3]);
+for(let i=0;i<=end;i++){const{cx,cy}=worldToCanvas(pts[i].x,pts[i].y,R,maxH);i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy);}ctx.stroke();ctx.setLineDash([]);
+if(progress>=1){const last=pts[pts.length-1];const{cx,cy}=worldToCanvas(last.x,0,R,maxH);ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(cx,OY,6,0,Math.PI*2);ctx.fill();}
+if(progress>0&&progress<1){const idx=Math.min(end,pts.length-1);const{cx,cy}=worldToCanvas(pts[idx].x,pts[idx].y,R,maxH);ctx.fillStyle='#f97316';ctx.beginPath();ctx.arc(cx,cy,7,0,Math.PI*2);ctx.fill();}}
+function draw(progress){const{a,v,g}=getParams();const{pts,T,R,maxH}=calcPoints(a,v,g);drawScene(pts,R,maxH,progress);document.getElementById('rng').textContent=R.toFixed(1);document.getElementById('mh').textContent=maxH.toFixed(1);document.getElementById('tm').textContent=T.toFixed(2);}
+function update(){draw(1);}
+['angle','speed','grav'].forEach(id=>{const el=document.getElementById(id);el.addEventListener('input',()=>{if(id==='angle')document.getElementById('aVal').textContent=el.value;if(id==='speed')document.getElementById('sVal').textContent=el.value;if(id==='grav')document.getElementById('gVal').textContent=(el.value/10).toFixed(1);if(animId)cancelAnimationFrame(animId),animId=null;update();});});
+document.getElementById('btn').addEventListener('click',()=>{if(animId)cancelAnimationFrame(animId);const{a,v,g}=getParams();const{pts,T,R,maxH}=calcPoints(a,v,g);animPts=pts;animDur=T*1000;const start=performance.now();function frame(now){const p=(now-start)/animDur;drawScene(animPts,R,maxH,p);document.getElementById('rng').textContent=R.toFixed(1);document.getElementById('mh').textContent=maxH.toFixed(1);document.getElementById('tm').textContent=T.toFixed(2);if(p<1)animId=requestAnimationFrame(frame);else{animId=null;drawScene(animPts,R,maxH,1);}}animId=requestAnimationFrame(frame);});
+update();
+</script></body></html>

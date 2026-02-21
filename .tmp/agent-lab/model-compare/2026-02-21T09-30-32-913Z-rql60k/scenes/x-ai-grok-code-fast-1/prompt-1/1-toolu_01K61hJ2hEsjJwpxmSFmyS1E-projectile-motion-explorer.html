@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  
+  </head>
+  <body class="bg-gray-100 p-4 flex flex-col items-center">
+    <h1 class="text-2xl font-bold mb-4">Projectile Motion Explorer</h1>
+    <div class="mb-4 text-center text-sm">Adjust sliders, click Launch to animate. Ball resets on slider change or Reset.</div>
+    <canvas id="canvas" width="700" height="380" class="border border-gray-300 mb-4" style="width:100%;height:auto;max-width:700px;"></canvas>
+    <div class="flex flex-wrap justify-center gap-4 mb-4">
+      <label class="flex flex-col items-center">
+        <span>Angle: <span id="angleVal">45</span>°</span>
+        <input type="range" id="angle" min="0" max="90" value="45" class="w-32">
+      </label>
+      <label class="flex flex-col items-center">
+        <span>Speed: <span id="speedVal">50</span> m/s</span>
+        <input type="range" id="speed" min="0" max="100" value="50" class="w-32">
+      </label>
+      <label class="flex flex-col items-center">
+        <span>Gravity: <span id="gravityVal">9.8</span> m/s²</span>
+        <input type="range" id="gravity" min="0" max="20" step="0.1" value="9.8" class="w-32">
+      </label>
+    </div>
+    <div class="flex gap-4">
+      <button id="launch" class="bg-blue-500 text-white px-4 py-2 rounded">Launch</button>
+      <button id="reset" class="bg-red-500 text-white px-4 py-2 rounded">Reset</button>
+    </div>
+    <script>
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      const x0 = 50, y0 = H;
+      let angle = 45, speed = 50, gravity = 9.8;
+      let animating = false, t = 0;
+      const scale = 2; // pixels per meter
+      
+      function updateVals() {
+        document.getElementById('angleVal').textContent = angle;
+        document.getElementById('speedVal').textContent = speed;
+        document.getElementById('gravityVal').textContent = gravity.toFixed(1);
+        resetBall();
+        draw();
+      }
+      
+      document.getElementById('angle').addEventListener('input', e => { angle = +e.target.value; updateVals(); });
+      document.getElementById('speed').addEventListener('input', e => { speed = +e.target.value; updateVals(); });
+      document.getElementById('gravity').addEventListener('input', e => { gravity = +e.target.value; updateVals(); });
+      
+      document.getElementById('launch').addEventListener('click', () => {
+        if (!animating) { animating = true; t = 0; animate(); }
+      });
+      
+      document.getElementById('reset').addEventListener('click', resetBall);
+      
+      function resetBall() {
+        animating = false; t = 0; draw();
+      }
+      
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        // Ground
+        ctx.beginPath();
+        ctx.moveTo(0, H);
+        ctx.lineTo(W, H);
+        ctx.stroke();
+        // Trajectory
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        for (let tt = 0; tt < 10; tt += 0.1) {
+          const x = x0 + speed * Math.cos(angle * Math.PI / 180) * tt * scale;
+          const y = y0 - (speed * Math.sin(angle * Math.PI / 180) * tt - 0.5 * gravity * tt * tt) * scale;
+          if (y > H) break;
+          if (tt === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Ball
+        const x = x0 + speed * Math.cos(angle * Math.PI / 180) * t * scale;
+        const y = Math.max(H - (speed * Math.sin(angle * Math.PI / 180) * t - 0.5 * gravity * t * t) * scale, H);
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = 'red';
+        ctx.fill();
+      }
+      
+      function animate() {
+        if (!animating) return;
+        t += 0.05;
+        const y = speed * Math.sin(angle * Math.PI / 180) * t - 0.5 * gravity * t * t;
+        if (y < 0) { animating = false; t = 0; draw(); return; }
+        draw();
+        requestAnimationFrame(animate);
+      }
+      
+      updateVals();
+    </script>
+  </body>
+</html>

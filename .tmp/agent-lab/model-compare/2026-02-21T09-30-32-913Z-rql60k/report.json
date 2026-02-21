@@ -1,0 +1,211 @@
+{
+  "runId": "2026-02-21T09-30-32-913Z-rql60k",
+  "createdAt": "2026-02-21T09:30:35.479Z",
+  "options": {
+    "models": [
+      "anthropic/claude-sonnet-4.6",
+      "x-ai/grok-code-fast-1",
+      "x-ai/grok-4.1-fast",
+      "google/gemini-3-flash-preview",
+      "google/gemini-2.5-flash"
+    ],
+    "prompts": [
+      "Create a scene spark that explains derivative intuition with a draggable point, tangent line, secant line, and delta x slider.",
+      "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory."
+    ],
+    "userId": "model-compare-user",
+    "repeats": 1,
+    "pollMs": 250,
+    "scope": "scene",
+    "includeContext": false,
+    "debugRaw": false
+  },
+  "previousEnv": {
+    "OPENROUTER_MODEL": "anthropic/claude-sonnet-4.6",
+    "SPARK_WORKER_SCENE_MODEL": "anthropic/claude-sonnet-4.6"
+  },
+  "trials": [
+    {
+      "model": "anthropic/claude-sonnet-4.6",
+      "prompt": "Create a scene spark that explains derivative intuition with a draggable point, tangent line, secant line, and delta x slider.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-30-36-909Z-xipn2r.json",
+      "totalDurationMs": 48930,
+      "sparkDurationMs": 36192.59521484375,
+      "sparkFailures": 0,
+      "sceneFilePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-30-32-913Z-rql60k\\scenes\\anthropic-claude-sonnet-4-6\\prompt-1\\1-toolu_bdrk_013YUeUH8Q41gkgeakjJdyuv-derivative-intuition-explorer.html",
+      "actionResultText": "Here's your **Derivative Intuition Explorer**! 🎉 Here's how to use it:\n\n---\n\n### 🖱️ How to Interact\n\n| Control | What it does |\n|---|---|\n| **Drag the red dot** | Moves point **P** along the curve $f(x) = x^3 - 3x$ |\n| **Δx slider** | Adjusts how far point **Q** is from **P** |\n\n---\n\n### 📐 What You're Seeing\n\n- 🔵 **Blue line** — the **tangent line** at P, with slope $f'(x) = 3x^2 - 3$\n- 🟡 **Dashed yellow line** — the **secant line** from P to Q, with slope:\n\n$$\\text{Secant slope} = \\frac{f(x + \\Delta x) - f(x)}{\\Delta x}$$\n\n---\n\n### 💡 The Core Idea\n\nAs you **slide Δx toward 0**, watch the yellow secant line rotate and merge with the blue tangent line. That limit is exactly the derivative:\n\n$$f'(x) = \\lim_{\\Delta x \\to 0} \\frac{f(x + \\Delta x) - f(x)}{\\Delta x}$$\n\nTry dragging P to the **local min** near $x = 1$ — notice the tangent goes flat (slope = 0) right at the bottom of the curve!",
+      "html": {
+        "htmlLength": 4845,
+        "controls": 1,
+        "sliders": 1,
+        "handlers": 5,
+        "hasSvgOrCanvas": true,
+        "usesTailwindBrowser": true
+      },
+      "qualityScore": 90
+    },
+    {
+      "model": "anthropic/claude-sonnet-4.6",
+      "prompt": "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-31-25-997Z-zqmwfr.json",
+      "totalDurationMs": 43581,
+      "sparkDurationMs": 32491.61865234375,
+      "sparkFailures": 0,
+      "sceneFilePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-30-32-913Z-rql60k\\scenes\\anthropic-claude-sonnet-4-6\\prompt-1\\1-toolu_01UVsz1C6nGfDp3WL7H6BsZ7-projectile-motion-explorer.html",
+      "actionResultText": "Your **Projectile Motion Explorer** is ready! 🚀\n\n---\n\n### How to use it:\n\n| Control | What it does |\n|---|---|\n| **Angle slider** | Sets the launch angle (0°–90°). Watch the trajectory arc reshape live. |\n| **Speed slider** | Controls initial launch speed (10–100 m/s). Higher = longer range. |\n| **Gravity slider** | Adjusts gravitational acceleration (1–20 m/s²). Try Moon gravity (~1.6) vs. Earth (~9.8)! |\n| **Launch 🚀** | Fires the projectile and animates it along the path. |\n\n---\n\n### Key physics to notice:\n- **45°** always gives the **maximum range** (when speed & gravity are fixed) — try it!\n- **Range** scales with $v_0^2$, so doubling speed **quadruples** the distance.\n- The trajectory follows:\n$$x = v_0 \\cos\\theta \\cdot t, \\quad y = v_0 \\sin\\theta \\cdot t - \\tfrac{1}{2}g t^2$$\n- After launch, the stats bar shows **Range**, **Max Height**, and **Time of Flight** in real time.",
+      "html": {
+        "htmlLength": 4279,
+        "controls": 4,
+        "sliders": 3,
+        "handlers": 6,
+        "hasSvgOrCanvas": true,
+        "usesTailwindBrowser": true
+      },
+      "qualityScore": 100
+    },
+    {
+      "model": "x-ai/grok-code-fast-1",
+      "prompt": "Create a scene spark that explains derivative intuition with a draggable point, tangent line, secant line, and delta x slider.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-32-10-795Z-dlk8c5.json",
+      "totalDurationMs": 43813,
+      "sparkDurationMs": 30837.273193359375,
+      "sparkFailures": 0,
+      "sceneFilePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-30-32-913Z-rql60k\\scenes\\x-ai-grok-code-fast-1\\prompt-1\\1-toolu_01QWjRvpZZvvuFKTFVmddi9z-derivative-intuition-tangent-secant-lines.html",
+      "actionResultText": "Here's your **Derivative Intuition** Spark! 🎉 Here's how to use it:\n\n---\n\n### 🔵 How to Interact\n\n| Element | What to Do | What You'll See |\n|---|---|---|\n| **Blue point P** | Click & drag horizontally | Point slides along $f(x) = x^2$; all lines update live |\n| **Δx slider** | Drag left toward 0 | Orange secant line rotates and merges into the tangent |\n| **Info panel** | Read the slope values | Watch secant slope → tangent slope as $\\Delta x \\to 0$ |\n\n---\n\n### 📐 The Core Idea\n\nThe **secant line** connects two points on the curve:\n\n$$\\text{Secant slope} = \\frac{f(a + \\Delta x) - f(a)}{\\Delta x} = 2a + \\Delta x$$\n\nThe **tangent line** is what happens in the limit:\n\n$$f'(a) = \\lim_{\\Delta x \\to 0} \\frac{f(a+\\Delta x)-f(a)}{\\Delta x} = 2a$$\n\nAs you shrink $\\Delta x \\to 0$, the extra $+\\Delta x$ vanishes — and the secant **becomes** the tangent. That limiting slope *is* the derivative. The visualization makes this limit feel **geometric and physical**, not just algebraic.",
+      "html": {
+        "htmlLength": 6131,
+        "controls": 1,
+        "sliders": 1,
+        "handlers": 7,
+        "hasSvgOrCanvas": true,
+        "usesTailwindBrowser": true
+      },
+      "qualityScore": 90
+    },
+    {
+      "model": "x-ai/grok-code-fast-1",
+      "prompt": "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-32-54-755Z-xsatad.json",
+      "totalDurationMs": 35899,
+      "sparkDurationMs": 23311.85498046875,
+      "sparkFailures": 0,
+      "sceneFilePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-30-32-913Z-rql60k\\scenes\\x-ai-grok-code-fast-1\\prompt-1\\1-toolu_01K61hJ2hEsjJwpxmSFmyS1E-projectile-motion-explorer.html",
+      "actionResultText": "Here's your **Projectile Motion Explorer**! 🚀 Here's how to use it:\n\n---\n\n### 🎮 Controls\n| Slider | What it changes |\n|---|---|\n| **Angle** | Launch angle $\\theta$ from 0° to 90° |\n| **Speed** | Initial speed $v_0$ from 10–100 m/s |\n| **Gravity** | Gravitational acceleration $g$ from 1–20 m/s² |\n\n---\n\n### 🧪 Things to Try\n1. **Set angle to 45°** — this gives the **maximum range** for any given speed:\n$$R = \\frac{v_0^2 \\sin(2\\theta)}{g}$$\n\n2. **Compare 30° vs 60°** — notice they produce the **same range** (complementary angles), but different heights:\n$$H = \\frac{(v_0 \\sin\\theta)^2}{2g}$$\n\n3. **Lower gravity to ~1.6 m/s²** (Moon's gravity) and watch the ball soar for much longer — time of flight scales as:\n$$T = \\frac{2v_0 \\sin\\theta}{g}$$\n\n4. **Click Launch 🚀**, watch the arc animate, and observe the landing explosion. Adjust sliders to reset and re-launch anytime!",
+      "html": {
+        "htmlLength": 4205,
+        "controls": 5,
+        "sliders": 3,
+        "handlers": 6,
+        "hasSvgOrCanvas": true,
+        "usesTailwindBrowser": true
+      },
+      "qualityScore": 100
+    },
+    {
+      "model": "x-ai/grok-4.1-fast",
+      "prompt": "Create a scene spark that explains derivative intuition with a draggable point, tangent line, secant line, and delta x slider.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-33-32-232Z-gfyel5.json",
+      "totalDurationMs": 55792,
+      "sparkDurationMs": 41721.4150390625,
+      "sparkFailures": 1,
+      "actionResultText": "The Spark couldn't be generated this time due to a provider timeout — but let me walk you through the full derivative intuition concept clearly! 🎓\n\n---\n\n## 📐 Derivative Intuition: The Big Idea\n\n### 1. The Setup\n\nPick a smooth curve, say $f(x) = x^2$. Choose a point $P = (x,\\ f(x))$ on it.\n\n---\n\n### 2. The Secant Line (average rate of change)\n\nPick a second point $Q = (x + \\Delta x,\\ f(x + \\Delta x))$.\n\nThe **secant line** connects $P$ and $Q$. Its slope is:\n\n$$m_{\\text{secant}} = \\frac{f(x + \\Delta x) - f(x)}{\\Delta x}$$\n\nThis is the **average rate of change** over the interval $\\Delta x$.\n\n---\n\n### 3. The Tangent Line (instantaneous rate of change)\n\nNow **shrink $\\Delta x$ toward 0**. Watch what happens:\n\n$$f'(x) = \\lim_{\\Delta x \\to 0} \\frac{f(x + \\Delta x) - f(x)}{\\Delta x}$$\n\nFor $f(x) = x^2$, this gives $f'(x) = 2x$.\n\nAs $\\Delta x \\to 0$, the secant line **rotates into** the tangent line. That limiting slope *is* the derivative.\n\n---\n\n### 4. Key Visual Intuition\n\n| $\\Delta x$ large | $\\Delta x \\to 0$ |\n|---|---|\n| Secant cuts across the curve | Secant hugs the curve at $P$ |\n| Rough average slope | Exact instantaneous slope |\n| Far from $f'(x)$ | Equals $f'(x)$ |\n\n---\n\n### 5. Try It Yourself (mentally)\n\nAt $x = 2$ on $f(x) = x^2$:\n- **Tangent slope** = $f'(2) = 2(2) = 4$\n- **Secant slope** with $\\Delta x = 1$: $\\frac{f(3) - f(2)}{1} = \\frac{9-4}{1} = 5$ → close, but not exact\n- **Secant slope** with $\\Delta x = 0.1$: $\\frac{f(2.1) - f(2)}{0.1} = \\frac{4.41-4}{0.1} = 4.1$ → even closer! ✅\n\n---\n\nThe derivative is simply the secant line's slope **taken to its limit**. Would you like me to try the interactive Spark again, or explore a specific part of this further?",
+      "qualityScore": 0
+    },
+    {
+      "model": "x-ai/grok-4.1-fast",
+      "prompt": "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-34-28-168Z-e79vrn.json",
+      "totalDurationMs": 56576,
+      "sparkDurationMs": 44506.163818359375,
+      "sparkFailures": 1,
+      "actionResultText": "The Spark couldn't be generated this time due to a provider timeout — sorry about that! Here's everything you need to understand the physics instead:\n\n---\n\n## 🚀 Projectile Motion — Key Ideas\n\n### The Equations\nGiven launch speed $v_0$, angle $\\theta$, and gravity $g$:\n\n$$x(t) = v_0 \\cos\\theta \\cdot t$$\n\n$$y(t) = v_0 \\sin\\theta \\cdot t - \\frac{1}{2}g t^2$$\n\n---\n\n### Key Results\n\n| Quantity | Formula |\n|---|---|\n| **Time of Flight** | $T = \\dfrac{2v_0 \\sin\\theta}{g}$ |\n| **Max Height** | $H = \\dfrac{(v_0 \\sin\\theta)^2}{2g}$ |\n| **Range** | $R = \\dfrac{v_0^2 \\sin 2\\theta}{g}$ |\n\n---\n\n### Intuition for the Sliders\n\n- 🎯 **Angle** → $45°$ maximizes range; $90°$ maximizes height.\n- ⚡ **Speed** → Range and height scale with $v_0^2$ — doubling speed **quadruples** both.\n- 🪐 **Gravity** → Lower gravity (like the Moon, $g ≈ 1.6\\ \\text{m/s}^2$) dramatically increases range and hang time.\n\n---\n\n### Example (v₀ = 50 m/s, θ = 45°, g = 9.8 m/s²)\n\n$$T = \\frac{2 \\times 50 \\times \\sin 45°}{9.8} \\approx 7.2\\ \\text{s}$$\n\n$$H = \\frac{(50 \\sin 45°)^2}{2 \\times 9.8} \\approx 63.8\\ \\text{m}$$\n\n$$R = \\frac{50^2 \\times \\sin 90°}{9.8} \\approx 255.1\\ \\text{m}$$\n\n---\n\nWould you like me to **retry the interactive scene**, dive deeper into any of these equations, or explore a specific scenario (e.g., projectile on the Moon)?",
+      "qualityScore": 0
+    },
+    {
+      "model": "google/gemini-3-flash-preview",
+      "prompt": "Create a scene spark that explains derivative intuition with a draggable point, tangent line, secant line, and delta x slider.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-35-25-940Z-7hvjqg.json",
+      "totalDurationMs": 28292,
+      "sparkDurationMs": 16523.506591796875,
+      "sparkFailures": 0,
+      "sceneFilePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-30-32-913Z-rql60k\\scenes\\google-gemini-3-flash-preview\\prompt-1\\1-toolu_bdrk_01398TLWorYsLQDaQzGov1Cr-derivative-intuition-explorer.html",
+      "actionResultText": "Here's your **Derivative Intuition Explorer**! 🎉\n\n---\n\n### How to use it:\n\n| Interaction | What it does |\n|---|---|\n| **Drag the blue point (P)** | Moves along the curve — watch both lines update in real time |\n| **Move the Δx slider** | Shrinks or grows the gap between P and Q |\n| **Shrink Δx → 0** | The red secant line rotates and converges onto the tangent slope |\n\n---\n\n### The core idea:\n\nThe **secant slope** between two points P and Q is:\n\n$$m_{\\text{sec}} = \\frac{f(x + \\Delta x) - f(x)}{\\Delta x}$$\n\nAs $\\Delta x \\to 0$, point Q slides into P, and that slope becomes the **instantaneous rate of change** — the **derivative**:\n\n$$f'(x) = \\lim_{\\Delta x \\to 0} \\frac{f(x + \\Delta x) - f(x)}{\\Delta x}$$\n\nThe live slope readout updates as you drag, so you can literally *see* the number settle toward $f'(x)$ as $\\Delta x$ shrinks. That limit is not just a formula — it's a geometric reality. 📐",
+      "html": {
+        "htmlLength": 3201,
+        "controls": 1,
+        "sliders": 1,
+        "handlers": 1,
+        "hasSvgOrCanvas": true,
+        "usesTailwindBrowser": true
+      },
+      "qualityScore": 80
+    },
+    {
+      "model": "google/gemini-3-flash-preview",
+      "prompt": "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-35-54-374Z-6lwckw.json",
+      "totalDurationMs": 26967,
+      "sparkDurationMs": 15573.139404296875,
+      "sparkFailures": 0,
+      "sceneFilePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-30-32-913Z-rql60k\\scenes\\google-gemini-3-flash-preview\\prompt-1\\1-toolu_bdrk_01597MFWpcGHY8vjs4LBJxPf-projectile-motion-explorer.html",
+      "actionResultText": "Here's your **Projectile Motion Explorer**! 🚀 Here's how to use it:\n\n---\n\n### 🎮 How to Use\n\n1. **Adjust the sliders** before launching:\n   - 🎯 **Angle** — controls the launch direction (0° = horizontal, 90° = straight up)\n   - ⚡ **Initial Speed** — how fast the projectile leaves the launcher\n   - 🌍 **Gravity** — try low values (Moon ~1.6) or high ones to see the difference\n\n2. **Watch the dotted ghost path** update live as you move sliders — that's the predicted trajectory.\n\n3. **Hit LAUNCH** — the orange ball animates along the real parabolic path.\n\n---\n\n### 📐 The Physics Behind It\n\nThe position at time $t$ is governed by:\n\n$$x(t) = v_0 \\cos(\\theta)\\cdot t \\qquad y(t) = v_0 \\sin(\\theta)\\cdot t - \\tfrac{1}{2}g t^2$$\n\nKey derived quantities:\n\n| Quantity | Formula |\n|---|---|\n| **Max Height** | $H = \\dfrac{v_0^2 \\sin^2\\theta}{2g}$ |\n| **Range** | $R = \\dfrac{v_0^2 \\sin(2\\theta)}{g}$ |\n| **Time of Flight** | $T = \\dfrac{2v_0 \\sin\\theta}{g}$ |\n\n> 💡 **Try this:** Set angle to **45°** — that's the sweet spot for **maximum range**! Then try the same speed on the Moon (g ≈ 1.6) vs. Earth (g = 9.8).",
+      "html": {
+        "htmlLength": 3711,
+        "controls": 4,
+        "sliders": 3,
+        "handlers": 3,
+        "hasSvgOrCanvas": true,
+        "usesTailwindBrowser": true
+      },
+      "qualityScore": 100
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "prompt": "Create a scene spark that explains derivative intuition with a draggable point, tangent line, secant line, and delta x slider.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-36-22-492Z-bf9np2.json",
+      "totalDurationMs": 33913,
+      "sparkDurationMs": 21101.265625,
+      "sparkFailures": 0,
+      "sceneFilePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-30-32-913Z-rql60k\\scenes\\google-gemini-2-5-flash\\prompt-1\\1-toolu_vrtx_01GLjEXuzb1qGoN3gAcdxVMV-derivative-intuition-tangent-secant-lines.html",
+      "actionResultText": "Here's your **Derivative Intuition** Spark! 🎉 Here's how to use it:\n\n---\n\n### 🔵 What's on screen\n| Element | Color | Meaning |\n|---|---|---|\n| Curve | Blue | $f(x) = x^2$ |\n| Point **P** | Red | Your base point on the curve |\n| Point **Q** | Green | A second point on the curve |\n| Tangent line | Red | Slope = $f'(x)$ at P |\n| Secant line | Green | Slope = $\\dfrac{\\Delta y}{\\Delta x} = \\dfrac{f(x+\\Delta x) - f(x)}{\\Delta x}$ |\n\n---\n\n### 🧪 Try these explorations\n\n1. **Drag Q toward P** — watch the secant slope get closer and closer to the tangent slope. This is the limit definition:\n$$f'(x) = \\lim_{\\Delta x \\to 0} \\frac{f(x + \\Delta x) - f(x)}{\\Delta x}$$\n\n2. **Drag P** to different spots — notice the tangent slope changes (steeper at large $|x|$, flat near $x = 0$).\n\n3. **At $x = 0$**, the tangent is horizontal → $f'(0) = 0$, which is the minimum of $x^2$.\n\n---\n\nThe core insight: **a derivative is just a secant line with an infinitely small Δx**. The tangent line is what the secant line *becomes* in the limit.",
+      "html": {
+        "htmlLength": 7503,
+        "controls": 0,
+        "sliders": 0,
+        "handlers": 4,
+        "hasSvgOrCanvas": true,
+        "usesTailwindBrowser": true
+      },
+      "qualityScore": 90
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "prompt": "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-36-56-566Z-9ba3ko.json",
+      "totalDurationMs": 35007,
+      "sparkDurationMs": 23390.240478515625,
+      "sparkFailures": 0,
+      "sceneFilePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-30-32-913Z-rql60k\\scenes\\google-gemini-2-5-flash\\prompt-1\\1-toolu_vrtx_01DDD1reWVYWmdqp4Scawf6m-projectile-motion-explorer.html",
+      "actionResultText": "Here's your **Projectile Motion Explorer**! 🚀\n\n---\n\n### How to use it:\n\n1. **Adjust the sliders** on the right panel:\n   - 🎯 **Launch Angle** — 0° (flat) to 90° (straight up); watch the dotted preview arc update live\n   - ⚡ **Initial Speed** — 10 to 100 m/s; a larger speed stretches the arc further\n   - 🌍 **Gravity** — 1 m/s² (Moon-like) to 20 m/s² (heavy planet); lower gravity = longer, higher arc\n\n2. **Click \"Launch\"** — the glowing projectile fires along the predicted arc with a trailing trail effect.\n\n3. **Click \"Reset\"** to return the projectile to the cannon and try new settings.\n\n---\n\n### Key physics at work:\n\n$$x(t) = v_0 \\cos\\theta \\cdot t$$\n\n$$y(t) = v_0 \\sin\\theta \\cdot t - \\frac{1}{2}g t^2$$\n\n- **Optimal range** is always at $\\theta = 45°$ (try it!)\n- **Lower gravity** (e.g., Moon = 1.6 m/s²) dramatically extends flight time\n- The **dotted white arc** is the live predicted trajectory — it updates as you drag any slider",
+      "html": {
+        "htmlLength": 9311,
+        "controls": 5,
+        "sliders": 3,
+        "handlers": 7,
+        "hasSvgOrCanvas": true,
+        "usesTailwindBrowser": true
+      },
+      "qualityScore": 100
+    }
+  ]
+}

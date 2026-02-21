@@ -1,0 +1,169 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  
+  </head>
+  <body>
+    <div class="flex flex-col items-center p-4 max-w-4xl mx-auto">
+      <h1 class="text-xl font-bold mb-4">Derivative Intuition</h1>
+      <canvas id="canvas" width="600" height="400" class="border border-gray-300 mb-4"></canvas>
+      <div class="mb-4">
+        <label class="block text-sm font-medium">Δx: <input type="range" id="deltaX" min="0.01" max="2" step="0.01" value="1" class="w-full"></label>
+      </div>
+      <div id="slopes" class="mb-4 text-center"></div>
+      <p class="text-sm text-gray-600 text-center">Drag the blue point on the curve. Adjust Δx to see the secant line (red) approach the tangent line (green).</p>
+    </div>
+    <script>
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width;
+      const height = canvas.height;
+      const xMin = -3, xMax = 3, yMin = -0.5, yMax = 9;
+      const xRange = xMax - xMin;
+      const yRange = yMax - yMin;
+      let currentX = 1;
+      let dragging = false;
+
+      function draw() {
+        ctx.clearRect(0, 0, width, height);
+        // grid
+        ctx.strokeStyle = 'lightgray';
+        ctx.lineWidth = 1;
+        for (let x = xMin; x <= xMax; x++) {
+          let cx = (x - xMin) / xRange * width;
+          ctx.beginPath();
+          ctx.moveTo(cx, 0);
+          ctx.lineTo(cx, height);
+          ctx.stroke();
+        }
+        for (let y = yMin; y <= yMax; y++) {
+          let cy = height - ((y - yMin) / yRange * height);
+          ctx.beginPath();
+          ctx.moveTo(0, cy);
+          ctx.lineTo(width, cy);
+          ctx.stroke();
+        }
+        // axes
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        let cx0 = (0 - xMin) / xRange * width;
+        let cy0 = height - ((0 - yMin) / yRange * height);
+        ctx.beginPath();
+        ctx.moveTo(cx0, 0);
+        ctx.lineTo(cx0, height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, cy0);
+        ctx.lineTo(width, cy0);
+        ctx.stroke();
+        // curve
+        ctx.strokeStyle = 'blue';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i <= 600; i++) {
+          let x = xMin + i / 600 * xRange;
+          let y = x * x;
+          let cx = (x - xMin) / xRange * width;
+          let cy = height - ((y - yMin) / yRange * height);
+          if (i === 0) ctx.moveTo(cx, cy);
+          else ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+        // point P
+        let px = currentX;
+        let py = px * px;
+        let pcx = (px - xMin) / xRange * width;
+        let pcy = height - ((py - yMin) / yRange * height);
+        ctx.fillStyle = 'blue';
+        ctx.beginPath();
+        ctx.arc(pcx, pcy, 5, 0, 2 * Math.PI);
+        ctx.fill();
+        // Δx
+        let dx = parseFloat(document.getElementById('deltaX').value);
+        let qx = px + dx;
+        let qy = qx * qx;
+        let qcx = (qx - xMin) / xRange * width;
+        let qcy = height - ((qy - yMin) / yRange * height);
+        // secant
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(pcx, pcy);
+        ctx.lineTo(qcx, qcy);
+        ctx.stroke();
+        // tangent
+        let slope = 2 * px;
+        let tx1 = px - 1;
+        let tx2 = px + 1;
+        let ty1 = py + slope * (tx1 - px);
+        let ty2 = py + slope * (tx2 - px);
+        let tcx1 = (tx1 - xMin) / xRange * width;
+        let tcy1 = height - ((ty1 - yMin) / yRange * height);
+        let tcx2 = (tx2 - xMin) / xRange * width;
+        let tcy2 = height - ((ty2 - yMin) / yRange * height);
+        ctx.strokeStyle = 'green';
+        ctx.beginPath();
+        ctx.moveTo(tcx1, tcy1);
+        ctx.lineTo(tcx2, tcy2);
+        ctx.stroke();
+        // slopes
+        let secSlope = (qy - py) / dx;
+        document.getElementById('slopes').innerHTML = `Secant slope: ${secSlope.toFixed(2)}, Tangent slope: ${slope.toFixed(2)}`;
+      }
+
+      canvas.addEventListener('mousedown', e => {
+        let rect = canvas.getBoundingClientRect();
+        let cx = e.clientX - rect.left;
+        let cy = e.clientY - rect.top;
+        let pcx = (currentX - xMin) / xRange * width;
+        let pcy = height - ((currentX * currentX - yMin) / yRange * height);
+        if (Math.abs(cx - pcx) < 10 && Math.abs(cy - pcy) < 10) {
+          dragging = true;
+        }
+      });
+      canvas.addEventListener('mousemove', e => {
+        if (dragging) {
+          let rect = canvas.getBoundingClientRect();
+          let cx = e.clientX - rect.left;
+          let cy = e.clientY - rect.top;
+          let x = xMin + cx / width * xRange;
+          x = Math.max(xMin, Math.min(xMax, x));
+          currentX = x;
+          draw();
+        }
+      });
+      canvas.addEventListener('mouseup', () => dragging = false);
+      canvas.addEventListener('touchstart', e => {
+        e.preventDefault();
+        let touch = e.touches[0];
+        let rect = canvas.getBoundingClientRect();
+        let cx = touch.clientX - rect.left;
+        let cy = touch.clientY - rect.top;
+        let pcx = (currentX - xMin) / xRange * width;
+        let pcy = height - ((currentX * currentX - yMin) / yRange * height);
+        if (Math.abs(cx - pcx) < 10 && Math.abs(cy - pcy) < 10) {
+          dragging = true;
+        }
+      });
+      canvas.addEventListener('touchmove', e => {
+        e.preventDefault();
+        if (dragging) {
+          let touch = e.touches[0];
+          let rect = canvas.getBoundingClientRect();
+          let cx = touch.clientX - rect.left;
+          let cy = touch.clientY - rect.top;
+          let x = xMin + cx / width * xRange;
+          x = Math.max(xMin, Math.min(xMax, x));
+          currentX = x;
+          draw();
+        }
+      });
+      canvas.addEventListener('touchend', () => dragging = false);
+      document.getElementById('deltaX').addEventListener('input', draw);
+      draw();
+    </script>
+  </body>
+</html>

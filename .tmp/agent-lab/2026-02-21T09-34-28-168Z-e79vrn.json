@@ -1,0 +1,72 @@
+{
+  "runId": "2026-02-21T09-34-28-168Z-e79vrn",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId model-compare-user --newThread --saveSceneHtml --sceneOutDir C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-30-32-913Z-rql60k\\scenes\\x-ai-grok-4-1-fast\\prompt-1 --modelLabel x-ai/grok-4.1-fast --pollMs 250 --prompt Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory.",
+  "userId": "model-compare-user",
+  "threadId": "m57a9z2teh13e0yqsagrxjztbd81jcha",
+  "agentName": "studi",
+  "prompt": "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory.",
+  "promptHash": "e683f9fb49460645",
+  "modelLabel": "x-ai/grok-4.1-fast",
+  "startedAt": 1771666468168,
+  "endedAt": 1771666524744,
+  "totalDurationMs": 56576,
+  "firstAssistantEventMs": 56576,
+  "actionResultText": "The Spark couldn't be generated this time due to a provider timeout — sorry about that! Here's everything you need to understand the physics instead:\n\n---\n\n## 🚀 Projectile Motion — Key Ideas\n\n### The Equations\nGiven launch speed $v_0$, angle $\\theta$, and gravity $g$:\n\n$$x(t) = v_0 \\cos\\theta \\cdot t$$\n\n$$y(t) = v_0 \\sin\\theta \\cdot t - \\frac{1}{2}g t^2$$\n\n---\n\n### Key Results\n\n| Quantity | Formula |\n|---|---|\n| **Time of Flight** | $T = \\dfrac{2v_0 \\sin\\theta}{g}$ |\n| **Max Height** | $H = \\dfrac{(v_0 \\sin\\theta)^2}{2g}$ |\n| **Range** | $R = \\dfrac{v_0^2 \\sin 2\\theta}{g}$ |\n\n---\n\n### Intuition for the Sliders\n\n- 🎯 **Angle** → $45°$ maximizes range; $90°$ maximizes height.\n- ⚡ **Speed** → Range and height scale with $v_0^2$ — doubling speed **quadruples** both.\n- 🪐 **Gravity** → Lower gravity (like the Moon, $g ≈ 1.6\\ \\text{m/s}^2$) dramatically increases range and hang time.\n\n---\n\n### Example (v₀ = 50 m/s, θ = 45°, g = 9.8 m/s²)\n\n$$T = \\frac{2 \\times 50 \\times \\sin 45°}{9.8} \\approx 7.2\\ \\text{s}$$\n\n$$H = \\frac{(50 \\sin 45°)^2}{2 \\times 9.8} \\approx 63.8\\ \\text{m}$$\n\n$$R = \\frac{50^2 \\times \\sin 90°}{9.8} \\approx 255.1\\ \\text{m}$$\n\n---\n\nWould you like me to **retry the interactive scene**, dive deeper into any of these equations, or explore a specific scenario (e.g., projectile on the Moon)?",
+  "actionResultTextHash": "12c7aee12351d7df",
+  "messageCount": 4,
+  "newMessageCount": 4,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "toolu_vrtx_01NuXgijUETd6quqmDJhndYX",
+      "toolName": "create_spark",
+      "startedAt": 1771666468168,
+      "endedAt": 1771666512674.1638,
+      "durationMs": 44506.163818359375,
+      "durationEstimated": true,
+      "status": "error",
+      "sparkStatus": "failed",
+      "error": "Provider fault: name=SparkWorkerError | message=Spark worker timed out after 35000ms (model: x-ai/grok-4.1-fast)."
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1771666464886.9111,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks7eann4mj0gce3khf71a9fkss81jqms",
+      "kind": "user",
+      "detail": "Create a scene spark for projectile motion with launch angle and speed sliders, gravity control, and a live trajectory."
+    },
+    {
+      "at": 1771666512674.1638,
+      "relativeMs": 44506.163818359375,
+      "order": 0,
+      "stepOrder": 2,
+      "messageId": "ks79xfr6v08n32e5gcjjgbb5s981jv6c",
+      "kind": "tool_result",
+      "detail": "{\"error\":\"Provider fault: name=SparkWorkerError | message=Spark worker timed out after 35000ms (model: x-ai/grok-4.1-fa...",
+      "toolName": "create_spark",
+      "toolCallId": "toolu_vrtx_01NuXgijUETd6quqmDJhndYX",
+      "status": "error"
+    },
+    {
+      "at": 1771666524744,
+      "relativeMs": 56576,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "The Spark couldn't be generated this time due to a provider timeout — sorry about that! Here's everything you need to u..."
+    }
+  ],
+  "spark": {
+    "calls": 1,
+    "failures": 1,
+    "totalDurationMs": 44506.163818359375
+  },
+  "sceneFiles": []
+}

@@ -1,0 +1,44 @@
+{
+  "runId": "2026-02-21T09-18-30-116Z-bvpeuc",
+  "createdAt": "2026-02-21T09:18:32.437Z",
+  "options": {
+    "models": [
+      "anthropic/claude-sonnet-4.6"
+    ],
+    "prompts": [
+      "Create a scene spark showing derivative tangent intuition with draggable point."
+    ],
+    "userId": "model-compare-user",
+    "repeats": 1,
+    "pollMs": 250,
+    "scope": "scene",
+    "includeContext": false,
+    "debugRaw": false
+  },
+  "previousEnv": {
+    "OPENROUTER_MODEL": "anthropic/claude-sonnet-4.6",
+    "SPARK_WORKER_SCENE_MODEL": "anthropic/claude-sonnet-4.6"
+  },
+  "trials": [
+    {
+      "model": "anthropic/claude-sonnet-4.6",
+      "prompt": "Create a scene spark showing derivative tangent intuition with draggable point.",
+      "repeat": 1,
+      "artifactPath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\2026-02-21T09-18-33-649Z-gtekfr.json",
+      "totalDurationMs": 37071,
+      "sparkDurationMs": 24840.044189453125,
+      "sparkFailures": 0,
+      "sceneFilePath": "C:\\Users\\kaust\\Documents\\coding\\studi\\.tmp\\agent-lab\\model-compare\\2026-02-21T09-18-30-116Z-bvpeuc\\scenes\\anthropic-claude-sonnet-4-6\\prompt-1\\1-toolu_bdrk_01XiKiysrRrQzgPXB4DzguPw-derivative-tangent-line-intuition.html",
+      "actionResultText": "Here's your **Derivative Tangent Line Intuition** Spark! 🎉\n\n---\n\n### How to use it:\n\n1. **Drag the yellow dot** left or right along the curve $f(x) = x^3 - 3x + 1$\n2. Watch the **dashed yellow tangent line** rotate in real time as you move\n3. Read the live stats at the bottom:\n   - **x** — your current position\n   - **f(x)** — the curve's height at that point\n   - **f′(x)** — the instantaneous slope (the derivative!)\n\n---\n\n### Key intuitions to notice:\n\n| What you see | What it means |\n|---|---|\n| Tangent line tilts **upward** | $f'(x) > 0$ — function is increasing |\n| Tangent line tilts **downward** | $f'(x) < 0$ — function is decreasing |\n| Tangent line goes **flat** | $f'(x) = 0$ — a local max or min! |\n\n> 💡 Try dragging to the **two flat spots** near $x \\approx -1$ and $x \\approx +1$ — those are the critical points where $f'(x) = 3x^2 - 3 = 0$.",
+      "html": {
+        "htmlLength": 4842,
+        "controls": 0,
+        "sliders": 0,
+        "handlers": 6,
+        "hasSvgOrCanvas": true,
+        "usesTailwindBrowser": true
+      },
+      "qualityScore": 90
+    }
+  ]
+}

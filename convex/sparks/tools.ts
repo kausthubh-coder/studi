@@ -34,7 +34,7 @@ const sceneWorkerModel =
 const desmosWorkerModel =
   process.env.SPARK_WORKER_DESMOS_MODEL ??
   process.env.SPARK_WORKER_MODEL ??
-  "z-ai/glm-5";
+  "google/gemini-3-flash-preview";
 
 function parseSparkWorkerTimeoutMs(
   value: string | undefined,
