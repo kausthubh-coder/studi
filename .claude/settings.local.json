@@ -8,7 +8,19 @@
       "WebFetch(domain:docs.convex.dev)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:stack.convex.dev)",
-      "WebFetch(domain:www.npmjs.com)"
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(head:*)",
+      "Bash(cd /c/Users/kaust/Documents/coding/studi && bun run lint 2>&1)",
+      "Bash(cd /c/Users/kaust/Documents/coding/studi && bun run lint 2>&1 && bunx tsc --noEmit 2>&1 && bunx convex typecheck 2>&1)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(bunx tsc:*)",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "mcp__plugin_playwright_playwright__browser_run_code",
+      "mcp__plugin_playwright_playwright__browser_wait_for",
+      "mcp__plugin_playwright_playwright__browser_click",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
