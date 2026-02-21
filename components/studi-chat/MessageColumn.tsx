@@ -14,7 +14,7 @@ export function MessageColumn({
   return (
     <div ref={listRef} className="flex-1 overflow-y-auto">
       <div
-        className="mx-auto px-8 pb-4 pt-14"
+        className="mx-auto px-8 pb-36 pt-14"
         style={{ maxWidth: "var(--column-max)" }}
       >
         {selectedThreadId && messages.length === 0 && (

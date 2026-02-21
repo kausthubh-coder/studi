@@ -272,7 +272,7 @@ export default function StudiChat() {
         onCreateThread={handleNewThread}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         {isOnWelcome ? (
           <WelcomeView
             pendingAttachments={pendingAttachments}

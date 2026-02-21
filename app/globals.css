@@ -168,6 +168,12 @@ body::after {
 /* ── Composer ─────────────────────────────────────────────── */
 .composer-card {
   position: relative;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 1px 3px rgba(28, 18, 8, 0.04),
+    0 8px 32px rgba(28, 18, 8, 0.06);
 }
 .composer-card.is-welcome {
   background: var(--bg-card);
@@ -188,10 +194,29 @@ body::after {
     0 0 0 3px var(--accent-dim);
 }
 
-/* Chat composer wrapper — no visible background */
+/* Chat composer wrapper — floating over scroll content */
 .composer-footer {
-  flex-shrink: 0;
-  padding: 0.75rem 1.5rem 1rem;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 0 1.5rem 1rem;
+  pointer-events: none;
+}
+.composer-footer > * {
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+}
+.composer-footer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  top: -2rem;
+  z-index: 0;
+  background: linear-gradient(to bottom, transparent, var(--bg) 60%);
+  pointer-events: none;
 }
 
 .composer-card textarea {
