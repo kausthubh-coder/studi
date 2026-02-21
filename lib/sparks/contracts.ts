@@ -1,6 +1,6 @@
 export const sparkSceneVersion = 1 as const;
 
-export const sparkTypes = ["scene", "desmos_graph"] as const;
+export const sparkTypes = ["scene", "desmos_graph", "code_playground"] as const;
 
 export type SparkType = (typeof sparkTypes)[number];
 export type SparkMode = "readonly" | "editable";
@@ -31,11 +31,24 @@ export type DesmosGraphPayload = {
   hint?: string;
 };
 
+export const codePlaygroundLanguages = ["python"] as const;
+
+export type CodePlaygroundLanguage = (typeof codePlaygroundLanguages)[number];
+
+export type CodePlaygroundPayload = {
+  language: CodePlaygroundLanguage;
+  instructions: string;
+  starterCode: string;
+  testCode?: string;
+  runHint?: string;
+};
+
 export type SparkSceneArtifact = {
   kind: "spark_scene";
   version: typeof sparkSceneVersion;
   sparkType: "scene";
   mode: SparkMode;
+  artifactId?: string;
   title: string;
   summary?: string;
   payload: SceneSparkPayload;
@@ -46,12 +59,27 @@ export type SparkDesmosGraphArtifact = {
   version: typeof sparkSceneVersion;
   sparkType: "desmos_graph";
   mode: SparkMode;
+  artifactId?: string;
   title: string;
   summary?: string;
   payload: DesmosGraphPayload;
 };
 
-export type SparkArtifact = SparkSceneArtifact | SparkDesmosGraphArtifact;
+export type SparkCodePlaygroundArtifact = {
+  kind: "spark_code_playground";
+  version: typeof sparkSceneVersion;
+  sparkType: "code_playground";
+  mode: SparkMode;
+  artifactId?: string;
+  title: string;
+  summary?: string;
+  payload: CodePlaygroundPayload;
+};
+
+export type SparkArtifact =
+  | SparkSceneArtifact
+  | SparkDesmosGraphArtifact
+  | SparkCodePlaygroundArtifact;
 
 export type CreateSparkToolInput = {
   sparkId: SparkType;
@@ -76,6 +104,7 @@ export type CreateSparkToolResult =
 
 export type SparkDraft = {
   html: string;
+  artifactId?: string;
   title?: string;
   summary?: string;
   workerSummary?: string;
@@ -83,6 +112,15 @@ export type SparkDraft = {
 
 export type DesmosSparkDraft = {
   payload: DesmosGraphPayload;
+  artifactId?: string;
+  title?: string;
+  summary?: string;
+  workerSummary?: string;
+};
+
+export type CodePlaygroundSparkDraft = {
+  payload: CodePlaygroundPayload;
+  artifactId?: string;
   title?: string;
   summary?: string;
   workerSummary?: string;
@@ -97,12 +135,16 @@ export type SparkValidationResult = {
 const maxTitleLength = 80;
 const maxSummaryLength = 220;
 const maxCodeLength = 16_000;
+const maxCodePlaygroundLength = 22_000;
+const maxInstructionsLength = 1_200;
+const maxRunHintLength = 240;
 const maxHintLength = 180;
 const maxExpressions = 40;
 
 const sparkTypeLabels: Record<SparkType, string> = {
   scene: "Scene",
   desmos_graph: "Desmos Graph",
+  code_playground: "Code Playground",
 };
 
 function clampText(value: string, maxLength: number): string {
@@ -111,6 +153,10 @@ function clampText(value: string, maxLength: number): string {
 
 function clampCode(value: string): string {
   return value.slice(0, maxCodeLength);
+}
+
+function clampPlaygroundCode(value: string): string {
+  return value.slice(0, maxCodePlaygroundLength);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -158,7 +204,19 @@ function normalizeSparkType(sparkType: string | undefined): SparkType {
   if (sparkType === "desmos_graph") {
     return sparkType;
   }
+  if (sparkType === "code_playground") {
+    return sparkType;
+  }
   return "scene";
+}
+
+function normalizeCodePlaygroundLanguage(
+  value: unknown,
+): CodePlaygroundLanguage {
+  if (value === "python") {
+    return value;
+  }
+  return "python";
 }
 
 function normalizeDesmosExpressions(input: unknown): DesmosExpressionState[] {
@@ -332,6 +390,10 @@ export function normalizeSparkSceneDraft(
     version: sparkSceneVersion,
     sparkType: "scene",
     mode: "readonly",
+    artifactId:
+      typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
+        ? clampText(draft.artifactId, 120)
+        : undefined,
     title,
     summary,
     payload: {
@@ -372,6 +434,62 @@ export function normalizeSparkDesmosGraphDraft(
     version: sparkSceneVersion,
     sparkType: "desmos_graph",
     mode: "editable",
+    artifactId:
+      typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
+        ? clampText(draft.artifactId, 120)
+        : undefined,
+    title,
+    summary,
+    payload: normalizedPayload,
+  };
+}
+
+export function normalizeSparkCodePlaygroundDraft(
+  draft: CodePlaygroundSparkDraft,
+): SparkCodePlaygroundArtifact {
+  const title = clampText(
+    typeof draft.title === "string" && draft.title.trim().length > 0
+      ? draft.title
+      : getSparkTypeLabel("code_playground"),
+    maxTitleLength,
+  );
+
+  const summary =
+    typeof draft.summary === "string" && draft.summary.trim().length > 0
+      ? clampText(draft.summary, maxSummaryLength)
+      : undefined;
+
+  const payload = draft.payload;
+
+  const normalizedPayload: CodePlaygroundPayload = {
+    language: normalizeCodePlaygroundLanguage(payload.language),
+    instructions:
+      typeof payload.instructions === "string" &&
+      payload.instructions.trim().length > 0
+        ? clampText(payload.instructions, maxInstructionsLength)
+        : "Run the code and modify it to test your understanding.",
+    starterCode: clampPlaygroundCode(
+      typeof payload.starterCode === "string" ? payload.starterCode : "",
+    ),
+    testCode:
+      typeof payload.testCode === "string" && payload.testCode.trim().length > 0
+        ? clampPlaygroundCode(payload.testCode)
+        : undefined,
+    runHint:
+      typeof payload.runHint === "string" && payload.runHint.trim().length > 0
+        ? clampText(payload.runHint, maxRunHintLength)
+        : undefined,
+  };
+
+  return {
+    kind: "spark_code_playground",
+    version: sparkSceneVersion,
+    sparkType: "code_playground",
+    mode: "editable",
+    artifactId:
+      typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
+        ? clampText(draft.artifactId, 120)
+        : undefined,
     title,
     summary,
     payload: normalizedPayload,
@@ -417,6 +535,13 @@ export function isSparkSceneArtifact(
     return false;
   }
 
+  if (
+    candidate.artifactId !== undefined &&
+    typeof candidate.artifactId !== "string"
+  ) {
+    return false;
+  }
+
   if (!candidate.payload || typeof candidate.payload !== "object") {
     return false;
   }
@@ -443,11 +568,66 @@ export function isSparkDesmosGraphArtifact(
     return false;
   }
 
+  if (
+    candidate.artifactId !== undefined &&
+    typeof candidate.artifactId !== "string"
+  ) {
+    return false;
+  }
+
   return isDesmosGraphPayload(candidate.payload);
 }
 
+function isCodePlaygroundPayload(
+  value: unknown,
+): value is CodePlaygroundPayload {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+
+  return (
+    value.language === "python" &&
+    typeof value.instructions === "string" &&
+    typeof value.starterCode === "string" &&
+    (value.testCode === undefined || typeof value.testCode === "string") &&
+    (value.runHint === undefined || typeof value.runHint === "string")
+  );
+}
+
+export function isSparkCodePlaygroundArtifact(
+  value: unknown,
+): value is SparkCodePlaygroundArtifact {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<SparkCodePlaygroundArtifact>;
+  if (
+    candidate.kind !== "spark_code_playground" ||
+    candidate.version !== sparkSceneVersion ||
+    candidate.sparkType !== "code_playground" ||
+    typeof candidate.title !== "string" ||
+    (candidate.mode !== "readonly" && candidate.mode !== "editable")
+  ) {
+    return false;
+  }
+
+  if (
+    candidate.artifactId !== undefined &&
+    typeof candidate.artifactId !== "string"
+  ) {
+    return false;
+  }
+
+  return isCodePlaygroundPayload(candidate.payload);
+}
+
 export function isSparkArtifact(value: unknown): value is SparkArtifact {
-  return isSparkSceneArtifact(value) || isSparkDesmosGraphArtifact(value);
+  return (
+    isSparkSceneArtifact(value) ||
+    isSparkDesmosGraphArtifact(value) ||
+    isSparkCodePlaygroundArtifact(value)
+  );
 }
 
 export function isCreateSparkToolResult(

@@ -21,4 +21,35 @@ export default defineSchema({
     mimeType: v.string(),
     size: v.number(),
   }).index("by_userId", ["userId"]),
+
+  sparkInteractions: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    sparkInstanceId: v.string(),
+    sparkType: v.string(),
+    sparkTitle: v.optional(v.string()),
+    language: v.optional(v.string()),
+    code: v.optional(v.string()),
+    runCount: v.number(),
+    lastStatus: v.union(
+      v.literal("idle"),
+      v.literal("success"),
+      v.literal("error"),
+    ),
+    lastStdout: v.optional(v.string()),
+    lastStderr: v.optional(v.string()),
+    lastError: v.optional(v.string()),
+    lastRunAt: v.optional(v.number()),
+    lastUpdatedAt: v.number(),
+  })
+    .index("by_userId_and_threadId_and_lastUpdatedAt", [
+      "userId",
+      "threadId",
+      "lastUpdatedAt",
+    ])
+    .index("by_userId_and_threadId_and_sparkInstanceId", [
+      "userId",
+      "threadId",
+      "sparkInstanceId",
+    ]),
 });

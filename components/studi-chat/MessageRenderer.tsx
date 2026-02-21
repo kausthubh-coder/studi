@@ -1,6 +1,7 @@
 import type { UIMessage } from "@convex-dev/agent/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -11,6 +12,7 @@ import {
   type CreateSparkToolResult,
 } from "@/lib/sparks/contracts";
 import { IconChevronDown, IconPaperclip } from "@/components/studi-chat/icons";
+import { FlickeringGrid } from "@/components/studi-chat/FlickeringGrid";
 
 type ChatMessagePart = NonNullable<UIMessage["parts"]>[number];
 
@@ -39,6 +41,7 @@ type AssistantActivity = {
   isStreaming: boolean;
   summary: string;
   steps: ActivityStep[];
+  reasoningText: string;
 };
 
 type AssistantTextSegments = {
@@ -46,6 +49,8 @@ type AssistantTextSegments = {
   introText: string;
   finalText: string;
 };
+
+/* ── Helpers ──────────────────────────────────────────────── */
 
 function humanizeToolName(name: string): string {
   return name
@@ -172,16 +177,19 @@ function deriveAssistantActivity(
   const steps: ActivityStep[] = [];
   const summaryParts: string[] = [];
 
+  // Collect reasoning text
   const reasoningParts = parts.filter(
     (part): part is Extract<ChatMessagePart, { type: "reasoning" }> =>
       part.type === "reasoning",
   );
+
+  const reasoningText = reasoningParts
+    .map((part) => part.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
   if (reasoningParts.length > 0) {
-    const text = reasoningParts
-      .map((part) => part.text)
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
     const isReasoningStreaming = reasoningParts.some(
       (part) => part.state === "streaming",
     );
@@ -189,7 +197,7 @@ function deriveAssistantActivity(
     steps.push({
       id: `${message.key}-reasoning`,
       label: isReasoningStreaming ? "Thinking" : "Reasoned through response",
-      detail: text ? truncate(text, 180) : undefined,
+      detail: reasoningText ? truncate(reasoningText, 180) : undefined,
       status: isReasoningStreaming ? "active" : "complete",
       summary: isReasoningStreaming ? "Thinking" : "Reasoned",
     });
@@ -343,7 +351,7 @@ function deriveAssistantActivity(
         : "Show steps";
   const summary =
     isStreaming && baseSummary !== "Working"
-      ? `Working - ${baseSummary}`
+      ? `Working — ${baseSummary}`
       : baseSummary;
 
   return {
@@ -351,6 +359,7 @@ function deriveAssistantActivity(
     isStreaming,
     summary,
     steps,
+    reasoningText,
   };
 }
 
@@ -460,6 +469,33 @@ function classifySparkFailure(error: string): string {
   return "error";
 }
 
+/* ── Spark building animation ────────────────────────────── */
+
+function SparkBuildingCard({ context }: { context?: string }) {
+  return (
+    <div className="spark-building-card my-4 not-prose">
+      <FlickeringGrid
+        className="spark-building-grid"
+        squareSize={6}
+        gridGap={10}
+        maxOpacity={0.55}
+        flickerChance={0.55}
+        color="rgb(176, 86, 48)"
+      />
+      <div className="spark-building-content">
+        <p className="font-heading text-sm font-medium text-fg">
+          Building spark
+        </p>
+        {context && (
+          <p className="mt-1 text-xs text-fg-muted">{truncate(context, 95)}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Spark failure card ──────────────────────────────────── */
+
 function SparkFailureCard({
   sparkId,
   workerSummary,
@@ -475,39 +511,24 @@ function SparkFailureCard({
   const failureKind = classifySparkFailure(error);
 
   return (
-    <div
-      className="my-3 rounded-xl border px-3 py-2"
-      style={{
-        borderColor: "rgba(182, 71, 71, 0.35)",
-        background: "rgba(81, 15, 15, 0.18)",
-        color: "var(--fg)",
-      }}
-    >
+    <div className="spark-fail my-3 not-prose">
       <div className="flex items-center gap-2">
-        <p className="text-sm font-medium">{sparkLabel} failed to build</p>
-        <span
-          className="rounded-full px-2 py-0.5 text-[10px] uppercase"
-          style={{
-            letterSpacing: "0.08em",
-            border: "1px solid rgba(255, 195, 195, 0.32)",
-            color: "#ffe0e0",
-            background: "rgba(133, 22, 22, 0.42)",
-          }}
-        >
-          {failureKind}
-        </span>
+        <p className="text-sm font-medium text-fg">
+          {sparkLabel} failed to build
+        </p>
+        <span className="spark-fail-badge">{failureKind}</span>
       </div>
       {workerSummary ? (
-        <p className="mt-1 text-xs" style={{ color: "var(--fg-muted)" }}>
-          {workerSummary}
-        </p>
+        <p className="mt-1 text-xs text-fg-muted">{workerSummary}</p>
       ) : null}
-      <p className="mt-1 text-xs" style={{ color: "#ffd6d6" }}>
+      <p className="mt-1 text-xs" style={{ color: "#8f3c3c" }}>
         {error}
       </p>
     </div>
   );
 }
+
+/* ── Spark result extraction ─────────────────────────────── */
 
 function extractCreateSparkToolResult(
   output: unknown,
@@ -593,6 +614,8 @@ function extractCreateSparkToolResult(
   return null;
 }
 
+/* ── Agent UI state ──────────────────────────────────────── */
+
 export function deriveAgentUiState(messages: UIMessage[]): AgentUiState {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -607,38 +630,32 @@ export function deriveAgentUiState(messages: UIMessage[]): AgentUiState {
         getToolName(part) === "create_spark" && isToolPartInProgress(part),
     );
     if (sparkPart) {
-      return {
-        phase: "spark",
-      };
+      return { phase: "spark" };
     }
 
     const reasoningPart = parts.find(
       (part) => part.type === "reasoning" && part.state === "streaming",
     );
     if (reasoningPart) {
-      return {
-        phase: "reasoning",
-      };
+      return { phase: "reasoning" };
     }
 
     const toolPart = parts.find(
       (part) => Boolean(getToolName(part)) && isToolPartInProgress(part),
     );
     if (toolPart) {
-      return {
-        phase: "tool",
-      };
+      return { phase: "tool" };
     }
 
     if (message.status === "streaming") {
-      return {
-        phase: "reasoning",
-      };
+      return { phase: "reasoning" };
     }
   }
 
   return { phase: "idle" };
 }
+
+/* ── Activity panel (thinking-card design) ───────────────── */
 
 function AssistantActivityPanel({
   message,
@@ -685,35 +702,47 @@ function AssistantActivityPanel({
   const stepsId = `${message.key}-assistant-steps`;
 
   return (
-    <div className="agent-activity not-prose">
+    <div
+      className="thinking-card not-prose"
+      data-streaming={activity.isStreaming}
+    >
       <button
         type="button"
-        className="agent-activity-trigger"
-        onClick={() => {
-          setIsCollapsed((previous) => !previous);
-        }}
+        className="thinking-toggle"
+        onClick={() => setIsCollapsed((prev) => !prev)}
         aria-expanded={isOpen}
         aria-controls={stepsId}
       >
-        <span className="agent-activity-summary">{activity.summary}</span>
+        <span className="thinking-toggle-dot" aria-hidden />
+        <span className="thinking-toggle-label">{activity.summary}</span>
         <IconChevronDown
-          className={`agent-activity-chevron${isOpen ? " is-open" : ""}`}
+          className={`thinking-toggle-chevron${isOpen ? " is-open" : ""}`}
         />
       </button>
 
       <div
         id={stepsId}
-        className="agent-activity-steps"
+        className="thinking-body"
         data-state={isOpen ? "open" : "closed"}
       >
+        {/* Reasoning text block */}
+        {activity.reasoningText && (
+          <div className="reasoning-block">{activity.reasoningText}</div>
+        )}
+
+        {/* Steps timeline */}
         {activity.steps.map((step) => (
-          <div key={step.id} className="agent-step" data-status={step.status}>
-            <span className="agent-step-marker" aria-hidden />
-            <div className="agent-step-content">
-              <p className="agent-step-label">{step.label}</p>
-              {step.detail ? (
-                <p className="agent-step-detail">{step.detail}</p>
-              ) : null}
+          <div
+            key={step.id}
+            className="thinking-step"
+            data-status={step.status}
+          >
+            <span className="thinking-step-dot" aria-hidden />
+            <div>
+              <p className="thinking-step-label">{step.label}</p>
+              {step.detail && (
+                <p className="thinking-step-detail">{step.detail}</p>
+              )}
             </div>
           </div>
         ))}
@@ -722,7 +751,15 @@ function AssistantActivityPanel({
   );
 }
 
-function AssistantParts({ message }: { message: UIMessage }) {
+/* ── Assistant parts renderer ────────────────────────────── */
+
+function AssistantParts({
+  message,
+  threadId,
+}: {
+  message: UIMessage;
+  threadId: string | null;
+}) {
   const parts = useMemo(() => message.parts ?? [], [message.parts]);
   const textSegments = useMemo(
     () => splitAssistantTextSegments(parts),
@@ -736,12 +773,30 @@ function AssistantParts({ message }: { message: UIMessage }) {
   const shouldShowIntroText =
     activity.isStreaming && textSegments.introText.trim().length > 0;
 
-  const finalText =
-    textSegments.hasToolBoundary && !activity.isStreaming
-      ? textSegments.finalText
-      : textSegments.hasToolBoundary && activity.isStreaming
-        ? textSegments.finalText
-        : textSegments.finalText;
+  const finalText = textSegments.hasToolBoundary
+    ? textSegments.finalText
+    : textSegments.finalText;
+
+  // Spark building cards (in-progress create_spark tools)
+  const sparkBuildingCards = parts
+    .map((part, partIndex) => {
+      const toolName = getToolName(part);
+      if (toolName !== "create_spark") return null;
+      const toolState = part as { state?: string; input?: unknown };
+      if (
+        toolState.state !== "input-streaming" &&
+        toolState.state !== "input-available"
+      )
+        return null;
+      const context = getSparkBuildContext(toolState.input);
+      return (
+        <SparkBuildingCard
+          key={`${message.key}-spark-building-${partIndex}`}
+          context={context}
+        />
+      );
+    })
+    .filter((card): card is React.JSX.Element => card !== null);
 
   const sparkArtifacts = parts
     .map((part, partIndex) => {
@@ -765,7 +820,14 @@ function AssistantParts({ message }: { message: UIMessage }) {
 
       return (
         <div key={`${message.key}-spark-${partIndex}`}>
-          <SparkSceneRenderer artifact={sparkResult.artifact} />
+          <SparkSceneRenderer
+            artifact={sparkResult.artifact}
+            threadId={threadId}
+            sparkInstanceId={
+              sparkResult.artifact.artifactId ??
+              `${message.key}-spark-${partIndex}`
+            }
+          />
         </div>
       );
     })
@@ -850,8 +912,7 @@ function AssistantParts({ message }: { message: UIMessage }) {
             href={part.url}
             target="_blank"
             rel="noreferrer"
-            className="my-3 block overflow-hidden rounded-lg"
-            style={{ border: "1px solid var(--border)" }}
+            className="my-3 block overflow-hidden rounded-xl border border-border-warm"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -869,12 +930,7 @@ function AssistantParts({ message }: { message: UIMessage }) {
           href={part.url}
           target="_blank"
           rel="noreferrer"
-          className="my-2 flex w-fit items-center gap-1.5 rounded-md px-3 py-1.5 text-sm"
-          style={{
-            border: "1px solid var(--border)",
-            background: "var(--bg-alt)",
-            color: "var(--fg-muted)",
-          }}
+          className="my-2 flex w-fit items-center gap-1.5 rounded-lg border border-border-warm bg-bg-alt px-3 py-1.5 text-sm text-fg-muted"
         >
           <IconPaperclip />
           {part.filename ?? "file"}
@@ -895,16 +951,17 @@ function AssistantParts({ message }: { message: UIMessage }) {
       {shouldShowIntroText ? (
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[rehypeKatex]}
+          rehypePlugins={[rehypeKatex, rehypeHighlight]}
         >
           {textSegments.introText}
         </ReactMarkdown>
       ) : null}
       <AssistantActivityPanel message={message} activity={activity} />
+      {sparkBuildingCards}
       {textToRender ? (
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[rehypeKatex]}
+          rehypePlugins={[rehypeKatex, rehypeHighlight]}
         >
           {textToRender}
         </ReactMarkdown>
@@ -916,12 +973,16 @@ function AssistantParts({ message }: { message: UIMessage }) {
   );
 }
 
+/* ── Message component ───────────────────────────────────── */
+
 export function ArticleMessage({
   message,
   index,
+  threadId,
 }: {
   message: UIMessage;
   index: number;
+  threadId: string | null;
 }) {
   const fileParts = (message.parts ?? []).filter((p) => p.type === "file");
 
@@ -931,14 +992,7 @@ export function ArticleMessage({
         className="animate-rise mb-6 mt-8 flex justify-end first:mt-0"
         style={{ animationDelay: `${Math.min(index * 30, 200)}ms` }}
       >
-        <div
-          className="max-w-[72%] rounded-2xl rounded-br-sm px-4 py-2.5 font-body text-sm leading-relaxed"
-          style={{
-            background: "var(--accent-dim)",
-            border: "1px solid rgba(168,92,58,0.18)",
-            color: "var(--fg)",
-          }}
-        >
+        <div className="max-w-[72%] rounded-2xl rounded-br-sm border border-accent-dim bg-accent-dim px-4 py-2.5 font-body text-sm leading-relaxed text-fg">
           {message.text || "..."}
           {fileParts.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -973,8 +1027,7 @@ export function ArticleMessage({
                     href={f.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-1 text-xs underline"
-                    style={{ color: "var(--accent)" }}
+                    className="flex items-center gap-1 text-xs text-accent underline"
                   >
                     <IconPaperclip />
                     {f.filename ?? "file"}
@@ -994,7 +1047,7 @@ export function ArticleMessage({
       style={{ animationDelay: `${Math.min(index * 30, 200)}ms` }}
     >
       <div className="article-prose">
-        <AssistantParts message={message} />
+        <AssistantParts message={message} threadId={threadId} />
       </div>
     </div>
   );

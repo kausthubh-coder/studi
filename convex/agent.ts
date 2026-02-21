@@ -6,6 +6,7 @@ import { stepCountIs } from "ai";
 import { components } from "./_generated/api";
 import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
 import { createSparkTool } from "./sparks/tools";
+import { getCodeSparkContextTool } from "../lib/agent-tools/getCodeSparkContextTool";
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
@@ -22,12 +23,13 @@ const openrouter = createOpenRouter({
 const defaultModel =
   process.env.OPENROUTER_MODEL ?? "anthropic/claude-sonnet-4.6";
 
-export const studiAgent = new Agent(components.agent, {
+export const studiAgent: Agent = new Agent(components.agent, {
   name: "studi",
   languageModel: openrouter.chat(defaultModel),
   stopWhen: stepCountIs(6),
   tools: {
     create_spark: createSparkTool,
+    get_code_spark_context: getCodeSparkContextTool,
   },
   instructions: `You are Studi, an intuition-first tutor. Keep responses concise, clear, and step-by-step.
 
@@ -43,6 +45,12 @@ When a Spark is clearly useful, call create_spark once with:
 Spark selection hints:
 - Use sparkId: desmos_graph for graphing equations, plotting points, or table-driven math exploration.
 - Use sparkId: scene for custom non-Desmos interactive visualizations.
+- Use sparkId: code_playground for hands-on coding practice where the learner should edit and run code.
+
+Code tutoring with spark context:
+- If the learner asks for debugging help or follow-up on a previously edited code spark, call get_code_spark_context first.
+- Use returned edits, outputs, and errors to give targeted feedback.
+- If context is empty, continue with normal teaching and ask the learner to run/edit the spark.
 
 Math formatting:
 - When explaining equations, prefer LaTeX in message text (inline: $...$, block: $$...$$).

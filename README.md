@@ -182,6 +182,7 @@ The current product is a chat interface where authenticated users can:
 
 - `scene`: self-contained HTML/CSS/JS micro-interactions rendered in a sandboxed iframe
 - `desmos_graph`: interactive graph artifacts rendered with the Desmos calculator API
+- `code_playground`: editable Monaco-powered Python playgrounds executed client-side with Pyodide
 - Spark worker does structured generation + validation + one repair retry
 
 ## Architecture Overview

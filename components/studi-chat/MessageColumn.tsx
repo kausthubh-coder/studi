@@ -17,36 +17,21 @@ export function MessageColumn({
         className="mx-auto px-8 pb-4 pt-14"
         style={{ maxWidth: "var(--column-max)" }}
       >
-        {!selectedThreadId && (
-          <div className="py-24 text-center">
-            <p
-              className="font-brand text-4xl italic"
-              style={{ color: "var(--fg-faint)" }}
-            >
-              Ask anything
-            </p>
-            <p
-              className="mt-2 font-heading text-sm italic"
-              style={{ color: "var(--fg-faint)" }}
-            >
-              Create or select a thread to begin.
-            </p>
-          </div>
-        )}
-
         {selectedThreadId && messages.length === 0 && (
           <div className="py-24 text-center">
-            <p
-              className="font-heading text-base italic"
-              style={{ color: "var(--fg-faint)" }}
-            >
+            <p className="font-heading text-base italic text-fg-faint">
               Start by asking a question below.
             </p>
           </div>
         )}
 
         {messages.map((message, idx) => (
-          <ArticleMessage key={message.key} message={message} index={idx} />
+          <ArticleMessage
+            key={message.key}
+            message={message}
+            index={idx}
+            threadId={selectedThreadId}
+          />
         ))}
       </div>
     </div>

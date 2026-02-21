@@ -12,6 +12,7 @@ import type * as agent from "../agent.js";
 import type * as chat from "../chat.js";
 import type * as chatActions from "../chatActions.js";
 import type * as playground from "../playground.js";
+import type * as sparkFeedback from "../sparkFeedback.js";
 import type * as sparks_tools from "../sparks/tools.js";
 
 import type {
@@ -25,6 +26,7 @@ declare const fullApi: ApiFromModules<{
   chat: typeof chat;
   chatActions: typeof chatActions;
   playground: typeof playground;
+  sparkFeedback: typeof sparkFeedback;
   "sparks/tools": typeof sparks_tools;
 }>;
 

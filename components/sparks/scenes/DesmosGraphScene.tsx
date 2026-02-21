@@ -158,52 +158,33 @@ export default function DesmosGraphScene({ payload }: DesmosGraphSceneProps) {
   }, [payload, status]);
 
   return (
-    <div
-      className="overflow-hidden rounded-2xl"
-      style={{
-        border: "1px solid rgba(58, 109, 168, 0.28)",
-        background:
-          "radial-gradient(120% 140% at 0% 0%, rgba(47,97,156,0.2) 0%, rgba(13,19,30,0.96) 66%)",
-        boxShadow: "0 14px 34px rgba(12, 18, 28, 0.18)",
-      }}
-    >
-      <div
-        className="flex items-center justify-between gap-3 px-3 py-2 text-xs"
-        style={{
-          borderBottom: "1px solid rgba(133, 167, 201, 0.22)",
-          color: "rgba(215, 231, 247, 0.82)",
-          background: "rgba(9, 16, 27, 0.45)",
-        }}
-      >
-        <span>{status === "ready" ? "Desmos Graph" : "Loading Desmos"}</span>
-        {payload.hint ? <span>{payload.hint}</span> : null}
+    <div className="spark-scene">
+      <div className="spark-scene-bar">
+        <span className="font-heading text-[11px] text-fg-muted">
+          {status === "ready" ? "Desmos Graph" : "Loading Desmos"}
+        </span>
+        {payload.hint && (
+          <span className="ml-auto text-[11px] text-fg-faint">
+            {payload.hint}
+          </span>
+        )}
       </div>
 
-      {!hasApiKey ? (
-        <div
-          className="p-4 text-sm"
-          style={{
-            color: "#ffd6d6",
-            background: "rgba(81, 15, 15, 0.38)",
-            borderTop: "1px solid rgba(182, 71, 71, 0.35)",
-          }}
-        >
-          Missing NEXT_PUBLIC_DESMOS_API_KEY.
+      {!hasApiKey && (
+        <div className="spark-fail" style={{ borderRadius: 0 }}>
+          <p className="text-sm text-fg-muted">
+            Missing <code className="text-accent">NEXT_PUBLIC_DESMOS_API_KEY</code>.
+          </p>
         </div>
-      ) : null}
+      )}
 
-      {status === "error" ? (
-        <div
-          className="p-4 text-sm"
-          style={{
-            color: "#ffd6d6",
-            background: "rgba(81, 15, 15, 0.38)",
-            borderTop: "1px solid rgba(182, 71, 71, 0.35)",
-          }}
-        >
-          {errorText ?? "Unable to initialize Desmos graph."}
+      {status === "error" && (
+        <div className="spark-fail" style={{ borderRadius: 0 }}>
+          <p className="text-sm text-fg-muted">
+            {errorText ?? "Unable to initialize Desmos graph."}
+          </p>
         </div>
-      ) : null}
+      )}
 
       <div
         ref={mountRef}

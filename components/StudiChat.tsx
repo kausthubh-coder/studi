@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -19,6 +20,7 @@ import {
   type AgentUiState,
 } from "@/components/studi-chat/MessageRenderer";
 import { ThreadSidebar } from "@/components/studi-chat/ThreadSidebar";
+import { WelcomeView } from "@/components/studi-chat/WelcomeView";
 import type {
   PendingAttachment,
   ThreadSummary,
@@ -48,8 +50,8 @@ export default function StudiChat() {
     () => (threadsQuery ?? []) as ThreadSummary[],
     [threadsQuery],
   );
-  const createThread = useAction(api.chatActions.createThread);
-  const sendMessage = useMutation(api.chat.sendMessage);
+  const sendMessageMutation = useMutation(api.chat.sendMessage);
+  const sendFirstMessageAction = useAction(api.chatActions.sendFirstMessage);
   const backfillThreadActivity = useMutation(
     api.chat.backfillThreadActivityForCurrentUser,
   );
@@ -77,11 +79,8 @@ export default function StudiChat() {
     });
   }, [backfillThreadActivity]);
 
-  useEffect(() => {
-    if (!selectedThreadId && threads.length > 0) {
-      setSelectedThreadId(threads[0].threadId);
-    }
-  }, [threads, selectedThreadId]);
+  // Don't auto-select first thread — start on welcome view
+  // User can click a thread in the sidebar to open it
 
   useEffect(() => {
     if (!listRef.current) return;
@@ -106,155 +105,209 @@ export default function StudiChat() {
   const hasActiveAgentWork = currentAgentState.phase !== "idle";
   const isComposerBusy = isSending || isUploading;
 
+  const isOnWelcome = selectedThreadId === null;
+
   const canSend = useMemo(
     () =>
       !isSending &&
       !isUploading &&
       !hasActiveAgentWork &&
-      Boolean(selectedThreadId) &&
       (input.trim().length > 0 || pendingAttachments.length > 0),
+    [input, hasActiveAgentWork, isSending, isUploading, pendingAttachments.length],
+  );
+
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const arr = Array.from(files);
+      if (!arr.length) return;
+      setIsUploading(true);
+      try {
+        const uploaded: PendingAttachment[] = [];
+        for (const file of arr) {
+          const postUrl = await generateUploadUrl({});
+          const res = await fetch(postUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+            },
+            body: file,
+          });
+          if (!res.ok) throw new Error(`Upload failed for ${file.name}`);
+          const { storageId } = (await res.json()) as {
+            storageId: Id<"_storage">;
+          };
+          const saved = await saveAttachment({
+            storageId,
+            filename: file.name,
+            mimeType: file.type || "application/octet-stream",
+            size: file.size,
+          });
+          uploaded.push({
+            attachmentId: saved.attachmentId,
+            filename: saved.filename,
+            mimeType: saved.mimeType,
+            size: saved.size,
+            previewUrl: file.type.startsWith("image/")
+              ? URL.createObjectURL(file)
+              : undefined,
+          });
+        }
+        setPendingAttachments((previous) => [...previous, ...uploaded]);
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [generateUploadUrl, saveAttachment],
+  );
+
+  const onPaste = useCallback(
+    async (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      const images: File[] = [];
+      for (const item of Array.from(e.clipboardData.items)) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) images.push(file);
+        }
+      }
+      if (images.length > 0) {
+        e.preventDefault();
+        await uploadFiles(images);
+      }
+    },
+    [uploadFiles],
+  );
+
+  const onSend = useCallback(
+    async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (!canSend) return;
+
+      const draft = input;
+      const prompt = draft.trim() || undefined;
+      const attachmentsSnapshot = pendingAttachments;
+      const attachmentIds = attachmentsSnapshot.map((a) => a.attachmentId);
+
+      setInput("");
+      setPendingAttachments([]);
+      setIsSending(true);
+      try {
+        if (isOnWelcome) {
+          // Lazy thread creation: create thread + send first message atomically
+          const { threadId } = await sendFirstMessageAction({
+            prompt,
+            attachmentIds,
+            requestId: makeRequestId(),
+          });
+          releaseAttachmentPreviewUrls(attachmentsSnapshot);
+          setSelectedThreadId(threadId);
+        } else {
+          await sendMessageMutation({
+            threadId: selectedThreadId!,
+            prompt,
+            attachmentIds,
+            requestId: makeRequestId(),
+          });
+          releaseAttachmentPreviewUrls(attachmentsSnapshot);
+        }
+      } catch (error) {
+        setInput(draft);
+        setPendingAttachments(attachmentsSnapshot);
+        console.error("Failed to send message", error);
+      } finally {
+        setIsSending(false);
+      }
+    },
     [
+      canSend,
       input,
-      hasActiveAgentWork,
-      isSending,
-      isUploading,
-      pendingAttachments.length,
+      pendingAttachments,
+      isOnWelcome,
       selectedThreadId,
+      sendFirstMessageAction,
+      sendMessageMutation,
     ],
   );
 
-  const createNewThread = async () => {
-    const threadId = await createThread({ title: "New Thread" });
-    setSelectedThreadId(threadId);
-    setTimeout(() => textareaRef.current?.focus(), 50);
-  };
-
-  const uploadFiles = async (files: FileList | File[]) => {
-    const arr = Array.from(files);
-    if (!arr.length) return;
-    setIsUploading(true);
-    try {
-      const uploaded: PendingAttachment[] = [];
-      for (const file of arr) {
-        const postUrl = await generateUploadUrl({});
-        const res = await fetch(postUrl, {
-          method: "POST",
-          headers: { "Content-Type": file.type || "application/octet-stream" },
-          body: file,
-        });
-        if (!res.ok) throw new Error(`Upload failed for ${file.name}`);
-        const { storageId } = (await res.json()) as {
-          storageId: Id<"_storage">;
-        };
-        const saved = await saveAttachment({
-          storageId,
-          filename: file.name,
-          mimeType: file.type || "application/octet-stream",
-          size: file.size,
-        });
-        uploaded.push({
-          attachmentId: saved.attachmentId,
-          filename: saved.filename,
-          mimeType: saved.mimeType,
-          size: saved.size,
-          previewUrl: file.type.startsWith("image/")
-            ? URL.createObjectURL(file)
-            : undefined,
-        });
-      }
-      setPendingAttachments((previous) => [...previous, ...uploaded]);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const onPaste = async (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const images: File[] = [];
-    for (const item of Array.from(e.clipboardData.items)) {
-      if (item.type.startsWith("image/")) {
-        const file = item.getAsFile();
-        if (file) images.push(file);
-      }
-    }
-    if (images.length > 0) {
-      e.preventDefault();
-      await uploadFiles(images);
-    }
-  };
-
-  const onSend = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!canSend || !selectedThreadId) return;
-
-    const draft = input;
-    const prompt = draft.trim() || undefined;
-    const attachmentsSnapshot = pendingAttachments;
-    const attachmentIds = attachmentsSnapshot.map((a) => a.attachmentId);
-
-    setInput("");
-    setPendingAttachments([]);
-    setIsSending(true);
-    try {
-      await sendMessage({
-        threadId: selectedThreadId,
-        prompt,
-        attachmentIds,
-        requestId: makeRequestId(),
+  const removeAttachment = useCallback(
+    (attachmentId: Id<"attachments">) => {
+      setPendingAttachments((previous) => {
+        const item = previous.find(
+          (entry) => entry.attachmentId === attachmentId,
+        );
+        if (item?.previewUrl) {
+          URL.revokeObjectURL(item.previewUrl);
+        }
+        return previous.filter(
+          (entry) => entry.attachmentId !== attachmentId,
+        );
       });
-      releaseAttachmentPreviewUrls(attachmentsSnapshot);
-    } catch (error) {
-      setInput(draft);
-      setPendingAttachments(attachmentsSnapshot);
-      console.error("Failed to send message", error);
-    } finally {
-      setIsSending(false);
-    }
-  };
+    },
+    [],
+  );
 
-  const removeAttachment = (attachmentId: Id<"attachments">) => {
-    setPendingAttachments((previous) => {
-      const item = previous.find(
-        (entry) => entry.attachmentId === attachmentId,
-      );
-      if (item?.previewUrl) {
-        URL.revokeObjectURL(item.previewUrl);
-      }
-      return previous.filter((entry) => entry.attachmentId !== attachmentId);
+  const handleSuggestionClick = useCallback(
+    (prompt: string) => {
+      setInput(prompt);
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    },
+    [],
+  );
+
+  const handleNewThread = useCallback(() => {
+    setSelectedThreadId(null);
+    setInput("");
+    setPendingAttachments((prev) => {
+      releaseAttachmentPreviewUrls(prev);
+      return [];
     });
-  };
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
 
   return (
-    <div
-      className="flex h-screen overflow-hidden"
-      style={{ background: "var(--bg)" }}
-    >
+    <div className="flex h-screen overflow-hidden bg-bg">
       <ThreadSidebar
         threads={threads}
         selectedThreadId={selectedThreadId}
         onSelectThread={setSelectedThreadId}
-        onCreateThread={() => {
-          void createNewThread();
-        }}
+        onCreateThread={handleNewThread}
       />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <MessageColumn
-          listRef={listRef}
-          selectedThreadId={selectedThreadId}
-          messages={uiMessages.results}
-        />
-        <Composer
-          pendingAttachments={pendingAttachments}
-          input={input}
-          canSend={canSend}
-          isComposerBusy={isComposerBusy}
-          textareaRef={textareaRef}
-          onInputChange={setInput}
-          onSubmit={onSend}
-          onPaste={onPaste}
-          onUpload={uploadFiles}
-          onRemoveAttachment={removeAttachment}
-        />
+        {isOnWelcome ? (
+          <WelcomeView
+            pendingAttachments={pendingAttachments}
+            input={input}
+            canSend={canSend}
+            isComposerBusy={isComposerBusy}
+            textareaRef={textareaRef}
+            onInputChange={setInput}
+            onSubmit={onSend}
+            onPaste={onPaste}
+            onUpload={uploadFiles}
+            onRemoveAttachment={removeAttachment}
+            onSuggestionClick={handleSuggestionClick}
+          />
+        ) : (
+          <>
+            <MessageColumn
+              listRef={listRef}
+              selectedThreadId={selectedThreadId}
+              messages={uiMessages.results}
+            />
+            <Composer
+              pendingAttachments={pendingAttachments}
+              input={input}
+              canSend={canSend}
+              isComposerBusy={isComposerBusy}
+              textareaRef={textareaRef}
+              onInputChange={setInput}
+              onSubmit={onSend}
+              onPaste={onPaste}
+              onUpload={uploadFiles}
+              onRemoveAttachment={removeAttachment}
+            />
+          </>
+        )}
       </main>
     </div>
   );

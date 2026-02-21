@@ -6,7 +6,10 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
+  normalizeSparkCodePlaygroundDraft,
   normalizeCreateSparkInput,
+  type CodePlaygroundPayload,
+  type CodePlaygroundSparkDraft,
   normalizeSparkDesmosGraphDraft,
   normalizeSparkSceneDraft,
   type CreateSparkToolInput,
@@ -36,6 +39,11 @@ const desmosWorkerModel =
   process.env.SPARK_WORKER_MODEL ??
   "google/gemini-3-flash-preview";
 
+const codeWorkerModel =
+  process.env.SPARK_WORKER_CODE_MODEL ??
+  process.env.SPARK_WORKER_MODEL ??
+  "google/gemini-3-flash-preview";
+
 function parseSparkWorkerTimeoutMs(
   value: string | undefined,
   fallbackMs = 18_000,
@@ -61,6 +69,11 @@ const sceneWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
   Math.min(sparkWorkerTimeoutMs, 35_000),
 );
 
+const codeWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
+  process.env.SPARK_WORKER_CODE_TIMEOUT_MS,
+  Math.min(sparkWorkerTimeoutMs, 25_000),
+);
+
 const tailwindBrowserScriptSrc =
   "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4";
 
@@ -70,8 +83,10 @@ const openrouter = createOpenRouter({
 
 const createSparkInputSchema = z.object({
   sparkId: z
-    .enum(["scene", "desmos_graph"])
-    .describe("Spark id to generate. Use scene or desmos_graph."),
+    .enum(["scene", "desmos_graph", "code_playground"])
+    .describe(
+      "Spark id to generate. Use scene, desmos_graph, or code_playground.",
+    ),
   context: z
     .string()
     .min(1)
@@ -133,6 +148,14 @@ const desmosPayloadSchema: z.ZodType<DesmosGraphPayload> = z
     },
   );
 
+const codePlaygroundPayloadSchema: z.ZodType<CodePlaygroundPayload> = z.object({
+  language: z.literal("python"),
+  instructions: z.string().min(1),
+  starterCode: z.string().min(1),
+  testCode: z.string().optional(),
+  runHint: z.string().optional(),
+});
+
 const sceneWorkerOutputSchema = z.object({
   title: z.string(),
   summary: z.string(),
@@ -147,8 +170,16 @@ const desmosWorkerOutputSchema = z.object({
   payload: desmosPayloadSchema,
 });
 
+const codePlaygroundWorkerOutputSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  workerSummary: z.string(),
+  payload: codePlaygroundPayloadSchema,
+});
+
 type SceneDraft = z.infer<typeof sceneWorkerOutputSchema>;
 type DesmosDraft = z.infer<typeof desmosWorkerOutputSchema>;
+type CodePlaygroundDraft = z.infer<typeof codePlaygroundWorkerOutputSchema>;
 
 type WorkerErrorKind = "timeout" | "cancelled" | "provider" | "other";
 
@@ -262,6 +293,16 @@ function isAbortError(error: unknown): boolean {
     return false;
   }
   return error.name === "AbortError" || /aborted/i.test(error.message);
+}
+
+function createArtifactId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return `spark_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function extractInlineScriptBlocks(html: string): string[] {
@@ -447,33 +488,68 @@ function validateDesmosPayload(
   };
 }
 
+function validateCodePlaygroundPayload(
+  payload: CodePlaygroundPayload,
+): SparkValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (payload.language !== "python") {
+    errors.push("Code playground currently supports only python.");
+  }
+
+  if (!payload.instructions.trim()) {
+    errors.push("Code playground instructions are required.");
+  }
+
+  if (!payload.starterCode.trim()) {
+    errors.push("Code playground starterCode is required.");
+  }
+
+  const starterLines = payload.starterCode.split(/\r?\n/);
+  if (starterLines.length < 2) {
+    errors.push(
+      "Code playground starterCode must be multi-line Python code with proper indentation.",
+    );
+  }
+
+  const hasInlineCommentedFunctionBody = starterLines.some((line) =>
+    /^\s*def\s+[A-Za-z_]\w*\([^)]*\):\s*#/.test(line),
+  );
+  if (hasInlineCommentedFunctionBody) {
+    errors.push(
+      "Function definitions must not place TODO comments inline after ':'. Put comments on the next indented line.",
+    );
+  }
+
+  if (payload.starterCode.length > 22_000) {
+    errors.push("Code playground starterCode is too large.");
+  }
+
+  if (payload.testCode && payload.testCode.length > 22_000) {
+    errors.push("Code playground testCode is too large.");
+  }
+
+  if (/\brequests\b|\burllib\b|\bsocket\b/i.test(payload.starterCode)) {
+    warnings.push("Starter code may rely on network-related modules.");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
 function extractEquationCandidates(context: string): string[] {
   const blockers = [
     "table",
-    "slider",
     "parametric",
     "polar",
     "inequality",
     "piecewise",
     "regression",
   ];
-  const allowedMathWords = new Set([
-    "sin",
-    "cos",
-    "tan",
-    "cot",
-    "sec",
-    "csc",
-    "asin",
-    "acos",
-    "atan",
-    "log",
-    "ln",
-    "sqrt",
-    "abs",
-    "theta",
-    "pi",
-  ]);
 
   const normalizedContext = context.replace(/\s+/g, " ").trim();
   const lowered = normalizedContext.toLowerCase();
@@ -494,59 +570,97 @@ function extractEquationCandidates(context: string): string[] {
 
   const results: string[] = [];
   const seen = new Set<string>();
+  const equationPattern =
+    /([a-zA-Z](?:[a-zA-Z0-9'_]*|\([^)]*\))*\s*=\s*[^,;\n]+)/g;
+  const allowedIdentifiers = new Set([
+    "x",
+    "y",
+    "a",
+    "b",
+    "t",
+    "n",
+    "f",
+    "g",
+    "h",
+    "sin",
+    "cos",
+    "tan",
+    "cot",
+    "sec",
+    "csc",
+    "asin",
+    "acos",
+    "atan",
+    "log",
+    "ln",
+    "sqrt",
+    "abs",
+    "theta",
+    "pi",
+    "e",
+  ]);
 
   for (const chunk of chunks) {
     if (!chunk.includes("=")) {
       continue;
     }
 
-    let candidate = chunk
-      .replace(/^(graph|plot|show|line|curve|equation|function)\s+/i, "")
-      .replace(/^(the\s+)?(line|curve|parabola|equation|function)\s+/i, "")
-      .replace(/^\(?\s*/, "")
-      .replace(/\s*\)?$/, "")
-      .trim();
+    const matches = Array.from(chunk.matchAll(equationPattern));
+    for (const match of matches) {
+      let candidate = (match[1] ?? "").trim();
 
-    candidate = candidate
-      .replace(/\([^)]*\)/g, " ")
-      .replace(/\([^)]*$/, "")
-      .replace(/\)\s+.*$/, "")
-      .replace(/\.\s+.*$/, "")
-      .replace(/\s+\b(on|where|for|to|in)\b\s+.*$/i, "")
-      .trim();
+      candidate = candidate
+        .replace(/\s+\b(and|with|where|for|to|in)\b\s+.*$/i, "")
+        .replace(/\.\s+[a-zA-Z].*$/, "")
+        .replace(/\s+\(or\b[\s\S]*$/i, "")
+        .replace(/[.;]\s*$/, "")
+        .replace(/\s+/g, " ")
+        .trim();
 
-    const firstEquals = candidate.indexOf("=");
-    const secondEquals =
-      firstEquals === -1 ? -1 : candidate.indexOf("=", firstEquals + 1);
-    if (secondEquals !== -1) {
-      candidate = candidate.slice(0, secondEquals).trim();
+      if (!candidate.includes("=") || /https?:\/\//i.test(candidate)) {
+        continue;
+      }
+
+      if (candidate.length > 100) {
+        continue;
+      }
+
+      if (!/^[a-zA-Z0-9_'()\s+\-*/^.=]+$/.test(candidate)) {
+        continue;
+      }
+
+      const firstEquals = candidate.indexOf("=");
+      const secondEquals = candidate.indexOf("=", firstEquals + 1);
+      if (secondEquals !== -1) {
+        candidate = candidate.slice(0, secondEquals).trim();
+      }
+
+      const lhs = candidate.split("=")[0]?.trim() ?? "";
+      if (!/[a-zA-Z]/.test(lhs)) {
+        continue;
+      }
+
+      const rhs = candidate.split("=")[1]?.trim() ?? "";
+      if (!rhs) {
+        continue;
+      }
+
+      const rhsWords = rhs.toLowerCase().match(/[a-zA-Z]+/g) ?? [];
+      const hasUnknownIdentifier = rhsWords.some(
+        (word) => !allowedIdentifiers.has(word),
+      );
+      if (hasUnknownIdentifier) {
+        continue;
+      }
+
+      const key = candidate.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      results.push(candidate);
     }
-
-    if (!candidate.includes("=") || !/[a-z]/i.test(candidate)) {
-      continue;
-    }
-
-    if (candidate.length > 80 || /https?:\/\//i.test(candidate)) {
-      continue;
-    }
-
-    candidate = candidate.replace(/\s+/g, " ");
-
-    const words = candidate.toLowerCase().match(/[a-z]+/g) ?? [];
-    const hasDisallowedWord = words.some(
-      (word) => word.length > 2 && !allowedMathWords.has(word),
-    );
-    if (hasDisallowedWord) {
-      continue;
-    }
-
-    const key = candidate.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    results.push(candidate);
   }
 
   return results;
@@ -958,6 +1072,124 @@ async function buildDesmosGraphSpark(
   }
 }
 
+async function buildCodePlaygroundSpark(
+  input: CreateSparkToolInput,
+  abortSignal?: AbortSignal,
+): Promise<CreateSparkToolResult> {
+  const skill = sparkSkillById.code_playground;
+  const warnings: string[] = [];
+  let firstDraft: CodePlaygroundSparkDraft | null = null;
+  let firstErrors: string[] = [];
+
+  try {
+    const prompt = buildPrompt({
+      sparkType: "code_playground",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+    });
+
+    const firstGeneration = await generateWorkerObject<CodePlaygroundDraft>({
+      schema: codePlaygroundWorkerOutputSchema,
+      prompt,
+      model: codeWorkerModel,
+      abortSignal,
+      timeoutMs: codeWorkerTimeoutMs,
+    });
+
+    warnings.push(...firstGeneration.warnings);
+    firstDraft = {
+      ...firstGeneration.object,
+      artifactId: createArtifactId(),
+    };
+
+    const firstValidation = validateCodePlaygroundPayload(firstDraft.payload);
+    warnings.push(...firstValidation.warnings);
+    firstErrors = firstValidation.errors;
+
+    if (firstValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: firstGeneration.object.workerSummary,
+        warnings,
+        artifact: normalizeSparkCodePlaygroundDraft(firstDraft),
+      };
+    }
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Code playground generation failed due to provider fault.",
+      warnings,
+      error: toProviderFaultMessage(error),
+    };
+  }
+
+  if (!firstDraft) {
+    return {
+      status: "failed",
+      workerSummary: "Code playground worker failed before repair.",
+      warnings,
+      error: "Spark worker could not produce an initial code draft.",
+    };
+  }
+
+  try {
+    const repairPrompt = buildPrompt({
+      sparkType: "code_playground",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+      previousOutput: JSON.stringify(firstDraft),
+      previousErrors: firstErrors,
+    });
+
+    const repairedGeneration = await generateWorkerObject<CodePlaygroundDraft>({
+      schema: codePlaygroundWorkerOutputSchema,
+      prompt: repairPrompt,
+      model: codeWorkerModel,
+      abortSignal,
+      timeoutMs: codeWorkerTimeoutMs,
+    });
+
+    warnings.push(...repairedGeneration.warnings);
+    const repairedDraft: CodePlaygroundSparkDraft = {
+      ...repairedGeneration.object,
+      artifactId: firstDraft.artifactId,
+    };
+    const repairedValidation = validateCodePlaygroundPayload(
+      repairedDraft.payload,
+    );
+    warnings.push(...repairedValidation.warnings);
+
+    if (repairedValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: repairedGeneration.object.workerSummary,
+        warnings,
+        artifact: normalizeSparkCodePlaygroundDraft(repairedDraft),
+      };
+    }
+
+    return {
+      status: "failed",
+      workerSummary:
+        repairedGeneration.object.workerSummary ||
+        "Code playground payload failed validation in two attempts.",
+      warnings,
+      error: repairedValidation.errors.join(" "),
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Code playground repair failed due to provider fault.",
+      warnings,
+      error: toProviderFaultMessage(error),
+    };
+  }
+}
+
 const sparkTool = createTool<CreateSparkToolInput, CreateSparkToolResult>({
   description:
     "Create a Spark artifact for inline learning interaction. Provide the sparkId and focused learner context.",
@@ -972,6 +1204,10 @@ const sparkTool = createTool<CreateSparkToolInput, CreateSparkToolResult>({
 
       if (input.sparkId === "desmos_graph") {
         return await buildDesmosGraphSpark(input, options.abortSignal);
+      }
+
+      if (input.sparkId === "code_playground") {
+        return await buildCodePlaygroundSpark(input, options.abortSignal);
       }
 
       return {

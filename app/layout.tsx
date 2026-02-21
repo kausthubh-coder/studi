@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Lora, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
+import "highlight.js/styles/github-dark.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 

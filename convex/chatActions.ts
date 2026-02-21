@@ -38,6 +38,39 @@ export const createThread = action({
   },
 });
 
+export const sendFirstMessage = action({
+  args: {
+    prompt: v.optional(v.string()),
+    attachmentIds: v.optional(v.array(v.id("attachments"))),
+    requestId: v.string(),
+  },
+  returns: v.object({
+    threadId: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+
+    const { threadId } = await studiAgent.createThread(ctx, {
+      userId,
+    });
+
+    await ctx.runMutation(internal.chat.createThreadRecord, {
+      userId,
+      threadId,
+      lastMessageAt: Date.now(),
+    });
+
+    await ctx.runMutation(api.chat.sendMessage, {
+      threadId,
+      prompt: args.prompt,
+      attachmentIds: args.attachmentIds,
+      requestId: args.requestId,
+    });
+
+    return { threadId };
+  },
+});
+
 export const sendMessage = action({
   args: {
     threadId: v.string(),
