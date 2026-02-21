@@ -7,5 +7,5 @@ export default defineConfig([
   ...nextCoreWebVitals,
   ...nextTypescript,
   ...convexPlugin.configs.recommended,
-  globalIgnores(["convex/_generated"]),
+  globalIgnores(["convex/_generated", "examples/**"]),
 ]);

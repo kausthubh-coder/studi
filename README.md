@@ -10,7 +10,7 @@ College is increasingly obsolete — the internet already gives you free knowled
 
 ## Philosophy
 
-- **Intuition-first** — never just give the formula. Teach the *why* until the concept feels inevitable.
+- **Intuition-first** — never just give the formula. Teach the _why_ until the concept feels inevitable.
 - **Active learning** — instant feedback, early wins, and small victories at every step. No passive consumption.
 - **Personalized** — pacing, focus areas, and teaching style adapt to each learner.
 - **Meta-learning** — we study and implement what the research says about how people learn best.
@@ -21,7 +21,7 @@ Chat is the primary interface. There is no mode picker upfront — you just talk
 
 A **`+` icon** opens the agent control panel, where you can explicitly trigger Learn, Review, and other actions.
 
-Additionally, if you type trigger words in the chat input — things like *"learn"*, *"teach me"*, *"step by step"*, or *"review"*, *"go over"*, *"practice"* — the app will prompt you to confirm and launch the appropriate mode automatically.
+Additionally, if you type trigger words in the chat input — things like _"learn"_, _"teach me"_, _"step by step"_, or _"review"_, _"go over"_, _"practice"_ — the app will prompt you to confirm and launch the appropriate mode automatically.
 
 Each thread is scoped to a **specific topic** and a single intent: Learn or Review.
 
@@ -42,15 +42,15 @@ Each thread is scoped to a **specific topic** and a single intent: Learn or Revi
 
 Tools the agent can invoke inside a thread:
 
-| Tool | Description |
-|---|---|
-| **Custom component** | Generate an interactive HTML/CSS/JS component to visualize or simulate a concept |
-| **Graphing** | Render 2D and 3D graphs via Desmos |
-| **Code snippet** | Display syntax-highlighted code examples |
-| **Code test** | Present a coding problem with an embedded input box; the learner submits a solution and gets instant feedback with optional hints |
-| **Quiz** | Multiple choice, open-ended, fill-in-the-blank, and more |
-| **Whiteboard** | Shared canvas — the agent can draw on it to explain, or ask the learner to draw and then review their work |
-| **Lab (link-out)** | Launch a full lab space (see below) |
+| Tool                 | Description                                                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Custom component** | Generate an interactive HTML/CSS/JS component to visualize or simulate a concept                                                  |
+| **Graphing**         | Render 2D and 3D graphs via Desmos                                                                                                |
+| **Code snippet**     | Display syntax-highlighted code examples                                                                                          |
+| **Code test**        | Present a coding problem with an embedded input box; the learner submits a solution and gets instant feedback with optional hints |
+| **Quiz**             | Multiple choice, open-ended, fill-in-the-blank, and more                                                                          |
+| **Whiteboard**       | Shared canvas — the agent can draw on it to explain, or ask the learner to draw and then review their work                        |
+| **Lab (link-out)**   | Launch a full lab space (see below)                                                                                               |
 
 > **Future integrations**: Khan Academy and IXL — surfacing their problems and videos directly inside threads.
 
@@ -59,8 +59,9 @@ Tools the agent can invoke inside a thread:
 Labs are standalone spaces linked from a thread. They're used for larger, hands-on projects that need their own environment.
 
 **Example flow** — Learning React:
+
 1. Cover fundamentals in the thread (components, props, state).
-2. Milestone checkpoint → launch a lab: *build a simple to-do app*.
+2. Milestone checkpoint → launch a lab: _build a simple to-do app_.
 3. Return to the thread, continue with more concepts.
 4. Another milestone → back to the lab to extend the project.
 5. Repeat until the topic is complete.
@@ -106,6 +107,28 @@ bun run dev
 
 ```
 http://localhost:3000
+```
+
+## Agent Playground
+
+This repo now exposes the Convex Agent Playground API at `convex/playground.ts`.
+
+1. Issue an API key:
+
+```bash
+bunx convex run --component agent apiKeys:issue '{"name":"studi-playground"}'
+```
+
+2. Use the hosted playground:
+   - Open `https://get-convex.github.io/agent/`
+   - Deployment URL: from `CONVEX_URL` in `.env.local`
+   - API key: the key from step 1
+   - API module path: `playground`
+
+3. Or run playground locally:
+
+```bash
+bun run playground
 ```
 
 ## Current Scope
