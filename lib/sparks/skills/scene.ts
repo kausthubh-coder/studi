@@ -6,34 +6,35 @@ export const sparkSceneSkill = {
     "Use when the learner would understand better with an interactive visual demo instead of text alone.",
   instructions: `You are building a Spark Scene artifact.
 
-Output requirements:
-- Return strict JSON with keys: title, summary, workerSummary, html.
-- title, summary, and workerSummary must be plain strings.
-- html must be exactly one complete HTML file string.
-- Do not wrap the JSON in markdown code fences.
-- Keep everything in one file: HTML, CSS, JavaScript.
-- Make interactions intuitive on desktop and mobile.
-- Prefer canvas or simple DOM interactions for smooth performance.
-- Keep visuals polished and readable with clear hierarchy.
-- Avoid external scripts or remote dependencies.
-- Keep educational value high: labels, hints, and immediate feedback.
-- Keep JavaScript straightforward: avoid nested template literals, dynamic code generation, or unusual syntax tricks.
-- Before finalizing, ensure every inline <script> block is syntactically valid plain JavaScript.
+Return strict JSON with keys: title, summary, workerSummary, html.
+Do not use markdown code fences.
 
-JSON example shape:
-{
-  "title": "Projectile Motion Explorer",
-  "summary": "Adjust launch angle and speed to see trajectory changes.",
-  "workerSummary": "Built an interactive projectile simulator with sliders and live graph.",
-  "html": "<!doctype html><html>...</html>"
-}
+Use this HTML shell (you can customize body content and classes):
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body>
+    <!-- scene content -->
+  </body>
+</html>
+
+Speed + reliability constraints:
+- Keep html compact (prefer under 5500 chars).
+- Keep JavaScript simple and short (prefer under 160 lines).
+- Use simple DOM interactions (inputs, buttons, pointer drag) unless explicitly asked for more.
+- Avoid heavy animations, large loops, and complex rendering code.
 
 Safety constraints:
-- Do not include network requests.
-- Do not include popups, top-level navigation, or storage access requirements.
+- No network requests.
+- No external scripts besides the Tailwind browser script above.
+- No popups, top-level navigation, or storage requirements.
 
-Content quality:
-- Keep the experience focused on the requested learning concept.
-- Include concise in-UI guidance so learners know what to try.
-- Use semantic, accessible markup where possible.`,
+Quality constraints:
+- Focus tightly on the requested concept.
+- Include short in-UI instructions.
+- Make it usable on mobile and desktop.`,
 } as const;

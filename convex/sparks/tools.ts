@@ -6,13 +6,13 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
-  isCreateSparkToolResult,
   normalizeCreateSparkInput,
   normalizeSparkDesmosGraphDraft,
   normalizeSparkSceneDraft,
   type CreateSparkToolInput,
   type CreateSparkToolResult,
   type DesmosGraphPayload,
+  type DesmosSparkDraft,
   type JsonValue,
   type SparkType,
   type SparkValidationResult,
@@ -26,14 +26,23 @@ if (!openRouterApiKey) {
   );
 }
 
-const sparkWorkerModel = process.env.SPARK_WORKER_MODEL ?? "z-ai/glm-5";
-const sparkWorkerFallbackModel =
-  process.env.SPARK_WORKER_FALLBACK_MODEL ?? "z-ai/glm-5";
+const sceneWorkerModel =
+  process.env.SPARK_WORKER_SCENE_MODEL ??
+  process.env.SPARK_WORKER_MODEL ??
+  "google/gemini-3-flash-preview";
 
-function parseSparkWorkerTimeoutMs(value: string | undefined): number {
-  const parsed = Number.parseInt(value ?? "18000", 10);
+const desmosWorkerModel =
+  process.env.SPARK_WORKER_DESMOS_MODEL ??
+  process.env.SPARK_WORKER_MODEL ??
+  "z-ai/glm-5";
+
+function parseSparkWorkerTimeoutMs(
+  value: string | undefined,
+  fallbackMs = 18_000,
+): number {
+  const parsed = Number.parseInt(value ?? String(fallbackMs), 10);
   if (!Number.isFinite(parsed)) {
-    return 18_000;
+    return fallbackMs;
   }
   return Math.min(120_000, Math.max(2_000, parsed));
 }
@@ -41,6 +50,19 @@ function parseSparkWorkerTimeoutMs(value: string | undefined): number {
 const sparkWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
   process.env.SPARK_WORKER_TIMEOUT_MS,
 );
+
+const desmosWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
+  process.env.SPARK_WORKER_DESMOS_TIMEOUT_MS,
+  Math.min(sparkWorkerTimeoutMs, 20_000),
+);
+
+const sceneWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
+  process.env.SPARK_WORKER_SCENE_TIMEOUT_MS,
+  Math.min(sparkWorkerTimeoutMs, 35_000),
+);
+
+const tailwindBrowserScriptSrc =
+  "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4";
 
 const openrouter = createOpenRouter({
   apiKey: openRouterApiKey,
@@ -210,25 +232,6 @@ function isProviderError(error: unknown): boolean {
   );
 }
 
-function isRetryableProviderError(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return true;
-  }
-
-  const statusCode = (error as { statusCode?: unknown }).statusCode;
-  if (typeof statusCode === "number") {
-    if (statusCode >= 500 || statusCode === 429) {
-      return true;
-    }
-    if (statusCode >= 400 && statusCode < 500) {
-      const message = toMessage(error).toLowerCase();
-      return message.includes("unsupported") || message.includes("model");
-    }
-  }
-
-  return true;
-}
-
 function toMessage(error: unknown): string {
   const providerDetails = extractProviderErrorDetails(error);
   if (providerDetails) {
@@ -239,6 +242,19 @@ function toMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function toProviderFaultMessage(error: unknown): string {
+  if (
+    error instanceof SparkWorkerError &&
+    (error.kind === "provider" ||
+      error.kind === "timeout" ||
+      error.kind === "cancelled")
+  ) {
+    return `Provider fault: ${toMessage(error)}`;
+  }
+
+  return toMessage(error);
 }
 
 function isAbortError(error: unknown): boolean {
@@ -257,6 +273,90 @@ function extractInlineScriptBlocks(html: string): string[] {
   }
 
   return blocks;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractExternalScriptSrcs(html: string): string[] {
+  const sources: string[] = [];
+  const scriptSrcPattern = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
+
+  for (const match of html.matchAll(scriptSrcPattern)) {
+    const src = (match[1] ?? "").trim();
+    if (src) {
+      sources.push(src);
+    }
+  }
+
+  return sources;
+}
+
+function normalizeScriptSource(src: string): string {
+  try {
+    const parsed = new URL(src);
+    const pathname = parsed.pathname.endsWith("/")
+      ? parsed.pathname.slice(0, -1)
+      : parsed.pathname;
+    return `${parsed.origin}${pathname}`;
+  } catch {
+    return src.trim();
+  }
+}
+
+function normalizeSceneHtmlWithTemplate(html: string): string {
+  const trimmed = html.trim();
+  let normalized = trimmed;
+
+  if (!/<html[\s>]/i.test(normalized)) {
+    normalized = `<html><head></head><body>${normalized}</body></html>`;
+  }
+
+  if (!/<head[\s>]/i.test(normalized)) {
+    normalized = normalized.replace(/<html([^>]*)>/i, "<html$1><head></head>");
+  }
+
+  if (!/<body[\s>]/i.test(normalized)) {
+    if (/<\/head>/i.test(normalized)) {
+      normalized = normalized.replace(/<\/head>/i, "</head><body></body>");
+    } else if (/<\/html>/i.test(normalized)) {
+      normalized = normalized.replace(/<\/html>/i, "<body></body></html>");
+    } else {
+      normalized = `${normalized}<body></body>`;
+    }
+  }
+
+  normalized = normalized.replace(
+    /<head([^>]*)>([\s\S]*?)<\/head>/i,
+    (_full, attrs: string, headContent: string) => {
+      let nextHeadContent = headContent;
+
+      if (!/<meta\b[^>]*charset\s*=\s*/i.test(nextHeadContent)) {
+        nextHeadContent = `\n    <meta charset="UTF-8" />${nextHeadContent}`;
+      }
+
+      if (!/<meta\b[^>]*name\s*=\s*["']viewport["']/i.test(nextHeadContent)) {
+        nextHeadContent = `\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />${nextHeadContent}`;
+      }
+
+      const tailwindScriptPattern = new RegExp(
+        `<script\\b[^>]*\\bsrc\\s*=\\s*["']${escapeRegExp(tailwindBrowserScriptSrc)}["'][^>]*>\\s*<\\/script>`,
+        "i",
+      );
+      if (!tailwindScriptPattern.test(nextHeadContent)) {
+        nextHeadContent = `\n    <script src="${tailwindBrowserScriptSrc}"></script>${nextHeadContent}`;
+      }
+
+      return `<head${attrs}>${nextHeadContent}\n  </head>`;
+    },
+  );
+
+  if (!/<!doctype html>/i.test(normalized)) {
+    normalized = `<!doctype html>\n${normalized}`;
+  }
+
+  return normalized;
 }
 
 function validateSceneHtml(html: string): SparkValidationResult {
@@ -279,8 +379,14 @@ function validateSceneHtml(html: string): SparkValidationResult {
     warnings.push("Scene HTML is missing a <body> element.");
   }
 
-  if (/<script\b[^>]*\ssrc\s*=\s*/i.test(html)) {
-    errors.push("External script tags are not allowed. Inline scripts only.");
+  const externalScriptSrcs = extractExternalScriptSrcs(html);
+  const disallowedScriptSrcs = externalScriptSrcs.filter(
+    (src) => normalizeScriptSource(src) !== tailwindBrowserScriptSrc,
+  );
+  if (disallowedScriptSrcs.length > 0) {
+    errors.push(
+      `External script is not allowed: ${disallowedScriptSrcs[0]}. Only ${tailwindBrowserScriptSrc} is permitted.`,
+    );
   }
 
   if (/\bfetch\(/i.test(html)) {
@@ -294,16 +400,10 @@ function validateSceneHtml(html: string): SparkValidationResult {
   }
 
   const scripts = extractInlineScriptBlocks(html);
-  for (const script of scripts) {
-    if (!script.trim()) {
-      continue;
-    }
-    try {
-      new Function(script);
-    } catch (error) {
-      errors.push(`Inline script syntax error: ${toMessage(error)}`);
-      break;
-    }
+  if (scripts.some((script) => script.trim().length > 0)) {
+    warnings.push(
+      "Inline script syntax checks are skipped in this runtime environment.",
+    );
   }
 
   return {
@@ -347,7 +447,159 @@ function validateDesmosPayload(
   };
 }
 
-function createTimeoutSignal(abortSignal?: AbortSignal): {
+function extractEquationCandidates(context: string): string[] {
+  const blockers = [
+    "table",
+    "slider",
+    "parametric",
+    "polar",
+    "inequality",
+    "piecewise",
+    "regression",
+  ];
+  const allowedMathWords = new Set([
+    "sin",
+    "cos",
+    "tan",
+    "cot",
+    "sec",
+    "csc",
+    "asin",
+    "acos",
+    "atan",
+    "log",
+    "ln",
+    "sqrt",
+    "abs",
+    "theta",
+    "pi",
+  ]);
+
+  const normalizedContext = context.replace(/\s+/g, " ").trim();
+  const lowered = normalizedContext.toLowerCase();
+  if (blockers.some((token) => lowered.includes(token))) {
+    return [];
+  }
+
+  const chunks = normalizedContext
+    .replace(/i\.e\./gi, "")
+    .split(/\n|,|;|\band\b|\bplus\b|\bwith\b/gi)
+    .map((part) =>
+      part
+        .replace(/^[^a-zA-Z0-9(\-]+/, "")
+        .replace(/[^a-zA-Z0-9)\]}]+$/, "")
+        .trim(),
+    )
+    .filter(Boolean);
+
+  const results: string[] = [];
+  const seen = new Set<string>();
+
+  for (const chunk of chunks) {
+    if (!chunk.includes("=")) {
+      continue;
+    }
+
+    let candidate = chunk
+      .replace(/^(graph|plot|show|line|curve|equation|function)\s+/i, "")
+      .replace(/^(the\s+)?(line|curve|parabola|equation|function)\s+/i, "")
+      .replace(/^\(?\s*/, "")
+      .replace(/\s*\)?$/, "")
+      .trim();
+
+    candidate = candidate
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/\([^)]*$/, "")
+      .replace(/\)\s+.*$/, "")
+      .replace(/\.\s+.*$/, "")
+      .replace(/\s+\b(on|where|for|to|in)\b\s+.*$/i, "")
+      .trim();
+
+    const firstEquals = candidate.indexOf("=");
+    const secondEquals =
+      firstEquals === -1 ? -1 : candidate.indexOf("=", firstEquals + 1);
+    if (secondEquals !== -1) {
+      candidate = candidate.slice(0, secondEquals).trim();
+    }
+
+    if (!candidate.includes("=") || !/[a-z]/i.test(candidate)) {
+      continue;
+    }
+
+    if (candidate.length > 80 || /https?:\/\//i.test(candidate)) {
+      continue;
+    }
+
+    candidate = candidate.replace(/\s+/g, " ");
+
+    const words = candidate.toLowerCase().match(/[a-z]+/g) ?? [];
+    const hasDisallowedWord = words.some(
+      (word) => word.length > 2 && !allowedMathWords.has(word),
+    );
+    if (hasDisallowedWord) {
+      continue;
+    }
+
+    const key = candidate.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    results.push(candidate);
+  }
+
+  return results;
+}
+
+function buildSimpleDesmosDraft(
+  input: CreateSparkToolInput,
+): DesmosSparkDraft | null {
+  const equations = extractEquationCandidates(input.context).slice(0, 4);
+
+  if (equations.length === 0) {
+    return null;
+  }
+
+  const joined = equations.join(" and ");
+  const title =
+    input.title ?? (equations.length === 1 ? equations[0] : "Equation Graphs");
+  const summary =
+    input.summary ??
+    (equations.length === 1
+      ? `Explore ${equations[0]} interactively.`
+      : `Explore ${joined} on the same graph.`);
+
+  return {
+    title,
+    summary,
+    workerSummary:
+      equations.length === 1
+        ? `Created a deterministic Desmos graph for ${equations[0]}.`
+        : `Created a deterministic Desmos graph for ${joined}.`,
+    payload: {
+      expressions: equations.map((latex, index) => ({
+        id: `eq${index + 1}`,
+        latex,
+      })),
+      viewport: {
+        left: -10,
+        right: 10,
+        bottom: -10,
+        top: 10,
+      },
+      hint:
+        equations.length === 1
+          ? "Edit the equation or add another one to compare shapes."
+          : "Toggle equations and zoom near intersections.",
+    },
+  };
+}
+
+function createTimeoutSignal(
+  abortSignal?: AbortSignal,
+  timeoutMs = sparkWorkerTimeoutMs,
+): {
   signal: AbortSignal;
   cleanup: () => void;
   didTimeout: () => boolean;
@@ -360,7 +612,7 @@ function createTimeoutSignal(abortSignal?: AbortSignal): {
   const timeoutId = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, sparkWorkerTimeoutMs);
+  }, timeoutMs);
 
   const onAbort = () => {
     cancelled = true;
@@ -393,8 +645,10 @@ async function generateWorkerObjectForModel<T>(params: {
   prompt: string;
   model: string;
   abortSignal?: AbortSignal;
+  timeoutMs?: number;
 }): Promise<T> {
-  const timeout = createTimeoutSignal(params.abortSignal);
+  const timeoutMs = params.timeoutMs ?? sparkWorkerTimeoutMs;
+  const timeout = createTimeoutSignal(params.abortSignal, timeoutMs);
 
   try {
     const result = await generateObject({
@@ -411,7 +665,7 @@ async function generateWorkerObjectForModel<T>(params: {
       throw new SparkWorkerError(
         "timeout",
         params.model,
-        `Spark worker timed out after ${sparkWorkerTimeoutMs}ms (model: ${params.model}).`,
+        `Spark worker timed out after ${timeoutMs}ms (model: ${params.model}).`,
       );
     }
     if (timeout.wasCancelled() || isAbortError(error)) {
@@ -444,67 +698,22 @@ async function generateWorkerObjectForModel<T>(params: {
 async function generateWorkerObject<T>(params: {
   schema: z.ZodType<T>;
   prompt: string;
+  model: string;
   abortSignal?: AbortSignal;
+  timeoutMs?: number;
 }): Promise<{ object: T; warnings: string[] }> {
-  const modelsToTry = Array.from(
-    new Set([sparkWorkerModel, sparkWorkerFallbackModel].filter(Boolean)),
-  );
+  const object = await generateWorkerObjectForModel({
+    schema: params.schema,
+    prompt: params.prompt,
+    model: params.model,
+    abortSignal: params.abortSignal,
+    timeoutMs: params.timeoutMs,
+  });
 
-  const warnings: string[] = [];
-  let firstError: SparkWorkerError | null = null;
-
-  for (let index = 0; index < modelsToTry.length; index += 1) {
-    const model = modelsToTry[index];
-
-    try {
-      const object = await generateWorkerObjectForModel({
-        schema: params.schema,
-        prompt: params.prompt,
-        model,
-        abortSignal: params.abortSignal,
-      });
-
-      if (index > 0) {
-        warnings.push(`Recovered using fallback worker model: ${model}.`);
-      }
-
-      return { object, warnings };
-    } catch (error) {
-      const workerError =
-        error instanceof SparkWorkerError
-          ? error
-          : new SparkWorkerError("other", model, toMessage(error));
-
-      if (!firstError) {
-        firstError = workerError;
-      }
-
-      const hasAnotherModel = index < modelsToTry.length - 1;
-      const shouldFailOver =
-        workerError.kind === "provider" &&
-        hasAnotherModel &&
-        isRetryableProviderError(error);
-
-      if (shouldFailOver) {
-        warnings.push(
-          `Primary worker model failed (${model}); retrying with fallback model.`,
-        );
-        continue;
-      }
-
-      throw workerError;
-    }
-  }
-
-  if (firstError) {
-    throw firstError;
-  }
-
-  throw new SparkWorkerError(
-    "other",
-    sparkWorkerModel,
-    "Spark worker failed before model execution.",
-  );
+  return {
+    object,
+    warnings: [],
+  };
 }
 
 function buildPrompt(params: {
@@ -572,12 +781,17 @@ async function buildSceneSpark(
       skillInstructions: skill.instructions,
     });
 
-    const firstGeneration = await generateWorkerObject({
+    const firstGeneration = await generateWorkerObject<SceneDraft>({
       schema: sceneWorkerOutputSchema,
       prompt,
+      model: sceneWorkerModel,
       abortSignal,
+      timeoutMs: sceneWorkerTimeoutMs,
     });
-    firstDraft = firstGeneration.object;
+    firstDraft = {
+      ...firstGeneration.object,
+      html: normalizeSceneHtmlWithTemplate(firstGeneration.object.html),
+    };
     firstWarnings.push(...firstGeneration.warnings);
 
     const firstValidation = validateSceneHtml(firstDraft.html);
@@ -593,7 +807,32 @@ async function buildSceneSpark(
       };
     }
   } catch (error) {
+    if (
+      error instanceof SparkWorkerError &&
+      (error.kind === "provider" ||
+        error.kind === "timeout" ||
+        error.kind === "cancelled")
+    ) {
+      return {
+        status: "failed",
+        workerSummary: "Scene generation failed due to provider fault.",
+        warnings: firstWarnings,
+        error: toProviderFaultMessage(error),
+      };
+    }
+
     firstErrors = [toMessage(error)];
+  }
+
+  if (!firstDraft) {
+    return {
+      status: "failed",
+      workerSummary: "Spark worker failed before scene repair.",
+      warnings: firstWarnings,
+      error:
+        firstErrors[0] ??
+        "Spark worker could not produce an initial scene draft.",
+    };
   }
 
   try {
@@ -607,12 +846,17 @@ async function buildSceneSpark(
       previousErrors: firstErrors,
     });
 
-    const repairedGeneration = await generateWorkerObject({
+    const repairedGeneration = await generateWorkerObject<SceneDraft>({
       schema: sceneWorkerOutputSchema,
       prompt: repairPrompt,
+      model: sceneWorkerModel,
       abortSignal,
+      timeoutMs: sceneWorkerTimeoutMs,
     });
-    const repairedDraft = repairedGeneration.object;
+    const repairedDraft = {
+      ...repairedGeneration.object,
+      html: normalizeSceneHtmlWithTemplate(repairedGeneration.object.html),
+    };
     firstWarnings.push(...repairedGeneration.warnings);
 
     const repairedValidation = validateSceneHtml(repairedDraft.html);
@@ -636,9 +880,9 @@ async function buildSceneSpark(
   } catch (error) {
     return {
       status: "failed",
-      workerSummary: "Spark worker failed to repair the scene draft.",
+      workerSummary: "Scene repair failed due to provider fault.",
       warnings: firstWarnings,
-      error: toMessage(error),
+      error: toProviderFaultMessage(error),
     };
   }
 }
@@ -648,9 +892,22 @@ async function buildDesmosGraphSpark(
   abortSignal?: AbortSignal,
 ): Promise<CreateSparkToolResult> {
   const skill = sparkSkillById.desmos_graph;
-  let firstDraft: DesmosDraft | null = null;
-  let firstErrors: string[] = [];
   const firstWarnings: string[] = [];
+
+  const simpleDraft = buildSimpleDesmosDraft(input);
+  if (simpleDraft) {
+    const validation = validateDesmosPayload(simpleDraft.payload);
+    if (validation.ok) {
+      return {
+        status: "success",
+        workerSummary:
+          simpleDraft.workerSummary ??
+          "Created deterministic Desmos graph payload.",
+        warnings: [...firstWarnings, ...validation.warnings],
+        artifact: normalizeSparkDesmosGraphDraft(simpleDraft),
+      };
+    }
+  }
 
   try {
     const prompt = buildPrompt({
@@ -661,16 +918,17 @@ async function buildDesmosGraphSpark(
       skillInstructions: skill.instructions,
     });
 
-    const firstGeneration = await generateWorkerObject({
+    const firstGeneration = await generateWorkerObject<DesmosDraft>({
       schema: desmosWorkerOutputSchema,
       prompt,
+      model: desmosWorkerModel,
       abortSignal,
+      timeoutMs: desmosWorkerTimeoutMs,
     });
-    firstDraft = firstGeneration.object;
+    const firstDraft = firstGeneration.object;
     firstWarnings.push(...firstGeneration.warnings);
 
     const firstValidation = validateDesmosPayload(firstDraft.payload);
-    firstErrors = firstValidation.errors;
     firstWarnings.push(...firstValidation.warnings);
 
     if (firstValidation.ok) {
@@ -681,75 +939,23 @@ async function buildDesmosGraphSpark(
         artifact: normalizeSparkDesmosGraphDraft(firstDraft),
       };
     }
-  } catch (error) {
-    firstErrors = [toMessage(error)];
-  }
-
-  try {
-    const repairPrompt = buildPrompt({
-      sparkType: "desmos_graph",
-      context: input.context,
-      title: input.title,
-      summary: input.summary,
-      skillInstructions: skill.instructions,
-      previousOutput: firstDraft ? JSON.stringify(firstDraft) : undefined,
-      previousErrors: firstErrors,
-    });
-
-    const repairedGeneration = await generateWorkerObject({
-      schema: desmosWorkerOutputSchema,
-      prompt: repairPrompt,
-      abortSignal,
-    });
-    const repairedDraft = repairedGeneration.object;
-    firstWarnings.push(...repairedGeneration.warnings);
-
-    const repairedValidation = validateDesmosPayload(repairedDraft.payload);
-    if (repairedValidation.ok) {
-      return {
-        status: "success",
-        workerSummary: repairedDraft.workerSummary,
-        warnings: [...firstWarnings, ...repairedValidation.warnings],
-        artifact: normalizeSparkDesmosGraphDraft(repairedDraft),
-      };
-    }
 
     return {
       status: "failed",
       workerSummary:
-        repairedDraft.workerSummary ||
-        "Spark worker could not produce a valid Desmos graph in two attempts.",
-      warnings: [...firstWarnings, ...repairedValidation.warnings],
-      error: repairedValidation.errors.join(" "),
+        firstDraft.workerSummary ||
+        "Desmos spark payload failed validation in the first attempt.",
+      warnings: firstWarnings,
+      error: firstValidation.errors.join(" "),
     };
   } catch (error) {
     return {
       status: "failed",
-      workerSummary: "Spark worker failed to repair the Desmos draft.",
+      workerSummary: "Desmos generation failed due to provider fault.",
       warnings: firstWarnings,
-      error: toMessage(error),
+      error: toProviderFaultMessage(error),
     };
   }
-}
-
-function summarizeSparkResultForModel(result: unknown): string {
-  if (!isCreateSparkToolResult(result)) {
-    return "Spark tool returned an unexpected result.";
-  }
-
-  if (result.status === "failed") {
-    return `Spark failed: ${result.error}`;
-  }
-
-  const sparkType = result.artifact.sparkType;
-  const title = result.artifact.title;
-  const summary = result.workerSummary.trim();
-  const warningSummary =
-    result.warnings.length > 0
-      ? ` Warnings: ${result.warnings.slice(0, 2).join("; ")}`
-      : "";
-
-  return `Spark created (${sparkType}) titled "${title}". ${summary}${warningSummary}`;
 }
 
 const sparkTool = createTool<CreateSparkToolInput, CreateSparkToolResult>({
@@ -784,21 +990,5 @@ const sparkTool = createTool<CreateSparkToolInput, CreateSparkToolResult>({
     }
   },
 });
-
-(
-  sparkTool as typeof sparkTool & {
-    toModelOutput?: (
-      options: { output: CreateSparkToolResult } | CreateSparkToolResult,
-    ) => { type: "text"; value: string };
-  }
-).toModelOutput = (options) => {
-  const output =
-    "output" in options ? options.output : (options as CreateSparkToolResult);
-
-  return {
-    type: "text",
-    value: summarizeSparkResultForModel(output),
-  };
-};
 
 export const createSparkTool = sparkTool;

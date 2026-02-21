@@ -10,7 +10,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "playground": "bunx @convex-dev/agent-playground"
+    "playground": "bunx @convex-dev/agent-playground",
+    "agentic:test": "bun agentic-testing/agent-lab.ts",
+    "agentic:compare": "bun agentic-testing/model-compare.ts"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.60.0",

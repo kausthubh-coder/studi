@@ -151,3 +151,163 @@ Out of scope for now:
 ## Vision
 
 A world where learning is interactive, adaptive, and measured by demonstrated ability — not credentials. Studi is the platform that gets you there.
+
+# Studi
+
+Studi is an intuition-first tutoring app built with Next.js, Convex, Clerk, and OpenRouter.
+
+The current product is a chat interface where authenticated users can:
+
+- create and switch between threads
+- send text plus file/image attachments
+- stream assistant responses in real time
+- render inline interactive Sparks (custom HTML scenes and Desmos graphs)
+
+## What Is Implemented
+
+### Chat and threads
+
+- Multi-thread chat UI with per-user thread ownership
+- Real-time streaming message updates via `@convex-dev/agent/react`
+- Request ID deduplication in `sendMessage` to avoid duplicate user messages
+- Automatic thread title seeding from the first non-empty prompt
+
+### Attachments
+
+- Uploads go through Convex file storage
+- Images and files are validated for ownership before model access
+- Uploaded files can be attached to prompts and rendered in message history
+
+### Sparks (interactive artifacts)
+
+- `scene`: self-contained HTML/CSS/JS micro-interactions rendered in a sandboxed iframe
+- `desmos_graph`: interactive graph artifacts rendered with the Desmos calculator API
+- Spark worker does structured generation + validation + one repair retry
+
+## Architecture Overview
+
+Message flow:
+
+1. User submits text/files from `components/StudiChat.tsx`.
+2. `convex/chat.ts:sendMessage` stores the user message and schedules AI work.
+3. `convex/chatActions.ts:generateAssistantReply` continues the agent thread and streams output.
+4. Frontend subscribes with `useUIMessages(..., { stream: true })` and updates live.
+
+Key backend files:
+
+- `convex/agent.ts` - primary Studi agent definition and `create_spark` tool wiring
+- `convex/chat.ts` - thread listing, message listing, uploads, send flow, auth checks
+- `convex/chatActions.ts` - actions for thread creation and assistant generation
+- `convex/sparks/tools.ts` - Spark generation, validation, retries, fallback model handling
+- `convex/schema.ts` - `userThreads` and `attachments` tables
+
+Key frontend files:
+
+- `components/StudiChat.tsx` - top-level chat orchestration
+- `components/studi-chat/` - sidebar, composer, message rendering
+- `components/sparks/` - Spark artifact rendering (scene + Desmos)
+
+## Tech Stack
+
+- Next.js 16 + React 19
+- Convex + `@convex-dev/agent`
+- Clerk authentication
+- OpenRouter via AI SDK provider
+- TypeScript + ESLint + Tailwind CSS
+
+## Prerequisites
+
+- Bun (required package manager)
+- A configured Convex project
+- A configured Clerk app
+- OpenRouter API key
+
+## Environment Variables
+
+Set frontend vars in `.env.local` and backend vars in Convex environment settings.
+
+```bash
+# Required (agent + spark worker)
+OPENROUTER_API_KEY=...
+
+# Optional model overrides
+OPENROUTER_MODEL=anthropic/claude-sonnet-4.6
+SPARK_WORKER_SCENE_MODEL=google/gemini-3-flash-preview
+SPARK_WORKER_DESMOS_MODEL=z-ai/glm-5
+SPARK_WORKER_TIMEOUT_MS=18000
+SPARK_WORKER_SCENE_TIMEOUT_MS=35000
+SPARK_WORKER_DESMOS_TIMEOUT_MS=20000
+
+# Required for Desmos spark rendering in the browser
+NEXT_PUBLIC_DESMOS_API_KEY=...
+
+# Required by Convex + Clerk setup (values come from their dashboards)
+NEXT_PUBLIC_CONVEX_URL=...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...
+CLERK_SECRET_KEY=...
+```
+
+## Getting Started
+
+1. Install dependencies:
+
+```bash
+bun install
+```
+
+2. Configure Convex (first run):
+
+```bash
+bunx convex dev
+```
+
+3. Start frontend + backend:
+
+```bash
+bun run dev
+```
+
+`bun run dev` runs a `predev` hook that checks Convex setup (`convex dev --until-success`) and opens the Convex dashboard.
+
+4. Open the app:
+
+```text
+http://localhost:3000
+```
+
+## Scripts
+
+- `bun run dev` - run Next.js + Convex in parallel
+- `bun run dev:frontend` - run Next.js only
+- `bun run dev:backend` - run Convex only
+- `bun run build` - production build
+- `bun run lint` - lint codebase
+- `bun run playground` - launch local Convex Agent Playground
+
+## Agent Playground
+
+Studi exposes a playground module at `convex/playground.ts`.
+
+1. Issue an API key:
+
+```bash
+bunx convex run --component agent apiKeys:issue '{"name":"studi-playground"}'
+```
+
+2. Open `https://get-convex.github.io/agent/` and set:
+
+- deployment URL from your Convex deployment (`CONVEX_URL`)
+- API key from step 1
+- API module path: `playground`
+
+Or run the local playground UI:
+
+```bash
+bun run playground
+```
+
+## Repository Layout
+
+- `app/`, `components/`, `convex/`, `lib/` - active Studi code
+- `docs/convex-agents/` - local reference docs for Convex Agent usage
+- `examples/` - older/reference implementations and experiments

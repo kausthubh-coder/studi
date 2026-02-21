@@ -235,8 +235,16 @@ function deriveAssistantActivity(
         status = "error";
       } else if (toolPart.state === "output-available") {
         if (!sparkResult) {
-          status = "error";
-          detail = "Spark returned an unexpected output shape.";
+          const outputText = getToolOutputText(
+            (toolPart as { output?: unknown }).output,
+          )?.trim();
+          if (outputText && /^spark created/i.test(outputText)) {
+            status = "complete";
+            detail = outputText;
+          } else {
+            status = "error";
+            detail = "Spark returned an unexpected output shape.";
+          }
         } else if (sparkResult.status === "failed") {
           status = "error";
           detail = sparkResult.error;
@@ -407,6 +415,34 @@ function getSparkId(input: unknown): string | undefined {
   return typeof sparkId === "string" ? sparkId : undefined;
 }
 
+function getToolOutputText(output: unknown): string | undefined {
+  if (typeof output === "string") {
+    return output;
+  }
+
+  if (!output || typeof output !== "object") {
+    return undefined;
+  }
+
+  const record = output as {
+    value?: unknown;
+    output?: unknown;
+  };
+
+  if (typeof record.value === "string") {
+    return record.value;
+  }
+
+  if (record.output && typeof record.output === "object") {
+    const nested = record.output as { value?: unknown };
+    if (typeof nested.value === "string") {
+      return nested.value;
+    }
+  }
+
+  return undefined;
+}
+
 function classifySparkFailure(error: string): string {
   const normalized = error.toLowerCase();
   if (normalized.includes("timed out")) {
@@ -479,6 +515,38 @@ function extractCreateSparkToolResult(
   if (isCreateSparkToolResult(output)) {
     return output;
   }
+
+  const parseFromString = (text: string): CreateSparkToolResult | null => {
+    const normalized = text.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    if (/^spark failed:/i.test(normalized)) {
+      return {
+        status: "failed",
+        workerSummary: "Spark generation failed.",
+        warnings: [],
+        error: normalized.replace(/^spark failed:\s*/i, "") || normalized,
+      };
+    }
+
+    if (normalized.startsWith("{") || normalized.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(normalized);
+        return isCreateSparkToolResult(parsed) ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  };
+
+  if (typeof output === "string") {
+    return parseFromString(output);
+  }
+
   if (!output || typeof output !== "object") {
     return null;
   }
@@ -487,13 +555,30 @@ function extractCreateSparkToolResult(
     artifact?: unknown;
     result?: unknown;
     output?: unknown;
+    value?: unknown;
   };
 
   if (isCreateSparkToolResult(container.result)) {
     return container.result;
   }
+  const nestedResult = extractCreateSparkToolResult(container.result);
+  if (nestedResult) {
+    return nestedResult;
+  }
+
   if (isCreateSparkToolResult(container.output)) {
     return container.output;
+  }
+  const nestedOutput = extractCreateSparkToolResult(container.output);
+  if (nestedOutput) {
+    return nestedOutput;
+  }
+
+  if (typeof container.value === "string") {
+    const parsed = parseFromString(container.value);
+    if (parsed) {
+      return parsed;
+    }
   }
 
   if (isSparkArtifact(container.artifact)) {
@@ -669,7 +754,7 @@ function AssistantParts({ message }: { message: UIMessage }) {
         state?: string;
         output?: unknown;
       };
-      const sparkResult = extractCreateSparkToolResult(toolState.output);
+      const sparkResult = extractCreateSparkToolResult(toolState);
       if (
         toolState.state !== "output-available" ||
         sparkResult?.status !== "success" ||
@@ -720,8 +805,13 @@ function AssistantParts({ message }: { message: UIMessage }) {
         return null;
       }
 
-      const sparkResult = extractCreateSparkToolResult(toolState.output);
+      const sparkResult = extractCreateSparkToolResult(toolState);
       if (!sparkResult) {
+        const outputText = getToolOutputText(toolState.output)?.trim();
+        if (outputText && /^spark created/i.test(outputText)) {
+          return null;
+        }
+
         return (
           <SparkFailureCard
             key={`${message.key}-spark-fail-${partIndex}`}

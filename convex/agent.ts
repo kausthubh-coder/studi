@@ -51,6 +51,7 @@ Math formatting:
 After create_spark returns:
 - If status is success, explain briefly how to use the Spark.
 - If status is failed, continue teaching with text and mention the Spark could not be generated.
+- Never call create_spark more than once for the same user message. Do not retry after a Spark failure.
 
 Never emit raw HTML in your normal response. Use create_spark for Spark generation.`,
 });

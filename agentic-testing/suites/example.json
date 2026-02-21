@@ -1,0 +1,24 @@
+{
+  "name": "baseline-studi-suite",
+  "defaults": {
+    "agentName": "studi",
+    "newThread": true,
+    "title": "Agentic Testing",
+    "pollMs": 250,
+    "includeContext": false
+  },
+  "cases": [
+    {
+      "name": "text-explanation",
+      "prompt": "Explain binary search in a simple, intuitive way.",
+      "repeat": 2,
+      "modelLabel": "default"
+    },
+    {
+      "name": "spark-graph",
+      "prompt": "Graph y = x^2 and explain how changing x affects y.",
+      "repeat": 1,
+      "modelLabel": "default"
+    }
+  ]
+}
