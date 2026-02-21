@@ -24,18 +24,8 @@ export default function SparkSceneRenderer({
   const renderScene = sparkSceneRegistry[artifact.sparkType];
 
   return (
-    <section
-      className="my-4 overflow-hidden rounded-xl"
-      style={{
-        border: "1px solid rgba(168,92,58,0.25)",
-        background:
-          "linear-gradient(180deg, rgba(168,92,58,0.10) 0%, rgba(168,92,58,0.04) 100%)",
-      }}
-    >
-      <header
-        className="px-4 py-3"
-        style={{ borderBottom: "1px solid rgba(168,92,58,0.2)" }}
-      >
+    <section className="my-4">
+      <header className="mb-2 px-1">
         <div className="flex items-center gap-2">
           <span
             className="rounded-full px-2 py-0.5 text-[10px] uppercase"
@@ -43,6 +33,7 @@ export default function SparkSceneRenderer({
               letterSpacing: "0.08em",
               color: "var(--accent)",
               border: "1px solid rgba(168,92,58,0.35)",
+              background: "rgba(168,92,58,0.08)",
             }}
           >
             Spark Scene
@@ -52,19 +43,19 @@ export default function SparkSceneRenderer({
           </span>
         </div>
         <p
-          className="mt-2 font-heading text-sm leading-snug"
+          className="mt-2 font-heading text-base leading-snug"
           style={{ color: "var(--fg)" }}
         >
           {artifact.title}
         </p>
         {artifact.summary && (
-          <p className="mt-1 text-xs" style={{ color: "var(--fg-muted)" }}>
+          <p className="mt-1 text-sm" style={{ color: "var(--fg-muted)" }}>
             {artifact.summary}
           </p>
         )}
       </header>
 
-      <div className="p-3">{renderScene(artifact)}</div>
+      {renderScene(artifact)}
     </section>
   );
 }
