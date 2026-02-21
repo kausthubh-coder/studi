@@ -31,7 +31,7 @@ export function Composer({
   const isWelcome = variant === "welcome";
 
   const composerCard = (
-    <form onSubmit={onSubmit} className="composer-card">
+    <form onSubmit={onSubmit} className={isWelcome ? "composer-card is-welcome" : "composer-card"}>
       {/* Attachment preview row */}
       {pendingAttachments.length > 0 && (
         <div className="flex flex-wrap gap-2 px-4 pt-3">
@@ -47,9 +47,7 @@ export function Composer({
                   alt={attachment.filename ?? "img"}
                   className="h-6 w-6 rounded object-cover"
                 />
-              ) : (
-                <IconPaperclip />
-              )}
+              ) : null}
               <span className="max-w-36 truncate">
                 {attachment.filename ?? "file"}
               </span>
@@ -136,7 +134,7 @@ export function Composer({
   }
 
   return (
-    <div className="flex-shrink-0 border-t border-border-faint bg-bg px-6 py-4">
+    <div className="composer-footer">
       <div className="mx-auto" style={{ maxWidth: "var(--column-max)" }}>
         {composerCard}
         <p className="mt-2 text-center font-heading text-[10px] italic text-fg-faint">

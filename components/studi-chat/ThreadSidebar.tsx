@@ -1,5 +1,5 @@
 import { UserButton } from "@clerk/nextjs";
-import { IconBook, IconCompose } from "@/components/studi-chat/icons";
+import { IconCompose } from "@/components/studi-chat/icons";
 import type { ThreadSummary } from "@/components/studi-chat/types";
 
 export function ThreadSidebar({
@@ -16,30 +16,49 @@ export function ThreadSidebar({
   const isOnWelcome = selectedThreadId === null;
 
   return (
-    <aside className="flex h-screen flex-shrink-0 flex-col overflow-hidden border-r border-border-warm bg-bg-alt" style={{ width: "var(--sidebar-w)" }}>
-      <div className="px-5 pb-3 pt-5">
-        <p className="font-brand text-xl italic tracking-wide text-fg">
+    <aside
+      className="flex h-screen flex-shrink-0 flex-col overflow-hidden border-r border-border-warm bg-bg-alt"
+      style={{ width: "var(--sidebar-w)" }}
+    >
+      {/* Brand logo */}
+      <div className="flex items-center gap-1.5 px-5 pb-3 pt-5">
+        <p
+          className="font-brand text-2xl tracking-wide text-fg"
+          style={{ lineHeight: 1 }}
+        >
           studi
         </p>
+        <span
+          className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full bg-accent"
+          aria-hidden
+        />
       </div>
 
-      <div className="px-3 pb-2 pt-2">
+      {/* New thread pill button */}
+      <div className="px-3 pb-3 pt-1">
         <button
           type="button"
           onClick={onCreateThread}
-          data-active={isOnWelcome}
-          className="sidebar-new-btn flex w-full items-center gap-2 rounded-lg border border-border-warm px-3 py-2 text-sm text-fg-muted"
+          className="sidebar-new-btn flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"
+          style={{
+            background: "var(--accent)",
+            color: "#fff",
+            fontFamily: "var(--font-jakarta)",
+          }}
         >
           <IconCompose />
-          <span className="font-heading text-[13px]">New thread</span>
+          <span>New thread</span>
         </button>
       </div>
 
+      {/* Thread list */}
       <div className="flex-1 overflow-y-auto py-1">
         {threads.length === 0 ? (
           <div className="px-5 py-6 text-center">
-            <IconBook className="mx-auto mb-2 text-fg-faint opacity-30" />
-            <p className="font-heading text-xs italic text-fg-faint">
+            <p
+              className="text-xs italic text-fg-faint"
+              style={{ fontFamily: "var(--font-jakarta)" }}
+            >
               No threads yet
             </p>
           </div>
@@ -55,19 +74,28 @@ export function ThreadSidebar({
                 className="sidebar-thread-btn w-full border-l-[2.5px] border-l-transparent px-4 py-2.5 text-left"
               >
                 <p
-                  className="truncate font-heading text-[13px] font-medium leading-snug"
+                  className="truncate text-[13px] font-semibold leading-snug"
                   style={{
+                    fontFamily: "var(--font-jakarta)",
                     color: isActive ? "var(--accent)" : "var(--fg)",
                   }}
                 >
                   {thread.title && thread.title !== "New Thread" ? (
                     thread.title
                   ) : (
-                    <span className="italic text-fg-faint">New thread</span>
+                    <span
+                      className="font-normal italic text-fg-faint"
+                      style={{ fontFamily: "var(--font-jakarta)" }}
+                    >
+                      New thread
+                    </span>
                   )}
                 </p>
                 {thread.lastMessageAt && (
-                  <p className="mt-0.5 text-[11px] text-fg-faint">
+                  <p
+                    className="mt-0.5 text-[11px] text-fg-faint"
+                    style={{ fontFamily: "var(--font-jakarta)" }}
+                  >
                     {new Date(thread.lastMessageAt).toLocaleDateString(
                       "en-US",
                       {
@@ -83,6 +111,7 @@ export function ThreadSidebar({
         )}
       </div>
 
+      {/* User account bottom */}
       <div className="flex items-center gap-2.5 border-t border-border-faint px-4 py-4">
         <UserButton
           appearance={{
@@ -91,7 +120,12 @@ export function ThreadSidebar({
             },
           }}
         />
-        <span className="font-heading text-xs text-fg-faint">Account</span>
+        <span
+          className="text-xs text-fg-faint"
+          style={{ fontFamily: "var(--font-jakarta)" }}
+        >
+          Account
+        </span>
       </div>
     </aside>
   );

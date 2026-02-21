@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    }
+    // {
+    //   "name": "Frontend (Next.js)",
+    //   "runtimeExecutable": "bun",
+    //   "runtimeArgs": ["run", "dev:frontend"],
+    //   "port": 3000
+    // },
+    // {
+    //   "name": "Backend (Convex)",
+    //   "runtimeExecutable": "bun",
+    //   "runtimeArgs": ["run", "dev:backend"],
+    //   "port": 3210
+    // },
+    // {
+    //   "name": "Agent Playground",
+    //   "runtimeExecutable": "bun",
+    //   "runtimeArgs": ["run", "playground"],
+    //   "port": 3001
+    // }
+  ]
+}

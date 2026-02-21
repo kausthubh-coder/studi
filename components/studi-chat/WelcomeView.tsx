@@ -7,10 +7,34 @@ import { Composer } from "@/components/studi-chat/Composer";
 import type { PendingAttachment } from "@/components/studi-chat/types";
 
 const chips = [
-  { emoji: "🧪", label: "Explain a concept", prompt: "Explain quantum entanglement in simple terms" },
-  { emoji: "📐", label: "Solve a problem", prompt: "Walk me through solving a quadratic equation step by step" },
-  { emoji: "📝", label: "Help me write", prompt: "Help me outline an essay about the Industrial Revolution" },
-  { emoji: "💡", label: "Study plan", prompt: "Create a study plan for learning calculus in 4 weeks" },
+  {
+    emoji: "🧪",
+    label: "Explain a concept",
+    sub: "Break down any topic simply",
+    prompt: "Explain quantum entanglement in simple terms",
+    colorClass: "card-teal",
+  },
+  {
+    emoji: "📐",
+    label: "Solve a problem",
+    sub: "Step-by-step guidance",
+    prompt: "Walk me through solving a quadratic equation step by step",
+    colorClass: "card-amber",
+  },
+  {
+    emoji: "📝",
+    label: "Help me write",
+    sub: "Essays, outlines & more",
+    prompt: "Help me outline an essay about the Industrial Revolution",
+    colorClass: "card-pink",
+  },
+  {
+    emoji: "💡",
+    label: "Study plan",
+    sub: "Structured learning paths",
+    prompt: "Create a study plan for learning calculus in 4 weeks",
+    colorClass: "card-lavender",
+  },
 ];
 
 export function WelcomeView({
@@ -42,15 +66,18 @@ export function WelcomeView({
   const firstName = user?.firstName ?? "there";
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6">
+    <div className="flex flex-1 flex-col items-center justify-center px-6 py-10">
       <div className="w-full" style={{ maxWidth: "var(--column-max)" }}>
         {/* Greeting */}
         <div className="welcome-enter mb-8 text-center">
-          <p className="font-brand text-4xl leading-tight tracking-tight sm:text-5xl">
-            <span className="italic text-fg">Hey, </span>
+          <p className="font-brand text-5xl leading-tight tracking-tight sm:text-6xl">
+            <span className="text-fg">Hey, </span>
             <span className="italic text-accent">{firstName}</span>
           </p>
-          <p className="mt-2 font-heading text-sm text-fg-faint">
+          <p
+            className="mt-3 text-sm text-fg-faint"
+            style={{ fontFamily: "var(--font-jakarta)" }}
+          >
             What would you like to learn today?
           </p>
         </div>
@@ -72,22 +99,26 @@ export function WelcomeView({
           />
         </div>
 
-        {/* Chip suggestions */}
-        <div className="welcome-enter-delay-2 mt-5 flex flex-wrap items-center justify-center gap-2">
+        {/* Colorful suggestion cards */}
+        <div className="welcome-enter-delay-2 mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           {chips.map((c) => (
             <button
               key={c.label}
               type="button"
-              className="chip"
+              className={`suggestion-card ${c.colorClass}`}
               onClick={() => onSuggestionClick(c.prompt)}
             >
-              <span>{c.emoji}</span>
-              {c.label}
+              <span className="suggestion-card-icon">{c.emoji}</span>
+              <span className="suggestion-card-label">{c.label}</span>
+              <span className="suggestion-card-sub">{c.sub}</span>
             </button>
           ))}
         </div>
 
-        <p className="welcome-enter-delay-2 mt-6 text-center font-heading text-[10px] italic text-fg-faint">
+        <p
+          className="welcome-enter-delay-2 mt-5 text-center text-[10px] text-fg-faint"
+          style={{ fontFamily: "var(--font-jakarta)" }}
+        >
           Studi may make mistakes — verify important information
         </p>
       </div>

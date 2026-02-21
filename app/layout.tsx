@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
-import { Fraunces, Lora, Source_Serif_4 } from "next/font/google";
+import { DM_Serif_Display, Plus_Jakarta_Sans, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+const dmSerifDisplay = DM_Serif_Display({
+  variable: "--font-dm-serif",
   subsets: ["latin"],
   display: "swap",
+  weight: "400",
   style: ["italic", "normal"],
 });
 
-const lora = Lora({
-  variable: "--font-lora",
+const plusJakartaSans = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
   subsets: ["latin"],
   display: "swap",
-  style: ["italic", "normal"],
 });
 
 const sourceSerif = Source_Serif_4({
@@ -43,9 +43,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${fraunces.variable} ${lora.variable} ${sourceSerif.variable} antialiased`}
+        className={`${dmSerifDisplay.variable} ${plusJakartaSans.variable} ${sourceSerif.variable} antialiased`}
       >
-        <ClerkProvider dynamic>
+        <ClerkProvider dynamic waitlistUrl="/">
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ClerkProvider>
       </body>

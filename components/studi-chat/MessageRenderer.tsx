@@ -1,5 +1,5 @@
 import type { UIMessage } from "@convex-dev/agent/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
@@ -38,6 +38,9 @@ type ActivityStep = {
 
 type AssistantActivity = {
   hasActivity: boolean;
+  /** True when the only activity is a single create_spark call with no reasoning.
+   *  In this case we hide the CoT panel — the SparkBuildingCard covers the UX. */
+  isTrivial: boolean;
   isStreaming: boolean;
   summary: string;
   steps: ActivityStep[];
@@ -205,11 +208,13 @@ function deriveAssistantActivity(
   }
 
   const seenToolCallIds = new Set<string>();
+  const seenToolNames = new Set<string>();
   for (const [index, part] of parts.entries()) {
     const toolName = getToolName(part);
     if (!toolName) {
       continue;
     }
+    seenToolNames.add(toolName);
 
     const toolPart = part as {
       toolCallId?: unknown;
@@ -354,8 +359,17 @@ function deriveAssistantActivity(
       ? `Working — ${baseSummary}`
       : baseSummary;
 
+  // A trivial activity is a single create_spark call with no reasoning.
+  // We skip the CoT panel for these — the SparkBuildingCard handles the UX.
+  const isTrivial =
+    reasoningText.trim().length === 0 &&
+    seenToolCallIds.size === 1 &&
+    seenToolNames.size === 1 &&
+    seenToolNames.has("create_spark");
+
   return {
     hasActivity: steps.length > 0,
+    isTrivial,
     isStreaming,
     summary,
     steps,
@@ -471,32 +485,44 @@ function classifySparkFailure(error: string): string {
 
 /* ── Spark building animation ────────────────────────────── */
 
-function SparkBuildingCard({ context }: { context?: string }) {
+const SparkBuildingCard = memo(function SparkBuildingCard({
+  context,
+}: {
+  context?: string;
+}) {
   return (
     <div className="spark-building-card my-4 not-prose">
       <FlickeringGrid
         className="spark-building-grid"
         squareSize={6}
         gridGap={10}
-        maxOpacity={0.55}
+        maxOpacity={0.45}
         flickerChance={0.55}
-        color="rgb(176, 86, 48)"
+        color="rgb(232, 160, 48)"
       />
       <div className="spark-building-content">
-        <p className="font-heading text-sm font-medium text-fg">
+        <p
+          className="text-sm font-semibold text-fg"
+          style={{ fontFamily: "var(--font-jakarta)" }}
+        >
           Building spark
         </p>
         {context && (
-          <p className="mt-1 text-xs text-fg-muted">{truncate(context, 95)}</p>
+          <p
+            className="mt-1 text-xs text-fg-muted"
+            style={{ fontFamily: "var(--font-jakarta)" }}
+          >
+            {truncate(context, 95)}
+          </p>
         )}
       </div>
     </div>
   );
-}
+});
 
 /* ── Spark failure card ──────────────────────────────────── */
 
-function SparkFailureCard({
+const SparkFailureCard = memo(function SparkFailureCard({
   sparkId,
   workerSummary,
   error,
@@ -513,20 +539,31 @@ function SparkFailureCard({
   return (
     <div className="spark-fail my-3 not-prose">
       <div className="flex items-center gap-2">
-        <p className="text-sm font-medium text-fg">
+        <p
+          className="text-sm font-semibold text-fg"
+          style={{ fontFamily: "var(--font-jakarta)" }}
+        >
           {sparkLabel} failed to build
         </p>
         <span className="spark-fail-badge">{failureKind}</span>
       </div>
       {workerSummary ? (
-        <p className="mt-1 text-xs text-fg-muted">{workerSummary}</p>
+        <p
+          className="mt-1 text-xs text-fg-muted"
+          style={{ fontFamily: "var(--font-jakarta)" }}
+        >
+          {workerSummary}
+        </p>
       ) : null}
-      <p className="mt-1 text-xs" style={{ color: "#8f3c3c" }}>
+      <p
+        className="mt-1 text-xs"
+        style={{ color: "#8f3c3c", fontFamily: "var(--font-jakarta)" }}
+      >
         {error}
       </p>
     </div>
   );
-}
+});
 
 /* ── Spark result extraction ─────────────────────────────── */
 
@@ -655,9 +692,9 @@ export function deriveAgentUiState(messages: UIMessage[]): AgentUiState {
   return { phase: "idle" };
 }
 
-/* ── Activity panel (thinking-card design) ───────────────── */
+/* ── Activity panel — redesigned chain-of-thought ────────── */
 
-function AssistantActivityPanel({
+const AssistantActivityPanel = memo(function AssistantActivityPanel({
   message,
   activity,
 }: {
@@ -694,18 +731,20 @@ function AssistantActivityPanel({
     }
   }, [activity.hasActivity, activity.isStreaming]);
 
-  if (!activity.hasActivity) {
+  if (!activity.hasActivity || activity.isTrivial) {
     return null;
   }
 
   const isOpen = !isCollapsed;
   const stepsId = `${message.key}-assistant-steps`;
+  const stepCount = activity.steps.length;
 
   return (
     <div
       className="thinking-card not-prose"
       data-streaming={activity.isStreaming}
     >
+      {/* Teal-tinted header strip */}
       <button
         type="button"
         className="thinking-toggle"
@@ -715,6 +754,11 @@ function AssistantActivityPanel({
       >
         <span className="thinking-toggle-dot" aria-hidden />
         <span className="thinking-toggle-label">{activity.summary}</span>
+        {stepCount > 0 && (
+          <span className="thinking-step-count">
+            {stepCount} {stepCount === 1 ? "step" : "steps"}
+          </span>
+        )}
         <IconChevronDown
           className={`thinking-toggle-chevron${isOpen ? " is-open" : ""}`}
         />
@@ -725,12 +769,12 @@ function AssistantActivityPanel({
         className="thinking-body"
         data-state={isOpen ? "open" : "closed"}
       >
-        {/* Reasoning text block */}
+        {/* Reasoning text — teal left border */}
         {activity.reasoningText && (
           <div className="reasoning-block">{activity.reasoningText}</div>
         )}
 
-        {/* Steps timeline */}
+        {/* Steps timeline with solid filled dots */}
         {activity.steps.map((step) => (
           <div
             key={step.id}
@@ -749,7 +793,7 @@ function AssistantActivityPanel({
       </div>
     </div>
   );
-}
+});
 
 /* ── Assistant parts renderer ────────────────────────────── */
 
@@ -975,7 +1019,7 @@ function AssistantParts({
 
 /* ── Message component ───────────────────────────────────── */
 
-export function ArticleMessage({
+export const ArticleMessage = memo(function ArticleMessage({
   message,
   index,
   threadId,
@@ -984,7 +1028,10 @@ export function ArticleMessage({
   index: number;
   threadId: string | null;
 }) {
-  const fileParts = (message.parts ?? []).filter((p) => p.type === "file");
+  const fileParts = useMemo(
+    () => (message.parts ?? []).filter((p) => p.type === "file"),
+    [message.parts],
+  );
 
   if (message.role === "user") {
     return (
@@ -992,7 +1039,15 @@ export function ArticleMessage({
         className="animate-rise mb-6 mt-8 flex justify-end first:mt-0"
         style={{ animationDelay: `${Math.min(index * 30, 200)}ms` }}
       >
-        <div className="max-w-[72%] rounded-2xl rounded-br-sm border border-accent-dim bg-accent-dim px-4 py-2.5 font-body text-sm leading-relaxed text-fg">
+        <div
+          className="max-w-[72%] rounded-2xl rounded-br-sm border px-4 py-2.5 text-sm leading-relaxed"
+          style={{
+            background: "var(--accent)",
+            borderColor: "var(--accent)",
+            color: "#fff",
+            fontFamily: "var(--font-jakarta)",
+          }}
+        >
           {message.text || "..."}
           {fileParts.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -1027,7 +1082,8 @@ export function ArticleMessage({
                     href={f.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-1 text-xs text-accent underline"
+                    className="flex items-center gap-1 text-xs underline"
+                    style={{ color: "rgba(255,255,255,0.85)" }}
                   >
                     <IconPaperclip />
                     {f.filename ?? "file"}
@@ -1051,4 +1107,4 @@ export function ArticleMessage({
       </div>
     </div>
   );
-}
+});

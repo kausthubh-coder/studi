@@ -332,16 +332,41 @@ export default function CodePlaygroundScene({
 
   return (
     <div className="spark-scene">
+      {/* Bar */}
       <div className="spark-scene-bar">
-        <span className="font-heading text-[11px] text-fg-muted">
+        <span aria-hidden style={{ fontSize: "1rem", lineHeight: 1 }}>
+          🐍
+        </span>
+        <span
+          className="text-[11px] text-fg-muted"
+          style={{ fontFamily: "var(--font-jakarta)", fontWeight: 500 }}
+        >
           Python Playground
         </span>
-        <span className="code-spark-meta">{runMeta}</span>
+
+        {/* Status pill */}
+        {runStatus !== "idle" && (
+          <span
+            className="code-spark-status-pill"
+            data-status={runStatus}
+          >
+            {runStatus === "running"
+              ? "Running…"
+              : runStatus === "success"
+                ? `Done ${durationMs}ms`
+                : "Error"}
+          </span>
+        )}
+        {runStatus === "idle" && durationMs !== null && (
+          <span className="code-spark-meta">{durationMs}ms</span>
+        )}
+
         <button
           type="button"
           className="spark-scene-expand"
           onClick={onResetClick}
           disabled={runStatus === "running"}
+          style={{ marginLeft: "auto" }}
         >
           Reset
         </button>
@@ -351,10 +376,11 @@ export default function CodePlaygroundScene({
           onClick={onRunClick}
           disabled={runStatus === "running"}
         >
-          {runStatus === "running" ? "Running" : "Run"}
+          {runStatus === "running" ? "Running…" : "▶ Run"}
         </button>
       </div>
 
+      {/* Notebook layout: instructions left | editor+output right */}
       <div className="code-spark-layout">
         <div className="code-spark-instructions">
           <p>{payload.instructions}</p>
@@ -365,22 +391,23 @@ export default function CodePlaygroundScene({
 
         <div className="code-spark-editor-shell">
           <MonacoEditor
-            height="340px"
+            height="320px"
             language="python"
             value={code}
             onChange={(value: string | undefined) => setDraftCode(value ?? "")}
             theme="vs-dark"
             options={{
               minimap: { enabled: false },
-              fontSize: 14,
+              fontSize: 13,
               lineNumbersMinChars: 3,
               scrollbar: {
-                verticalScrollbarSize: 8,
-                horizontalScrollbarSize: 8,
+                verticalScrollbarSize: 6,
+                horizontalScrollbarSize: 6,
               },
               automaticLayout: true,
-              padding: { top: 12 },
+              padding: { top: 10 },
               tabSize: 2,
+              fontVariantNumeric: "tabular-nums",
             }}
           />
         </div>
