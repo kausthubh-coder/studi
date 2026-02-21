@@ -7,7 +7,8 @@
       "WebFetch(domain:openrouter.ai)",
       "WebFetch(domain:docs.convex.dev)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:stack.convex.dev)"
+      "WebFetch(domain:stack.convex.dev)",
+      "WebFetch(domain:www.npmjs.com)"
     ]
   }
 }

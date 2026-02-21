@@ -398,6 +398,81 @@ function getSparkBuildContext(input: unknown): string | undefined {
   return undefined;
 }
 
+function getSparkId(input: unknown): string | undefined {
+  if (!input || typeof input !== "object") {
+    return undefined;
+  }
+
+  const sparkId = (input as { sparkId?: unknown }).sparkId;
+  return typeof sparkId === "string" ? sparkId : undefined;
+}
+
+function classifySparkFailure(error: string): string {
+  const normalized = error.toLowerCase();
+  if (normalized.includes("timed out")) {
+    return "timeout";
+  }
+  if (normalized.includes("provider")) {
+    return "provider";
+  }
+  if (normalized.includes("syntax")) {
+    return "syntax";
+  }
+  if (normalized.includes("cancelled")) {
+    return "cancelled";
+  }
+  return "error";
+}
+
+function SparkFailureCard({
+  sparkId,
+  workerSummary,
+  error,
+}: {
+  sparkId?: string;
+  workerSummary?: string;
+  error: string;
+}) {
+  const sparkLabel = sparkId
+    ? sparkId.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Spark";
+  const failureKind = classifySparkFailure(error);
+
+  return (
+    <div
+      className="my-3 rounded-xl border px-3 py-2"
+      style={{
+        borderColor: "rgba(182, 71, 71, 0.35)",
+        background: "rgba(81, 15, 15, 0.18)",
+        color: "var(--fg)",
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-medium">{sparkLabel} failed to build</p>
+        <span
+          className="rounded-full px-2 py-0.5 text-[10px] uppercase"
+          style={{
+            letterSpacing: "0.08em",
+            border: "1px solid rgba(255, 195, 195, 0.32)",
+            color: "#ffe0e0",
+            background: "rgba(133, 22, 22, 0.42)",
+          }}
+        >
+          {failureKind}
+        </span>
+      </div>
+      {workerSummary ? (
+        <p className="mt-1 text-xs" style={{ color: "var(--fg-muted)" }}>
+          {workerSummary}
+        </p>
+      ) : null}
+      <p className="mt-1 text-xs" style={{ color: "#ffd6d6" }}>
+        {error}
+      </p>
+    </div>
+  );
+}
+
 function extractCreateSparkToolResult(
   output: unknown,
 ): CreateSparkToolResult | null {
@@ -611,6 +686,66 @@ function AssistantParts({ message }: { message: UIMessage }) {
     })
     .filter((artifact): artifact is React.JSX.Element => artifact !== null);
 
+  const sparkFailures = parts
+    .map((part, partIndex) => {
+      const toolName = getToolName(part);
+      if (toolName !== "create_spark") {
+        return null;
+      }
+
+      const toolState = part as {
+        state?: string;
+        input?: unknown;
+        output?: unknown;
+        errorText?: unknown;
+      };
+
+      const sparkId = getSparkId(toolState.input);
+
+      if (toolState.state === "output-error") {
+        return (
+          <SparkFailureCard
+            key={`${message.key}-spark-fail-${partIndex}`}
+            sparkId={sparkId}
+            error={
+              typeof toolState.errorText === "string"
+                ? toolState.errorText
+                : "Spark tool failed before returning output."
+            }
+          />
+        );
+      }
+
+      if (toolState.state !== "output-available") {
+        return null;
+      }
+
+      const sparkResult = extractCreateSparkToolResult(toolState.output);
+      if (!sparkResult) {
+        return (
+          <SparkFailureCard
+            key={`${message.key}-spark-fail-${partIndex}`}
+            sparkId={sparkId}
+            error="Spark returned an unexpected output shape."
+          />
+        );
+      }
+
+      if (sparkResult.status === "failed") {
+        return (
+          <SparkFailureCard
+            key={`${message.key}-spark-fail-${partIndex}`}
+            sparkId={sparkId}
+            workerSummary={sparkResult.workerSummary}
+            error={sparkResult.error}
+          />
+        );
+      }
+
+      return null;
+    })
+    .filter((artifact): artifact is React.JSX.Element => artifact !== null);
+
   const fileArtifacts = parts
     .map((part, partIndex) => {
       if (part.type !== "file") {
@@ -684,6 +819,7 @@ function AssistantParts({ message }: { message: UIMessage }) {
           {textToRender}
         </ReactMarkdown>
       ) : null}
+      {sparkFailures}
       {sparkArtifacts}
       {fileArtifacts}
     </>

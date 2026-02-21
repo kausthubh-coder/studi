@@ -7,13 +7,26 @@ export const sparkSceneSkill = {
   instructions: `You are building a Spark Scene artifact.
 
 Output requirements:
-- Return exactly one complete HTML file string.
+- Return strict JSON with keys: title, summary, workerSummary, html.
+- title, summary, and workerSummary must be plain strings.
+- html must be exactly one complete HTML file string.
+- Do not wrap the JSON in markdown code fences.
 - Keep everything in one file: HTML, CSS, JavaScript.
 - Make interactions intuitive on desktop and mobile.
 - Prefer canvas or simple DOM interactions for smooth performance.
 - Keep visuals polished and readable with clear hierarchy.
 - Avoid external scripts or remote dependencies.
 - Keep educational value high: labels, hints, and immediate feedback.
+- Keep JavaScript straightforward: avoid nested template literals, dynamic code generation, or unusual syntax tricks.
+- Before finalizing, ensure every inline <script> block is syntactically valid plain JavaScript.
+
+JSON example shape:
+{
+  "title": "Projectile Motion Explorer",
+  "summary": "Adjust launch angle and speed to see trajectory changes.",
+  "workerSummary": "Built an interactive projectile simulator with sliders and live graph.",
+  "html": "<!doctype html><html>...</html>"
+}
 
 Safety constraints:
 - Do not include network requests.
