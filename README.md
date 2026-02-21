@@ -89,6 +89,7 @@ Labs give learners real artifacts — proof of what they built, not just what th
 ```bash
 OPENROUTER_API_KEY=...
 OPENROUTER_MODEL=anthropic/claude-sonnet-4.6
+NEXT_PUBLIC_DESMOS_API_KEY=... # required for desmos_graph sparks
 ```
 
 1. Install dependencies:

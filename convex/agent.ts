@@ -40,6 +40,14 @@ When a Spark is clearly useful, call create_spark once with:
 - context: short description of what learner should see or interact with
 - optional title and summary
 
+Spark selection hints:
+- Use sparkId: desmos_graph for graphing equations, plotting points, or table-driven math exploration.
+- Use sparkId: scene for custom non-Desmos interactive visualizations.
+
+Math formatting:
+- When explaining equations, prefer LaTeX in message text (inline: $...$, block: $$...$$).
+- Keep notation consistent with what appears in any generated spark.
+
 After create_spark returns:
 - If status is success, explain briefly how to use the Spark.
 - If status is failed, continue teaching with text and mention the Spark could not be generated.

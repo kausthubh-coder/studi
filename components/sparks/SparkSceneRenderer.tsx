@@ -1,27 +1,22 @@
 "use client";
 
+import DesmosGraphScene from "@/components/sparks/scenes/DesmosGraphScene";
 import HtmlCssJsSandboxScene from "@/components/sparks/scenes/HtmlCssJsSandboxScene";
-import {
-  getSparkTypeLabel,
-  type SparkSceneArtifact,
-  type SparkType,
-} from "@/lib/sparks/contracts";
+import { getSparkTypeLabel, type SparkArtifact } from "@/lib/sparks/contracts";
 
 type SparkSceneRendererProps = {
-  artifact: SparkSceneArtifact;
-};
-
-const sparkSceneRegistry: Record<
-  SparkType,
-  (artifact: SparkSceneArtifact) => React.JSX.Element
-> = {
-  scene: (artifact) => <HtmlCssJsSandboxScene payload={artifact.payload} />,
+  artifact: SparkArtifact;
 };
 
 export default function SparkSceneRenderer({
   artifact,
 }: SparkSceneRendererProps) {
-  const renderScene = sparkSceneRegistry[artifact.sparkType];
+  const renderScene =
+    artifact.kind === "spark_scene" ? (
+      <HtmlCssJsSandboxScene payload={artifact.payload} />
+    ) : (
+      <DesmosGraphScene payload={artifact.payload} />
+    );
 
   return (
     <section className="my-4">
@@ -36,7 +31,7 @@ export default function SparkSceneRenderer({
               background: "rgba(168,92,58,0.08)",
             }}
           >
-            Spark Scene
+            Spark
           </span>
           <span className="text-xs" style={{ color: "var(--fg-faint)" }}>
             {getSparkTypeLabel(artifact.sparkType)}
@@ -55,7 +50,7 @@ export default function SparkSceneRenderer({
         )}
       </header>
 
-      {renderScene(artifact)}
+      {renderScene}
     </section>
   );
 }

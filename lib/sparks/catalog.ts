@@ -1,4 +1,5 @@
 import type { SparkType } from "./contracts";
+import { sparkDesmosGraphSkill } from "./skills/desmosGraph";
 import { sparkSceneSkill } from "./skills/scene";
 
 export type SparkSkillDefinition = {
@@ -14,11 +15,16 @@ export const sparkSkillCatalog: readonly SparkSkillDefinition[] = [
     id: "scene",
     ...sparkSceneSkill,
   },
+  {
+    id: "desmos_graph",
+    ...sparkDesmosGraphSkill,
+  },
 ];
 
 export const sparkSkillById: Readonly<Record<SparkType, SparkSkillDefinition>> =
   {
     scene: sparkSkillCatalog[0],
+    desmos_graph: sparkSkillCatalog[1],
   };
 
 export function sparkCatalogPromptBlock(): string {

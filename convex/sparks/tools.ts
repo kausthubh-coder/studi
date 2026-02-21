@@ -7,10 +7,14 @@ import { z } from "zod";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
   normalizeCreateSparkInput,
+  normalizeSparkDesmosGraphDraft,
   normalizeSparkSceneDraft,
   type CreateSparkToolInput,
   type CreateSparkToolResult,
-  type SparkSceneValidationResult,
+  type DesmosGraphPayload,
+  type JsonValue,
+  type SparkType,
+  type SparkValidationResult,
 } from "../../lib/sparks/contracts";
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -28,17 +32,82 @@ const openrouter = createOpenRouter({
 });
 
 const createSparkInputSchema = z.object({
-  sparkId: z.literal("scene"),
-  context: z.string().min(1),
-  title: z.string().optional(),
-  summary: z.string().optional(),
+  sparkId: z
+    .enum(["scene", "desmos_graph"])
+    .describe("Spark id to generate. Use scene or desmos_graph."),
+  context: z
+    .string()
+    .min(1)
+    .describe("Short description of what the learner should explore."),
+  title: z
+    .string()
+    .optional()
+    .describe("Optional display title for the spark artifact."),
+  summary: z
+    .string()
+    .optional()
+    .describe("Optional one-line display summary for the spark artifact."),
 });
 
-type SparkSceneDraft = {
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number().finite(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+
+const desmosExpressionSchema = z.record(z.string(), jsonValueSchema);
+
+const desmosPayloadSchema: z.ZodType<DesmosGraphPayload> = z
+  .object({
+    expressions: z.array(desmosExpressionSchema).min(1),
+    settings: z
+      .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+      .optional(),
+    viewport: z
+      .object({
+        left: z.number(),
+        right: z.number(),
+        bottom: z.number(),
+        top: z.number(),
+      })
+      .optional(),
+    hint: z.string().optional(),
+  })
+  .refine(
+    (payload) =>
+      payload.expressions.every((expression) => {
+        const latex = expression.latex;
+        if (typeof latex === "string" && latex.trim().length > 0) {
+          return true;
+        }
+
+        const type = expression.type;
+        const columns = expression.columns;
+        return type === "table" && Array.isArray(columns) && columns.length > 0;
+      }),
+    {
+      message:
+        "Each Desmos expression must include latex, or be a table with columns.",
+    },
+  );
+
+type SceneDraft = {
   title: string;
   summary: string;
   workerSummary: string;
   html: string;
+};
+
+type DesmosDraft = {
+  title: string;
+  summary: string;
+  workerSummary: string;
+  payload: DesmosGraphPayload;
 };
 
 function toMessage(error: unknown): string {
@@ -48,7 +117,7 @@ function toMessage(error: unknown): string {
   return String(error);
 }
 
-function parseSparkSceneDraftFromText(text: string): SparkSceneDraft {
+function parseJsonObjectFromText(text: string): unknown {
   const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)```/i);
   const fallbackStart = text.indexOf("{");
   const fallbackEnd = text.lastIndexOf("}");
@@ -58,18 +127,21 @@ function parseSparkSceneDraftFromText(text: string): SparkSceneDraft {
       : text;
   const raw = jsonBlockMatch?.[1] ?? fallbackRaw;
 
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    return JSON.parse(raw);
   } catch {
     throw new Error("Worker response was not valid JSON.");
   }
+}
+
+function parseSceneDraftFromText(text: string): SceneDraft {
+  const parsed = parseJsonObjectFromText(text);
 
   if (!parsed || typeof parsed !== "object") {
     throw new Error("Worker response JSON must be an object.");
   }
 
-  const candidate = parsed as Partial<SparkSceneDraft>;
+  const candidate = parsed as Partial<SceneDraft>;
   if (
     typeof candidate.title !== "string" ||
     typeof candidate.summary !== "string" ||
@@ -77,7 +149,7 @@ function parseSparkSceneDraftFromText(text: string): SparkSceneDraft {
     typeof candidate.html !== "string"
   ) {
     throw new Error(
-      "Worker response must include string fields: title, summary, workerSummary, html.",
+      "Scene response must include string fields: title, summary, workerSummary, html.",
     );
   }
 
@@ -86,6 +158,48 @@ function parseSparkSceneDraftFromText(text: string): SparkSceneDraft {
     summary: candidate.summary,
     workerSummary: candidate.workerSummary,
     html: candidate.html,
+  };
+}
+
+function parseDesmosDraftFromText(text: string): DesmosDraft {
+  const parsed = parseJsonObjectFromText(text);
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Worker response JSON must be an object.");
+  }
+
+  const candidate = parsed as {
+    title?: unknown;
+    summary?: unknown;
+    workerSummary?: unknown;
+    payload?: unknown;
+    graph?: unknown;
+  };
+
+  if (
+    typeof candidate.title !== "string" ||
+    typeof candidate.summary !== "string" ||
+    typeof candidate.workerSummary !== "string"
+  ) {
+    throw new Error(
+      "Desmos response must include string fields: title, summary, workerSummary.",
+    );
+  }
+
+  const rawPayload = candidate.payload ?? candidate.graph;
+  const payloadResult = desmosPayloadSchema.safeParse(rawPayload);
+  if (!payloadResult.success) {
+    throw new Error(
+      `Invalid desmos payload: ${payloadResult.error.issues
+        .map((issue) => issue.message)
+        .join("; ")}`,
+    );
+  }
+
+  return {
+    title: candidate.title,
+    summary: candidate.summary,
+    workerSummary: candidate.workerSummary,
+    payload: payloadResult.data,
   };
 }
 
@@ -100,7 +214,7 @@ function extractInlineScriptBlocks(html: string): string[] {
   return blocks;
 }
 
-function validateSceneHtml(html: string): SparkSceneValidationResult {
+function validateSceneHtml(html: string): SparkValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -140,7 +254,6 @@ function validateSceneHtml(html: string): SparkSceneValidationResult {
       continue;
     }
     try {
-      // Syntax-only check for inline scripts.
       new Function(script);
     } catch (error) {
       errors.push(`Inline script syntax error: ${toMessage(error)}`);
@@ -152,27 +265,77 @@ function validateSceneHtml(html: string): SparkSceneValidationResult {
     ok: errors.length === 0,
     errors,
     warnings,
-    artifact: normalizeSparkSceneDraft("scene", {
-      html,
-      title: "Spark Scene",
-      summary: "",
-      workerSummary: "",
-    }),
   };
 }
 
-async function generateSceneDraft(params: {
+function validateDesmosPayload(
+  payload: DesmosGraphPayload,
+): SparkValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (payload.expressions.length === 0) {
+    errors.push("Desmos payload must include at least one expression.");
+  }
+
+  if (payload.viewport) {
+    if (payload.viewport.left >= payload.viewport.right) {
+      errors.push("Desmos viewport must satisfy left < right.");
+    }
+    if (payload.viewport.bottom >= payload.viewport.top) {
+      errors.push("Desmos viewport must satisfy bottom < top.");
+    }
+  }
+
+  const hasEquation = payload.expressions.some((expression) => {
+    const latex = expression.latex;
+    return typeof latex === "string" && latex.trim().length > 0;
+  });
+  if (!hasEquation) {
+    warnings.push("Desmos payload has no latex equations.");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+async function generateWorkerText(prompt: string): Promise<string> {
+  const result = await generateText({
+    model: openrouter.chat(sparkWorkerModel),
+    prompt,
+    temperature: 0.2,
+  });
+
+  return result.text;
+}
+
+function buildPrompt(params: {
+  sparkType: SparkType;
   context: string;
   title?: string;
   summary?: string;
   skillInstructions: string;
-  previousHtml?: string;
+  previousOutput?: string;
   previousErrors?: string[];
-}): Promise<SparkSceneDraft> {
-  const promptLines = [
-    "Build a Spark Scene for an educational chat.",
-    "Return strict JSON with keys: title, summary, workerSummary, html.",
-    "html must be one complete HTML file string.",
+}): string {
+  const outputRequirements =
+    params.sparkType === "scene"
+      ? [
+          "Return strict JSON with keys: title, summary, workerSummary, html.",
+          "html must be one complete HTML file string.",
+        ]
+      : [
+          "Return strict JSON with keys: title, summary, workerSummary, payload.",
+          "payload must be a JSON object compatible with Desmos setExpressions usage.",
+        ];
+
+  const lines = [
+    `Build a ${params.sparkType} spark for an educational chat.`,
+    `Spark id: ${params.sparkType}`,
+    ...outputRequirements,
     `Learning context: ${params.context}`,
     params.title ? `Preferred title: ${params.title}` : "",
     params.summary ? `Preferred summary: ${params.summary}` : "",
@@ -181,81 +344,169 @@ async function generateSceneDraft(params: {
     params.skillInstructions,
   ];
 
-  if (params.previousHtml) {
-    promptLines.push(
-      "",
-      "Repair this previous draft and fix validation issues:",
-      params.previousHtml,
-    );
+  if (params.previousOutput) {
+    lines.push("", "Repair this previous draft:", params.previousOutput);
   }
 
   if (params.previousErrors && params.previousErrors.length > 0) {
-    promptLines.push(
+    lines.push(
       "",
       "Validation errors to fix:",
       params.previousErrors.map((error) => `- ${error}`).join("\n"),
     );
   }
 
-  const result = await generateText({
-    model: openrouter.chat(sparkWorkerModel),
-    prompt: promptLines.filter(Boolean).join("\n"),
-    temperature: 0.2,
-  });
-
-  return parseSparkSceneDraftFromText(result.text);
+  return lines.filter(Boolean).join("\n");
 }
 
 async function buildSceneSpark(
   input: CreateSparkToolInput,
 ): Promise<CreateSparkToolResult> {
   const skill = sparkSkillById.scene;
+  let firstRaw = "";
+  let firstErrors: string[] = [];
+  const firstWarnings: string[] = [];
 
-  const firstDraft = await generateSceneDraft({
-    context: input.context,
-    title: input.title,
-    summary: input.summary,
-    skillInstructions: skill.instructions,
-  });
+  try {
+    const prompt = buildPrompt({
+      sparkType: "scene",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+    });
+    firstRaw = await generateWorkerText(prompt);
+    const firstDraft = parseSceneDraftFromText(firstRaw);
+    const firstValidation = validateSceneHtml(firstDraft.html);
+    firstErrors = firstValidation.errors;
+    firstWarnings.push(...firstValidation.warnings);
 
-  const firstValidation = validateSceneHtml(firstDraft.html);
-
-  if (firstValidation.ok) {
-    return {
-      status: "success",
-      workerSummary: firstDraft.workerSummary,
-      warnings: firstValidation.warnings,
-      artifact: normalizeSparkSceneDraft("scene", firstDraft),
-    };
+    if (firstValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: firstDraft.workerSummary,
+        warnings: firstWarnings,
+        artifact: normalizeSparkSceneDraft(firstDraft),
+      };
+    }
+  } catch (error) {
+    firstErrors = [toMessage(error)];
   }
 
-  const repairedDraft = await generateSceneDraft({
-    context: input.context,
-    title: input.title,
-    summary: input.summary,
-    skillInstructions: skill.instructions,
-    previousHtml: firstDraft.html,
-    previousErrors: firstValidation.errors,
-  });
+  try {
+    const repairPrompt = buildPrompt({
+      sparkType: "scene",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+      previousOutput: firstRaw,
+      previousErrors: firstErrors,
+    });
+    const repairedRaw = await generateWorkerText(repairPrompt);
+    const repairedDraft = parseSceneDraftFromText(repairedRaw);
+    const repairedValidation = validateSceneHtml(repairedDraft.html);
 
-  const repairedValidation = validateSceneHtml(repairedDraft.html);
-  if (repairedValidation.ok) {
+    if (repairedValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: repairedDraft.workerSummary,
+        warnings: [...firstWarnings, ...repairedValidation.warnings],
+        artifact: normalizeSparkSceneDraft(repairedDraft),
+      };
+    }
+
     return {
-      status: "success",
-      workerSummary: repairedDraft.workerSummary,
-      warnings: repairedValidation.warnings,
-      artifact: normalizeSparkSceneDraft("scene", repairedDraft),
+      status: "failed",
+      workerSummary:
+        repairedDraft.workerSummary ||
+        "Spark worker could not produce a valid scene in two attempts.",
+      warnings: [...firstWarnings, ...repairedValidation.warnings],
+      error: repairedValidation.errors.join(" "),
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Spark worker failed to repair the scene draft.",
+      warnings: firstWarnings,
+      error: toMessage(error),
     };
   }
+}
 
-  return {
-    status: "failed",
-    workerSummary:
-      repairedDraft.workerSummary ||
-      "Spark worker could not produce a valid scene in two attempts.",
-    warnings: [...firstValidation.warnings, ...repairedValidation.warnings],
-    error: repairedValidation.errors.join(" "),
-  };
+async function buildDesmosGraphSpark(
+  input: CreateSparkToolInput,
+): Promise<CreateSparkToolResult> {
+  const skill = sparkSkillById.desmos_graph;
+  let firstRaw = "";
+  let firstErrors: string[] = [];
+  const firstWarnings: string[] = [];
+
+  try {
+    const prompt = buildPrompt({
+      sparkType: "desmos_graph",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+    });
+    firstRaw = await generateWorkerText(prompt);
+    const firstDraft = parseDesmosDraftFromText(firstRaw);
+    const firstValidation = validateDesmosPayload(firstDraft.payload);
+    firstErrors = firstValidation.errors;
+    firstWarnings.push(...firstValidation.warnings);
+
+    if (firstValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: firstDraft.workerSummary,
+        warnings: firstWarnings,
+        artifact: normalizeSparkDesmosGraphDraft(firstDraft),
+      };
+    }
+  } catch (error) {
+    firstErrors = [toMessage(error)];
+  }
+
+  try {
+    const repairPrompt = buildPrompt({
+      sparkType: "desmos_graph",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+      previousOutput: firstRaw,
+      previousErrors: firstErrors,
+    });
+    const repairedRaw = await generateWorkerText(repairPrompt);
+    const repairedDraft = parseDesmosDraftFromText(repairedRaw);
+    const repairedValidation = validateDesmosPayload(repairedDraft.payload);
+
+    if (repairedValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: repairedDraft.workerSummary,
+        warnings: [...firstWarnings, ...repairedValidation.warnings],
+        artifact: normalizeSparkDesmosGraphDraft(repairedDraft),
+      };
+    }
+
+    return {
+      status: "failed",
+      workerSummary:
+        repairedDraft.workerSummary ||
+        "Spark worker could not produce a valid Desmos graph in two attempts.",
+      warnings: [...firstWarnings, ...repairedValidation.warnings],
+      error: repairedValidation.errors.join(" "),
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Spark worker failed to repair the Desmos draft.",
+      warnings: firstWarnings,
+      error: toMessage(error),
+    };
+  }
 }
 
 export const createSparkTool = createTool<
@@ -271,6 +522,10 @@ export const createSparkTool = createTool<
     try {
       if (input.sparkId === "scene") {
         return await buildSceneSpark(input);
+      }
+
+      if (input.sparkId === "desmos_graph") {
+        return await buildDesmosGraphSpark(input);
       }
 
       return {

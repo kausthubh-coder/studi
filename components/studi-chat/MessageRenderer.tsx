@@ -7,7 +7,7 @@ import remarkMath from "remark-math";
 import SparkSceneRenderer from "@/components/sparks/SparkSceneRenderer";
 import {
   isCreateSparkToolResult,
-  isSparkSceneArtifact,
+  isSparkArtifact,
   type CreateSparkToolResult,
 } from "@/lib/sparks/contracts";
 import { IconChevronDown, IconPaperclip } from "@/components/studi-chat/icons";
@@ -421,7 +421,7 @@ function extractCreateSparkToolResult(
     return container.output;
   }
 
-  if (isSparkSceneArtifact(container.artifact)) {
+  if (isSparkArtifact(container.artifact)) {
     return {
       status: "success",
       workerSummary: "Spark artifact created.",
