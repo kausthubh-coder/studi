@@ -1,8 +1,15 @@
 export const sparkSceneVersion = 1 as const;
 
-export const sparkTypes = ["scene", "desmos_graph", "code_playground"] as const;
+export const sparkTypes = [
+  "scene",
+  "quiz",
+  "flash_card",
+  "desmos_graph",
+  "code_playground",
+] as const;
 
 export type SparkType = (typeof sparkTypes)[number];
+export type SceneSparkType = "scene" | "quiz" | "flash_card";
 export type SparkMode = "readonly" | "editable";
 
 export type JsonPrimitive = string | number | boolean | null;
@@ -46,7 +53,7 @@ export type CodePlaygroundPayload = {
 export type SparkSceneArtifact = {
   kind: "spark_scene";
   version: typeof sparkSceneVersion;
-  sparkType: "scene";
+  sparkType: SceneSparkType;
   mode: SparkMode;
   artifactId?: string;
   title: string;
@@ -143,6 +150,8 @@ const maxExpressions = 40;
 
 const sparkTypeLabels: Record<SparkType, string> = {
   scene: "Scene",
+  quiz: "Quiz",
+  flash_card: "Flash Card",
   desmos_graph: "Desmos Graph",
   code_playground: "Code Playground",
 };
@@ -199,6 +208,12 @@ function normalizeJsonValue(value: unknown): JsonValue | undefined {
 
 function normalizeSparkType(sparkType: string | undefined): SparkType {
   if (sparkType === "scene") {
+    return sparkType;
+  }
+  if (sparkType === "quiz") {
+    return sparkType;
+  }
+  if (sparkType === "flash_card") {
     return sparkType;
   }
   if (sparkType === "desmos_graph") {
@@ -370,13 +385,14 @@ export function getSparkTypeLabel(sparkType: SparkType): string {
 
 export function normalizeSparkSceneDraft(
   draft: SparkDraft,
+  sparkType: SceneSparkType = "scene",
 ): SparkSceneArtifact {
   const html = clampCode(typeof draft.html === "string" ? draft.html : "");
 
   const title = clampText(
     typeof draft.title === "string" && draft.title.trim().length > 0
       ? draft.title
-      : getSparkTypeLabel("scene"),
+      : getSparkTypeLabel(sparkType),
     maxTitleLength,
   );
 
@@ -388,7 +404,7 @@ export function normalizeSparkSceneDraft(
   return {
     kind: "spark_scene",
     version: sparkSceneVersion,
-    sparkType: "scene",
+    sparkType,
     mode: "readonly",
     artifactId:
       typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
@@ -528,7 +544,9 @@ export function isSparkSceneArtifact(
   if (
     candidate.kind !== "spark_scene" ||
     candidate.version !== sparkSceneVersion ||
-    candidate.sparkType !== "scene" ||
+    (candidate.sparkType !== "scene" &&
+      candidate.sparkType !== "quiz" &&
+      candidate.sparkType !== "flash_card") ||
     typeof candidate.title !== "string" ||
     (candidate.mode !== "readonly" && candidate.mode !== "editable")
   ) {

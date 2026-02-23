@@ -44,6 +44,8 @@ When a Spark is clearly useful, call create_spark once with:
 
 Spark selection hints:
 - Use sparkId: desmos_graph for graphing equations, plotting points, or table-driven math exploration.
+- Use sparkId: quiz for short concept checks with scored questions and immediate feedback.
+- Use sparkId: flash_card for rapid recall practice with term/definition style cards.
 - Use sparkId: scene for custom non-Desmos interactive visualizations.
 - Use sparkId: code_playground for hands-on coding practice where the learner should edit and run code.
 

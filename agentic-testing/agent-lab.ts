@@ -866,7 +866,9 @@ async function runSingle(
             if (
               config.saveSceneHtml &&
               spark?.result?.status === "success" &&
-              spark.result.artifact.sparkType === "scene" &&
+              (spark.result.artifact.sparkType === "scene" ||
+                spark.result.artifact.sparkType === "quiz" ||
+                spark.result.artifact.sparkType === "flash_card") &&
               !savedSceneToolCalls.has(toolCallId)
             ) {
               savedSceneToolCalls.add(toolCallId);

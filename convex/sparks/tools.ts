@@ -6,6 +6,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
+  getSparkTypeLabel,
   normalizeSparkCodePlaygroundDraft,
   normalizeCreateSparkInput,
   type CodePlaygroundPayload,
@@ -16,7 +17,7 @@ import {
   type CreateSparkToolResult,
   type DesmosGraphPayload,
   type DesmosSparkDraft,
-  type JsonValue,
+  type SceneSparkType,
   type SparkType,
   type SparkValidationResult,
 } from "../../lib/sparks/contracts";
@@ -83,9 +84,9 @@ const openrouter = createOpenRouter({
 
 const createSparkInputSchema = z.object({
   sparkId: z
-    .enum(["scene", "desmos_graph", "code_playground"])
+    .enum(["scene", "quiz", "flash_card", "desmos_graph", "code_playground"])
     .describe(
-      "Spark id to generate. Use scene, desmos_graph, or code_playground.",
+      "Spark id to generate. Use scene, quiz, flash_card, desmos_graph, or code_playground.",
     ),
   context: z
     .string()
@@ -101,63 +102,56 @@ const createSparkInputSchema = z.object({
     .describe("Optional one-line display summary for the spark artifact."),
 });
 
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number().finite(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValueSchema),
-    z.record(z.string(), jsonValueSchema),
-  ]),
-);
+const desmosTableValueSchema = z.union([
+  z.string(),
+  z.number().finite(),
+  z.null(),
+]);
 
-const desmosExpressionSchema = z.record(z.string(), jsonValueSchema);
+const desmosTableColumnSchema = z.object({
+  latex: z.string().optional(),
+  values: z.array(desmosTableValueSchema).optional(),
+});
 
-const desmosPayloadSchema: z.ZodType<DesmosGraphPayload> = z
-  .object({
-    expressions: z.array(desmosExpressionSchema).min(1),
-    settings: z
-      .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-      .optional(),
-    viewport: z
-      .object({
-        left: z.number(),
-        right: z.number(),
-        bottom: z.number(),
-        top: z.number(),
-      })
-      .optional(),
-    hint: z.string().optional(),
-  })
-  .refine(
-    (payload) =>
-      payload.expressions.every((expression) => {
-        const latex = expression.latex;
-        if (typeof latex === "string" && latex.trim().length > 0) {
-          return true;
-        }
+const desmosEquationExpressionSchema = z.object({
+  id: z.string().optional(),
+  type: z.literal("expression").optional(),
+  latex: z.string().min(1),
+  color: z.string().optional(),
+  hidden: z.boolean().optional(),
+});
 
-        const type = expression.type;
+const desmosTableExpressionSchema = z.object({
+  id: z.string().optional(),
+  type: z.literal("table"),
+  columns: z.array(desmosTableColumnSchema).min(1),
+  hidden: z.boolean().optional(),
+});
 
-        // Tables must have at least one column
-        if (type === "table") {
-          const columns = expression.columns;
-          return Array.isArray(columns) && columns.length > 0;
-        }
+const desmosTextExpressionSchema = z.object({
+  id: z.string().optional(),
+  type: z.literal("text"),
+  text: z.string().min(1),
+});
 
-        // Text notes and expression type without latex are valid
-        if (type === "text" || type === "expression") {
-          return true;
-        }
+const desmosExpressionSchema = z.union([
+  desmosEquationExpressionSchema,
+  desmosTableExpressionSchema,
+  desmosTextExpressionSchema,
+]);
 
-        return false;
-      }),
-    {
-      message:
-        "Each Desmos expression must include latex, be a table with columns, or be an expression/text type.",
-    },
-  );
+const desmosPayloadSchema: z.ZodType<DesmosGraphPayload> = z.object({
+  expressions: z.array(desmosExpressionSchema).min(1),
+  viewport: z
+    .object({
+      left: z.number(),
+      right: z.number(),
+      bottom: z.number(),
+      top: z.number(),
+    })
+    .optional(),
+  hint: z.string().optional(),
+});
 
 const codePlaygroundPayloadSchema: z.ZodType<CodePlaygroundPayload> = z.object({
   language: z.literal("python"),
@@ -854,16 +848,20 @@ function buildPrompt(params: {
   previousOutput?: string;
   previousErrors?: string[];
 }): string {
-  const outputRequirements =
-    params.sparkType === "scene"
-      ? [
-          "Return strict JSON with keys: title, summary, workerSummary, html.",
-          "Do not include markdown fences.",
-        ]
-      : [
-          "Return strict JSON with keys: title, summary, workerSummary, payload.",
-          "Do not include markdown fences.",
-        ];
+  const isHtmlSpark =
+    params.sparkType === "scene" ||
+    params.sparkType === "quiz" ||
+    params.sparkType === "flash_card";
+
+  const outputRequirements = isHtmlSpark
+    ? [
+        "Return strict JSON with keys: title, summary, workerSummary, html.",
+        "Do not include markdown fences.",
+      ]
+    : [
+        "Return strict JSON with keys: title, summary, workerSummary, payload.",
+        "Do not include markdown fences.",
+      ];
 
   const lines = [
     `Build a ${params.sparkType} spark for an educational chat.`,
@@ -895,15 +893,17 @@ function buildPrompt(params: {
 async function buildSceneSpark(
   input: CreateSparkToolInput,
   abortSignal?: AbortSignal,
+  sceneSparkType: SceneSparkType = "scene",
 ): Promise<CreateSparkToolResult> {
-  const skill = sparkSkillById.scene;
+  const skill = sparkSkillById[sceneSparkType];
+  const sparkTypeLabel = getSparkTypeLabel(sceneSparkType);
   let firstDraft: SceneDraft | null = null;
   let firstErrors: string[] = [];
   const firstWarnings: string[] = [];
 
   try {
     const prompt = buildPrompt({
-      sparkType: "scene",
+      sparkType: sceneSparkType,
       context: input.context,
       title: input.title,
       summary: input.summary,
@@ -932,7 +932,7 @@ async function buildSceneSpark(
         status: "success",
         workerSummary: firstDraft.workerSummary,
         warnings: firstWarnings,
-        artifact: normalizeSparkSceneDraft(firstDraft),
+        artifact: normalizeSparkSceneDraft(firstDraft, sceneSparkType),
       };
     }
   } catch (error) {
@@ -944,7 +944,7 @@ async function buildSceneSpark(
     ) {
       return {
         status: "failed",
-        workerSummary: "Scene generation failed due to provider fault.",
+        workerSummary: `${sparkTypeLabel} generation failed due to provider fault.`,
         warnings: firstWarnings,
         error: toProviderFaultMessage(error),
       };
@@ -956,17 +956,17 @@ async function buildSceneSpark(
   if (!firstDraft) {
     return {
       status: "failed",
-      workerSummary: "Spark worker failed before scene repair.",
+      workerSummary: `Spark worker failed before ${sparkTypeLabel} repair.`,
       warnings: firstWarnings,
       error:
         firstErrors[0] ??
-        "Spark worker could not produce an initial scene draft.",
+        `Spark worker could not produce an initial ${sparkTypeLabel} draft.`,
     };
   }
 
   try {
     const repairPrompt = buildPrompt({
-      sparkType: "scene",
+      sparkType: sceneSparkType,
       context: input.context,
       title: input.title,
       summary: input.summary,
@@ -994,7 +994,7 @@ async function buildSceneSpark(
         status: "success",
         workerSummary: repairedDraft.workerSummary,
         warnings: [...firstWarnings, ...repairedValidation.warnings],
-        artifact: normalizeSparkSceneDraft(repairedDraft),
+        artifact: normalizeSparkSceneDraft(repairedDraft, sceneSparkType),
       };
     }
 
@@ -1002,14 +1002,14 @@ async function buildSceneSpark(
       status: "failed",
       workerSummary:
         repairedDraft.workerSummary ||
-        "Spark worker could not produce a valid scene in two attempts.",
+        `Spark worker could not produce a valid ${sparkTypeLabel} spark in two attempts.`,
       warnings: [...firstWarnings, ...repairedValidation.warnings],
       error: repairedValidation.errors.join(" "),
     };
   } catch (error) {
     return {
       status: "failed",
-      workerSummary: "Scene repair failed due to provider fault.",
+      workerSummary: `${sparkTypeLabel} repair failed due to provider fault.`,
       warnings: firstWarnings,
       error: toProviderFaultMessage(error),
     };
@@ -1278,8 +1278,12 @@ const sparkTool = createTool<CreateSparkToolInput, CreateSparkToolResult>({
     const input = normalizeCreateSparkInput(args);
 
     try {
-      if (input.sparkId === "scene") {
-        return await buildSceneSpark(input, options.abortSignal);
+      if (
+        input.sparkId === "scene" ||
+        input.sparkId === "quiz" ||
+        input.sparkId === "flash_card"
+      ) {
+        return await buildSceneSpark(input, options.abortSignal, input.sparkId);
       }
 
       if (input.sparkId === "desmos_graph") {

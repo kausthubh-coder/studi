@@ -1,6 +1,8 @@
 import type { SparkType } from "./contracts";
 import { sparkCodePlaygroundSkill } from "./skills/codePlayground";
 import { sparkDesmosGraphSkill } from "./skills/desmosGraph";
+import { sparkFlashCardSkill } from "./skills/flashCard";
+import { sparkQuizSkill } from "./skills/quiz";
 import { sparkSceneSkill } from "./skills/scene";
 
 export type SparkSkillDefinition = {
@@ -17,6 +19,14 @@ export const sparkSkillCatalog: readonly SparkSkillDefinition[] = [
     ...sparkSceneSkill,
   },
   {
+    id: "quiz",
+    ...sparkQuizSkill,
+  },
+  {
+    id: "flash_card",
+    ...sparkFlashCardSkill,
+  },
+  {
     id: "desmos_graph",
     ...sparkDesmosGraphSkill,
   },
@@ -29,8 +39,10 @@ export const sparkSkillCatalog: readonly SparkSkillDefinition[] = [
 export const sparkSkillById: Readonly<Record<SparkType, SparkSkillDefinition>> =
   {
     scene: sparkSkillCatalog[0],
-    desmos_graph: sparkSkillCatalog[1],
-    code_playground: sparkSkillCatalog[2],
+    quiz: sparkSkillCatalog[1],
+    flash_card: sparkSkillCatalog[2],
+    desmos_graph: sparkSkillCatalog[3],
+    code_playground: sparkSkillCatalog[4],
   };
 
 export function sparkCatalogPromptBlock(): string {
