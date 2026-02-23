@@ -644,11 +644,19 @@ body::after {
 }
 [data-spark-kind="spark_scene"] > .spark-card-header {
   background: color-mix(in srgb, var(--accent) 6%, var(--bg-alt) 94%);
-  border-bottom-color: color-mix(in srgb, var(--accent) 12%, var(--border-faint) 88%);
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--accent) 12%,
+    var(--border-faint) 88%
+  );
 }
 [data-spark-kind="spark_desmos_graph"] > .spark-card-header {
   background: color-mix(in srgb, var(--accent4) 7%, var(--bg-alt) 93%);
-  border-bottom-color: color-mix(in srgb, var(--accent4) 14%, var(--border-faint) 86%);
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--accent4) 14%,
+    var(--border-faint) 86%
+  );
 }
 .spark-card-header .spark-type-badge {
   flex-shrink: 0;
@@ -831,19 +839,69 @@ body::after {
 
 /* ── Spark side panel ──────────────────────────────────────── */
 @keyframes slide-in-from-right {
-  from { opacity: 0; transform: translateX(24px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .spark-panel {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  width: min(100%, 620px);
+  height: 100%;
   min-width: 0;
   border-left: 1px solid var(--border);
   background: var(--bg-card);
   animation: slide-in-from-right 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
   overflow: hidden;
+  box-shadow: 0 14px 48px rgba(28, 18, 8, 0.22);
+}
+
+.spark-panel-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.spark-panel-shell .spark-panel {
+  pointer-events: auto;
+}
+
+.spark-panel-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(28, 18, 8, 0.3);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+@media (min-width: 1024px) {
+  .spark-panel-shell {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    width: clamp(420px, 58vw, 980px);
+    pointer-events: auto;
+  }
+
+  .spark-panel-backdrop {
+    display: none;
+  }
+
+  .spark-panel {
+    width: 100%;
+    box-shadow: none;
+  }
 }
 
 .spark-panel-header {
@@ -1393,12 +1451,18 @@ body::after {
   animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.24s both;
 }
 
-
 /* ── Landing page ─────────────────────────────────────────── */
 @keyframes float-drift {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  33% { transform: translateY(-10px) rotate(2deg); }
-  66% { transform: translateY(5px) rotate(-1.5deg); }
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  33% {
+    transform: translateY(-10px) rotate(2deg);
+  }
+  66% {
+    transform: translateY(5px) rotate(-1.5deg);
+  }
 }
 
 .landing-page {

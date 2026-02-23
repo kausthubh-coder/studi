@@ -62,7 +62,9 @@ export default function StudiChat() {
   const saveAttachment = useMutation(api.chat.saveAttachment);
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const [expandedSpark, setExpandedSpark] = useState<ExpandedSpark | null>(null);
+  const [expandedSpark, setExpandedSpark] = useState<ExpandedSpark | null>(
+    null,
+  );
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -117,7 +119,13 @@ export default function StudiChat() {
       !isUploading &&
       !hasActiveAgentWork &&
       (input.trim().length > 0 || pendingAttachments.length > 0),
-    [input, hasActiveAgentWork, isSending, isUploading, pendingAttachments.length],
+    [
+      input,
+      hasActiveAgentWork,
+      isSending,
+      isUploading,
+      pendingAttachments.length,
+    ],
   );
 
   const uploadFiles = useCallback(
@@ -232,30 +240,22 @@ export default function StudiChat() {
     ],
   );
 
-  const removeAttachment = useCallback(
-    (attachmentId: Id<"attachments">) => {
-      setPendingAttachments((previous) => {
-        const item = previous.find(
-          (entry) => entry.attachmentId === attachmentId,
-        );
-        if (item?.previewUrl) {
-          URL.revokeObjectURL(item.previewUrl);
-        }
-        return previous.filter(
-          (entry) => entry.attachmentId !== attachmentId,
-        );
-      });
-    },
-    [],
-  );
+  const removeAttachment = useCallback((attachmentId: Id<"attachments">) => {
+    setPendingAttachments((previous) => {
+      const item = previous.find(
+        (entry) => entry.attachmentId === attachmentId,
+      );
+      if (item?.previewUrl) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+      return previous.filter((entry) => entry.attachmentId !== attachmentId);
+    });
+  }, []);
 
-  const handleSuggestionClick = useCallback(
-    (prompt: string) => {
-      setInput(prompt);
-      setTimeout(() => textareaRef.current?.focus(), 50);
-    },
-    [],
-  );
+  const handleSuggestionClick = useCallback((prompt: string) => {
+    setInput(prompt);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
 
   const handleNewThread = useCallback(() => {
     setSelectedThreadId(null);
@@ -274,7 +274,11 @@ export default function StudiChat() {
   }, []);
 
   const handleExpandSpark = useCallback(
-    (artifact: SparkArtifact, threadId: string | null, sparkInstanceId: string) => {
+    (
+      artifact: SparkArtifact,
+      threadId: string | null,
+      sparkInstanceId: string,
+    ) => {
       setExpandedSpark({ artifact, threadId, sparkInstanceId });
     },
     [],
@@ -305,10 +309,9 @@ export default function StudiChat() {
             onSuggestionClick={handleSuggestionClick}
           />
         ) : (
-          <div className="flex flex-1 overflow-hidden">
-            {/* Chat column */}
+          <div className="relative flex flex-1 overflow-hidden">
             <div
-              className={`relative flex min-w-0 flex-col overflow-hidden transition-[width] duration-300 ease-out ${expandedSpark ? "w-[420px] shrink-0" : "flex-1"}`}
+              className={`relative flex min-w-0 flex-1 flex-col overflow-hidden transition-[flex-basis] duration-300 ease-out ${expandedSpark ? "lg:basis-[clamp(360px,42vw,620px)] lg:shrink-0" : ""}`}
             >
               <MessageColumn
                 listRef={listRef}
@@ -330,12 +333,23 @@ export default function StudiChat() {
                 onRemoveAttachment={removeAttachment}
               />
             </div>
-            {/* Spark panel */}
             {expandedSpark && (
-              <SparkPanel
-                spark={expandedSpark}
-                onClose={() => setExpandedSpark(null)}
-              />
+              <div
+                className="spark-panel-shell"
+                role="dialog"
+                aria-label="Expanded spark"
+              >
+                <button
+                  type="button"
+                  className="spark-panel-backdrop"
+                  onClick={() => setExpandedSpark(null)}
+                  aria-label="Close spark"
+                />
+                <SparkPanel
+                  spark={expandedSpark}
+                  onClose={() => setExpandedSpark(null)}
+                />
+              </div>
             )}
           </div>
         )}

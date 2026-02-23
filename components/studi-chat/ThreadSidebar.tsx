@@ -13,8 +13,6 @@ export function ThreadSidebar({
   onSelectThread: (threadId: string) => void;
   onCreateThread: () => void;
 }) {
-  const isOnWelcome = selectedThreadId === null;
-
   return (
     <aside
       className="flex h-screen flex-shrink-0 flex-col overflow-hidden border-r border-border-warm bg-bg-alt"
