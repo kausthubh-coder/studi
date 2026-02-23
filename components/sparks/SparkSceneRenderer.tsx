@@ -4,6 +4,8 @@ import { memo, useCallback } from "react";
 import DesmosGraphScene from "@/components/sparks/scenes/DesmosGraphScene";
 import CodePlaygroundScene from "@/components/sparks/scenes/CodePlaygroundScene";
 import HtmlCssJsSandboxScene from "@/components/sparks/scenes/HtmlCssJsSandboxScene";
+import QuizScene from "@/components/sparks/scenes/QuizScene";
+import FlashCardScene from "@/components/sparks/scenes/FlashCardScene";
 import { getSparkTypeLabel, type SparkArtifact } from "@/lib/sparks/contracts";
 import { IconSparkle, IconExpand } from "@/components/studi-chat/icons";
 
@@ -11,12 +13,18 @@ type SparkSceneRendererProps = {
   artifact: SparkArtifact;
   threadId?: string | null;
   sparkInstanceId: string;
-  onExpandSpark: (artifact: SparkArtifact, threadId: string | null, sparkInstanceId: string) => void;
+  onExpandSpark: (
+    artifact: SparkArtifact,
+    threadId: string | null,
+    sparkInstanceId: string,
+  ) => void;
   expandedSparkInstanceId: string | null;
 };
 
 function getBadgeClass(kind: SparkArtifact["kind"]): string {
   if (kind === "spark_scene") return "badge-scene";
+  if (kind === "spark_quiz") return "badge-scene";
+  if (kind === "spark_flash_card") return "badge-scene";
   if (kind === "spark_code_playground") return "badge-code";
   if (kind === "spark_desmos_graph") return "badge-desmos";
   return "badge-scene";
@@ -29,7 +37,12 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
   onExpandSpark,
   expandedSparkInstanceId,
 }: SparkSceneRendererProps) {
-  const isExpanded = expandedSparkInstanceId === sparkInstanceId;
+  const isExpandable =
+    artifact.kind === "spark_scene" ||
+    artifact.kind === "spark_desmos_graph" ||
+    artifact.kind === "spark_code_playground";
+  const isExpanded =
+    isExpandable && expandedSparkInstanceId === sparkInstanceId;
   const isCodePlayground = artifact.kind === "spark_code_playground";
   const badgeClass = getBadgeClass(artifact.kind);
 
@@ -58,6 +71,10 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
   const scene =
     artifact.kind === "spark_scene" ? (
       <HtmlCssJsSandboxScene payload={artifact.payload} isExpanded={false} />
+    ) : artifact.kind === "spark_quiz" ? (
+      <QuizScene payload={artifact.payload} isExpanded={false} />
+    ) : artifact.kind === "spark_flash_card" ? (
+      <FlashCardScene payload={artifact.payload} isExpanded={false} />
     ) : artifact.kind === "spark_desmos_graph" ? (
       <DesmosGraphScene payload={artifact.payload} isExpanded={false} />
     ) : (
@@ -86,15 +103,17 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
               <p className="spark-card-summary">{artifact.summary}</p>
             )}
           </div>
-          <button
-            type="button"
-            className="spark-card-expand"
-            onClick={handleExpand}
-            aria-label="Expand spark"
-          >
-            <IconExpand />
-            <span>Expand</span>
-          </button>
+          {isExpandable ? (
+            <button
+              type="button"
+              className="spark-card-expand"
+              onClick={handleExpand}
+              aria-label="Expand spark"
+            >
+              <IconExpand />
+              <span>Expand</span>
+            </button>
+          ) : null}
         </div>
       )}
       {scene}

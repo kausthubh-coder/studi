@@ -7,17 +7,22 @@ import { z } from "zod";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
   getSparkTypeLabel,
+  normalizeSparkFlashCardDraft,
   normalizeSparkCodePlaygroundDraft,
   normalizeCreateSparkInput,
+  normalizeSparkQuizDraft,
   type CodePlaygroundPayload,
   type CodePlaygroundSparkDraft,
+  type FlashCardSparkDraft,
+  type FlashCardSparkPayload,
   normalizeSparkDesmosGraphDraft,
   normalizeSparkSceneDraft,
   type CreateSparkToolInput,
   type CreateSparkToolResult,
   type DesmosGraphPayload,
   type DesmosSparkDraft,
-  type SceneSparkType,
+  type QuizSparkDraft,
+  type QuizSparkPayload,
   type SparkType,
   type SparkValidationResult,
 } from "../../lib/sparks/contracts";
@@ -44,6 +49,12 @@ const codeWorkerModel =
   process.env.SPARK_WORKER_CODE_MODEL ??
   process.env.SPARK_WORKER_MODEL ??
   "google/gemini-3-flash-preview";
+
+const quizWorkerModel =
+  process.env.SPARK_WORKER_QUIZ_MODEL ?? "google/gemini-3-flash-preview";
+
+const flashWorkerModel =
+  process.env.SPARK_WORKER_FLASH_MODEL ?? "google/gemini-3-flash-preview";
 
 function parseSparkWorkerTimeoutMs(
   value: string | undefined,
@@ -72,6 +83,16 @@ const sceneWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
 
 const codeWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
   process.env.SPARK_WORKER_CODE_TIMEOUT_MS,
+  Math.min(sparkWorkerTimeoutMs, 25_000),
+);
+
+const quizWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
+  process.env.SPARK_WORKER_QUIZ_TIMEOUT_MS,
+  Math.min(sparkWorkerTimeoutMs, 25_000),
+);
+
+const flashWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
+  process.env.SPARK_WORKER_FLASH_TIMEOUT_MS,
   Math.min(sparkWorkerTimeoutMs, 25_000),
 );
 
@@ -161,6 +182,35 @@ const codePlaygroundPayloadSchema: z.ZodType<CodePlaygroundPayload> = z.object({
   runHint: z.string().optional(),
 });
 
+const quizChoiceSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1),
+});
+
+const quizQuestionSchema = z.object({
+  id: z.string().min(1),
+  prompt: z.string().min(1),
+  choices: z.array(quizChoiceSchema).min(2),
+  correctChoiceId: z.string().min(1),
+  explanation: z.string().optional(),
+});
+
+const quizPayloadSchema: z.ZodType<QuizSparkPayload> = z.object({
+  instructions: z.string().optional(),
+  questions: z.array(quizQuestionSchema).min(3),
+});
+
+const flashCardItemSchema = z.object({
+  id: z.string().min(1),
+  front: z.string().min(1),
+  back: z.string().min(1),
+});
+
+const flashCardPayloadSchema: z.ZodType<FlashCardSparkPayload> = z.object({
+  instructions: z.string().optional(),
+  cards: z.array(flashCardItemSchema).min(4),
+});
+
 const sceneWorkerOutputSchema = z.object({
   title: z.string(),
   summary: z.string(),
@@ -182,9 +232,25 @@ const codePlaygroundWorkerOutputSchema = z.object({
   payload: codePlaygroundPayloadSchema,
 });
 
+const quizWorkerOutputSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  workerSummary: z.string(),
+  payload: quizPayloadSchema,
+});
+
+const flashCardWorkerOutputSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  workerSummary: z.string(),
+  payload: flashCardPayloadSchema,
+});
+
 type SceneDraft = z.infer<typeof sceneWorkerOutputSchema>;
 type DesmosDraft = z.infer<typeof desmosWorkerOutputSchema>;
 type CodePlaygroundDraft = z.infer<typeof codePlaygroundWorkerOutputSchema>;
+type QuizDraft = z.infer<typeof quizWorkerOutputSchema>;
+type FlashCardDraft = z.infer<typeof flashCardWorkerOutputSchema>;
 
 type WorkerErrorKind = "timeout" | "cancelled" | "provider" | "other";
 
@@ -546,6 +612,74 @@ function validateCodePlaygroundPayload(
   };
 }
 
+function validateQuizPayload(payload: QuizSparkPayload): SparkValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (payload.questions.length < 3) {
+    errors.push("Quiz payload must include at least 3 questions.");
+  }
+
+  for (const [questionIndex, question] of payload.questions.entries()) {
+    if (!question.prompt.trim()) {
+      errors.push(`Question ${questionIndex + 1} prompt is required.`);
+    }
+
+    if (question.choices.length < 2) {
+      errors.push(`Question ${questionIndex + 1} needs at least 2 choices.`);
+    }
+
+    const hasCorrectChoice = question.choices.some(
+      (choice) => choice.id === question.correctChoiceId,
+    );
+    if (!hasCorrectChoice) {
+      errors.push(
+        `Question ${questionIndex + 1} has an invalid correctChoiceId.`,
+      );
+    }
+  }
+
+  if (!payload.instructions || !payload.instructions.trim()) {
+    warnings.push("Quiz payload is missing learner instructions.");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+function validateFlashCardPayload(
+  payload: FlashCardSparkPayload,
+): SparkValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (payload.cards.length < 4) {
+    errors.push("Flash-card payload must include at least 4 cards.");
+  }
+
+  for (const [cardIndex, card] of payload.cards.entries()) {
+    if (!card.front.trim()) {
+      errors.push(`Card ${cardIndex + 1} is missing front text.`);
+    }
+    if (!card.back.trim()) {
+      errors.push(`Card ${cardIndex + 1} is missing back text.`);
+    }
+  }
+
+  if (!payload.instructions || !payload.instructions.trim()) {
+    warnings.push("Flash-card payload is missing learner instructions.");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
 function extractEquationCandidates(context: string): string[] {
   const blockers = [
     "table",
@@ -848,20 +982,16 @@ function buildPrompt(params: {
   previousOutput?: string;
   previousErrors?: string[];
 }): string {
-  const isHtmlSpark =
-    params.sparkType === "scene" ||
-    params.sparkType === "quiz" ||
-    params.sparkType === "flash_card";
-
-  const outputRequirements = isHtmlSpark
-    ? [
-        "Return strict JSON with keys: title, summary, workerSummary, html.",
-        "Do not include markdown fences.",
-      ]
-    : [
-        "Return strict JSON with keys: title, summary, workerSummary, payload.",
-        "Do not include markdown fences.",
-      ];
+  const outputRequirements =
+    params.sparkType === "scene"
+      ? [
+          "Return strict JSON with keys: title, summary, workerSummary, html.",
+          "Do not include markdown fences.",
+        ]
+      : [
+          "Return strict JSON with keys: title, summary, workerSummary, payload.",
+          "Do not include markdown fences.",
+        ];
 
   const lines = [
     `Build a ${params.sparkType} spark for an educational chat.`,
@@ -893,17 +1023,16 @@ function buildPrompt(params: {
 async function buildSceneSpark(
   input: CreateSparkToolInput,
   abortSignal?: AbortSignal,
-  sceneSparkType: SceneSparkType = "scene",
 ): Promise<CreateSparkToolResult> {
-  const skill = sparkSkillById[sceneSparkType];
-  const sparkTypeLabel = getSparkTypeLabel(sceneSparkType);
+  const skill = sparkSkillById.scene;
+  const sparkTypeLabel = getSparkTypeLabel("scene");
   let firstDraft: SceneDraft | null = null;
   let firstErrors: string[] = [];
   const firstWarnings: string[] = [];
 
   try {
     const prompt = buildPrompt({
-      sparkType: sceneSparkType,
+      sparkType: "scene",
       context: input.context,
       title: input.title,
       summary: input.summary,
@@ -932,7 +1061,7 @@ async function buildSceneSpark(
         status: "success",
         workerSummary: firstDraft.workerSummary,
         warnings: firstWarnings,
-        artifact: normalizeSparkSceneDraft(firstDraft, sceneSparkType),
+        artifact: normalizeSparkSceneDraft(firstDraft),
       };
     }
   } catch (error) {
@@ -956,17 +1085,17 @@ async function buildSceneSpark(
   if (!firstDraft) {
     return {
       status: "failed",
-      workerSummary: `Spark worker failed before ${sparkTypeLabel} repair.`,
+      workerSummary: "Spark worker failed before scene repair.",
       warnings: firstWarnings,
       error:
         firstErrors[0] ??
-        `Spark worker could not produce an initial ${sparkTypeLabel} draft.`,
+        "Spark worker could not produce an initial scene draft.",
     };
   }
 
   try {
     const repairPrompt = buildPrompt({
-      sparkType: sceneSparkType,
+      sparkType: "scene",
       context: input.context,
       title: input.title,
       summary: input.summary,
@@ -994,7 +1123,7 @@ async function buildSceneSpark(
         status: "success",
         workerSummary: repairedDraft.workerSummary,
         warnings: [...firstWarnings, ...repairedValidation.warnings],
-        artifact: normalizeSparkSceneDraft(repairedDraft, sceneSparkType),
+        artifact: normalizeSparkSceneDraft(repairedDraft),
       };
     }
 
@@ -1002,7 +1131,7 @@ async function buildSceneSpark(
       status: "failed",
       workerSummary:
         repairedDraft.workerSummary ||
-        `Spark worker could not produce a valid ${sparkTypeLabel} spark in two attempts.`,
+        "Spark worker could not produce a valid scene in two attempts.",
       warnings: [...firstWarnings, ...repairedValidation.warnings],
       error: repairedValidation.errors.join(" "),
     };
@@ -1270,6 +1399,238 @@ async function buildCodePlaygroundSpark(
   }
 }
 
+async function buildQuizSpark(
+  input: CreateSparkToolInput,
+  abortSignal?: AbortSignal,
+): Promise<CreateSparkToolResult> {
+  const skill = sparkSkillById.quiz;
+  const warnings: string[] = [];
+  let firstDraft: QuizSparkDraft | null = null;
+  let firstErrors: string[] = [];
+
+  try {
+    const prompt = buildPrompt({
+      sparkType: "quiz",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+    });
+
+    const firstGeneration = await generateWorkerObject<QuizDraft>({
+      schema: quizWorkerOutputSchema,
+      prompt,
+      model: quizWorkerModel,
+      abortSignal,
+      timeoutMs: quizWorkerTimeoutMs,
+    });
+
+    warnings.push(...firstGeneration.warnings);
+    firstDraft = {
+      ...firstGeneration.object,
+      artifactId: createArtifactId(),
+    };
+
+    const firstValidation = validateQuizPayload(firstDraft.payload);
+    warnings.push(...firstValidation.warnings);
+    firstErrors = firstValidation.errors;
+
+    if (firstValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: firstGeneration.object.workerSummary,
+        warnings,
+        artifact: normalizeSparkQuizDraft(firstDraft),
+      };
+    }
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Quiz generation failed due to provider fault.",
+      warnings,
+      error: toProviderFaultMessage(error),
+    };
+  }
+
+  if (!firstDraft) {
+    return {
+      status: "failed",
+      workerSummary: "Quiz worker failed before repair.",
+      warnings,
+      error: "Spark worker could not produce an initial quiz draft.",
+    };
+  }
+
+  try {
+    const repairPrompt = buildPrompt({
+      sparkType: "quiz",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+      previousOutput: JSON.stringify(firstDraft),
+      previousErrors: firstErrors,
+    });
+
+    const repairedGeneration = await generateWorkerObject<QuizDraft>({
+      schema: quizWorkerOutputSchema,
+      prompt: repairPrompt,
+      model: quizWorkerModel,
+      abortSignal,
+      timeoutMs: quizWorkerTimeoutMs,
+    });
+
+    warnings.push(...repairedGeneration.warnings);
+    const repairedDraft: QuizSparkDraft = {
+      ...repairedGeneration.object,
+      artifactId: firstDraft.artifactId,
+    };
+    const repairedValidation = validateQuizPayload(repairedDraft.payload);
+    warnings.push(...repairedValidation.warnings);
+
+    if (repairedValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: repairedGeneration.object.workerSummary,
+        warnings,
+        artifact: normalizeSparkQuizDraft(repairedDraft),
+      };
+    }
+
+    return {
+      status: "failed",
+      workerSummary:
+        repairedGeneration.object.workerSummary ||
+        "Quiz payload failed validation in two attempts.",
+      warnings,
+      error: repairedValidation.errors.join(" "),
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Quiz repair failed due to provider fault.",
+      warnings,
+      error: toProviderFaultMessage(error),
+    };
+  }
+}
+
+async function buildFlashCardSpark(
+  input: CreateSparkToolInput,
+  abortSignal?: AbortSignal,
+): Promise<CreateSparkToolResult> {
+  const skill = sparkSkillById.flash_card;
+  const warnings: string[] = [];
+  let firstDraft: FlashCardSparkDraft | null = null;
+  let firstErrors: string[] = [];
+
+  try {
+    const prompt = buildPrompt({
+      sparkType: "flash_card",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+    });
+
+    const firstGeneration = await generateWorkerObject<FlashCardDraft>({
+      schema: flashCardWorkerOutputSchema,
+      prompt,
+      model: flashWorkerModel,
+      abortSignal,
+      timeoutMs: flashWorkerTimeoutMs,
+    });
+
+    warnings.push(...firstGeneration.warnings);
+    firstDraft = {
+      ...firstGeneration.object,
+      artifactId: createArtifactId(),
+    };
+
+    const firstValidation = validateFlashCardPayload(firstDraft.payload);
+    warnings.push(...firstValidation.warnings);
+    firstErrors = firstValidation.errors;
+
+    if (firstValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: firstGeneration.object.workerSummary,
+        warnings,
+        artifact: normalizeSparkFlashCardDraft(firstDraft),
+      };
+    }
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Flash-card generation failed due to provider fault.",
+      warnings,
+      error: toProviderFaultMessage(error),
+    };
+  }
+
+  if (!firstDraft) {
+    return {
+      status: "failed",
+      workerSummary: "Flash-card worker failed before repair.",
+      warnings,
+      error: "Spark worker could not produce an initial flash-card draft.",
+    };
+  }
+
+  try {
+    const repairPrompt = buildPrompt({
+      sparkType: "flash_card",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+      previousOutput: JSON.stringify(firstDraft),
+      previousErrors: firstErrors,
+    });
+
+    const repairedGeneration = await generateWorkerObject<FlashCardDraft>({
+      schema: flashCardWorkerOutputSchema,
+      prompt: repairPrompt,
+      model: flashWorkerModel,
+      abortSignal,
+      timeoutMs: flashWorkerTimeoutMs,
+    });
+
+    warnings.push(...repairedGeneration.warnings);
+    const repairedDraft: FlashCardSparkDraft = {
+      ...repairedGeneration.object,
+      artifactId: firstDraft.artifactId,
+    };
+    const repairedValidation = validateFlashCardPayload(repairedDraft.payload);
+    warnings.push(...repairedValidation.warnings);
+
+    if (repairedValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: repairedGeneration.object.workerSummary,
+        warnings,
+        artifact: normalizeSparkFlashCardDraft(repairedDraft),
+      };
+    }
+
+    return {
+      status: "failed",
+      workerSummary:
+        repairedGeneration.object.workerSummary ||
+        "Flash-card payload failed validation in two attempts.",
+      warnings,
+      error: repairedValidation.errors.join(" "),
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Flash-card repair failed due to provider fault.",
+      warnings,
+      error: toProviderFaultMessage(error),
+    };
+  }
+}
+
 const sparkTool = createTool<CreateSparkToolInput, CreateSparkToolResult>({
   description:
     "Create a Spark artifact for inline learning interaction. Provide the sparkId and focused learner context.",
@@ -1278,12 +1639,16 @@ const sparkTool = createTool<CreateSparkToolInput, CreateSparkToolResult>({
     const input = normalizeCreateSparkInput(args);
 
     try {
-      if (
-        input.sparkId === "scene" ||
-        input.sparkId === "quiz" ||
-        input.sparkId === "flash_card"
-      ) {
-        return await buildSceneSpark(input, options.abortSignal, input.sparkId);
+      if (input.sparkId === "scene") {
+        return await buildSceneSpark(input, options.abortSignal);
+      }
+
+      if (input.sparkId === "quiz") {
+        return await buildQuizSpark(input, options.abortSignal);
+      }
+
+      if (input.sparkId === "flash_card") {
+        return await buildFlashCardSpark(input, options.abortSignal);
       }
 
       if (input.sparkId === "desmos_graph") {

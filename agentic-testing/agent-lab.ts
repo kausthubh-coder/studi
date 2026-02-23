@@ -76,6 +76,14 @@ type SceneFileExport = {
   summary?: string;
 };
 
+type SparkArtifactSummary = {
+  toolCallId: string;
+  kind: string;
+  sparkType: string;
+  title: string;
+  summary?: string;
+};
+
 type RunConfig = {
   userId: string;
   prompt: string;
@@ -123,6 +131,7 @@ type RunResult = {
     failures: number;
     totalDurationMs: number;
   };
+  sparkArtifacts: SparkArtifactSummary[];
   sceneFiles: SceneFileExport[];
   rawMessages?: PlaygroundMessage[];
   context?: unknown;
@@ -204,7 +213,7 @@ Shared flags:
   --verbose                   Print detailed timeline while running
   --debugRaw                  Include raw message payloads in artifact JSON
   --modelLabel sonnet-4.6     Tag run metadata for comparison
-  --saveSceneHtml             Save generated scene HTML files locally
+  --saveSceneHtml             Save generated spark_scene HTML files locally
   --sceneOutDir <path>        Custom directory for saved scene files
 
 Run-specific flags:
@@ -653,8 +662,10 @@ async function runSingle(
   const timeline: TimelineEvent[] = [];
   const toolsByCallId = new Map<string, ToolRun>();
   const toolRuns: ToolRun[] = [];
+  const sparkArtifacts: SparkArtifactSummary[] = [];
   const sceneFiles: SceneFileExport[] = [];
   const savedSceneToolCalls = new Set<string>();
+  const savedSparkArtifactToolCalls = new Set<string>();
   const sceneOutDir =
     config.sceneOutDir && config.sceneOutDir.trim().length > 0
       ? path.resolve(config.sceneOutDir)
@@ -864,11 +875,23 @@ async function runSingle(
             }
 
             if (
+              spark?.result?.status === "success" &&
+              !savedSparkArtifactToolCalls.has(toolCallId)
+            ) {
+              savedSparkArtifactToolCalls.add(toolCallId);
+              sparkArtifacts.push({
+                toolCallId,
+                kind: spark.result.artifact.kind,
+                sparkType: spark.result.artifact.sparkType,
+                title: spark.result.artifact.title,
+                summary: spark.result.artifact.summary,
+              });
+            }
+
+            if (
               config.saveSceneHtml &&
               spark?.result?.status === "success" &&
-              (spark.result.artifact.sparkType === "scene" ||
-                spark.result.artifact.sparkType === "quiz" ||
-                spark.result.artifact.sparkType === "flash_card") &&
+              spark.result.artifact.kind === "spark_scene" &&
               !savedSceneToolCalls.has(toolCallId)
             ) {
               savedSceneToolCalls.add(toolCallId);
@@ -1019,6 +1042,7 @@ async function runSingle(
       failures: sparkFailures,
       totalDurationMs: sparkTotalDurationMs,
     },
+    sparkArtifacts,
     sceneFiles,
     rawMessages: config.debugRaw ? newMessages : undefined,
     context,
@@ -1054,6 +1078,15 @@ function printRunSummary(run: RunResult): void {
       const durationLabel = `${tool.durationMs ?? "n/a"}${tool.durationEstimated ? "~" : ""}`;
       console.log(
         `  - ${tool.toolName} (${tool.toolCallId}) status=${tool.status} durationMs=${durationLabel}${tail}`,
+      );
+    }
+  }
+
+  if (run.sparkArtifacts.length > 0) {
+    console.log("- sparkArtifacts:");
+    for (const artifact of run.sparkArtifacts) {
+      console.log(
+        `  - ${artifact.sparkType} (${artifact.kind}) ${artifact.title} [${artifact.toolCallId}]`,
       );
     }
   }

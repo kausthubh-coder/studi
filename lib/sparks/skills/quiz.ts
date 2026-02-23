@@ -1,46 +1,36 @@
 export const sparkQuizSkill = {
   name: "Quiz",
   description:
-    "Create an interactive quiz scene with multiple questions, instant feedback, and a score.",
+    "Create a structured quiz artifact with multiple questions, instant feedback, and scoring.",
   whenToUse:
     "Use when the learner should check understanding with short questions and immediate correctness feedback.",
   instructions: `You are building a Quiz Spark artifact.
 
-Return strict JSON with keys: title, summary, workerSummary, html.
-Do not use markdown code fences.
-
-Use this HTML shell (you can customize body content and classes):
-<!doctype html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  </head>
-  <body>
-    <!-- quiz content -->
-  </body>
-</html>
+Output requirements:
+- Return strict JSON with keys: title, summary, workerSummary, payload.
+- payload must have keys: instructions, questions.
+- questions must be an array of 3-6 items.
+- each question object must include: id, prompt, choices, correctChoiceId.
+- choices must be an array of 2-5 objects with keys: id, text.
+- optional question key: explanation.
 
 Quiz requirements:
 - Include 3-6 focused questions on one concept.
-- Support clear answer selection or short input for each question.
+- Use clear multiple-choice options for each question.
 - Show immediate feedback (correct/incorrect) and a running score.
 - Include a final result state and a retry button.
-- Include concise learner instructions in the UI.
+- Include concise learner instructions in payload.instructions.
 
 Speed + reliability constraints:
-- Keep html compact (prefer under 6000 chars).
-- Keep JavaScript simple and short (prefer under 180 lines).
-- Avoid heavy animations, long loops, or complex rendering.
+- Keep wording compact and clear.
+- Avoid unnecessarily long answer choices.
 
 Safety constraints:
 - No network requests.
-- No external scripts besides the Tailwind browser script above.
-- No popups, top-level navigation, or storage requirements.
+- Output JSON only. Do not output HTML.
 
 Quality constraints:
 - Ensure quiz is usable on mobile and desktop.
 - Keep wording clear, short, and age-neutral.
-- Make interactions keyboard-friendly when reasonable.`,
+- Keep each question unambiguous with one best answer.`,
 } as const;

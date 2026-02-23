@@ -9,7 +9,6 @@ export const sparkTypes = [
 ] as const;
 
 export type SparkType = (typeof sparkTypes)[number];
-export type SceneSparkType = "scene" | "quiz" | "flash_card";
 export type SparkMode = "readonly" | "editable";
 
 export type JsonPrimitive = string | number | boolean | null;
@@ -20,6 +19,35 @@ export type JsonValue =
 
 export type SceneSparkPayload = {
   html: string;
+};
+
+export type QuizChoice = {
+  id: string;
+  text: string;
+};
+
+export type QuizQuestion = {
+  id: string;
+  prompt: string;
+  choices: QuizChoice[];
+  correctChoiceId: string;
+  explanation?: string;
+};
+
+export type QuizSparkPayload = {
+  instructions?: string;
+  questions: QuizQuestion[];
+};
+
+export type FlashCardItem = {
+  id: string;
+  front: string;
+  back: string;
+};
+
+export type FlashCardSparkPayload = {
+  instructions?: string;
+  cards: FlashCardItem[];
 };
 
 export type DesmosExpressionState = Record<string, JsonValue>;
@@ -53,12 +81,34 @@ export type CodePlaygroundPayload = {
 export type SparkSceneArtifact = {
   kind: "spark_scene";
   version: typeof sparkSceneVersion;
-  sparkType: SceneSparkType;
+  sparkType: "scene";
   mode: SparkMode;
   artifactId?: string;
   title: string;
   summary?: string;
   payload: SceneSparkPayload;
+};
+
+export type SparkQuizArtifact = {
+  kind: "spark_quiz";
+  version: typeof sparkSceneVersion;
+  sparkType: "quiz";
+  mode: SparkMode;
+  artifactId?: string;
+  title: string;
+  summary?: string;
+  payload: QuizSparkPayload;
+};
+
+export type SparkFlashCardArtifact = {
+  kind: "spark_flash_card";
+  version: typeof sparkSceneVersion;
+  sparkType: "flash_card";
+  mode: SparkMode;
+  artifactId?: string;
+  title: string;
+  summary?: string;
+  payload: FlashCardSparkPayload;
 };
 
 export type SparkDesmosGraphArtifact = {
@@ -85,6 +135,8 @@ export type SparkCodePlaygroundArtifact = {
 
 export type SparkArtifact =
   | SparkSceneArtifact
+  | SparkQuizArtifact
+  | SparkFlashCardArtifact
   | SparkDesmosGraphArtifact
   | SparkCodePlaygroundArtifact;
 
@@ -111,6 +163,22 @@ export type CreateSparkToolResult =
 
 export type SparkDraft = {
   html: string;
+  artifactId?: string;
+  title?: string;
+  summary?: string;
+  workerSummary?: string;
+};
+
+export type QuizSparkDraft = {
+  payload: QuizSparkPayload;
+  artifactId?: string;
+  title?: string;
+  summary?: string;
+  workerSummary?: string;
+};
+
+export type FlashCardSparkDraft = {
+  payload: FlashCardSparkPayload;
   artifactId?: string;
   title?: string;
   summary?: string;
@@ -147,6 +215,15 @@ const maxInstructionsLength = 1_200;
 const maxRunHintLength = 240;
 const maxHintLength = 180;
 const maxExpressions = 40;
+const maxQuizQuestions = 8;
+const minQuizQuestions = 3;
+const maxChoicesPerQuestion = 6;
+const minChoicesPerQuestion = 2;
+const maxCards = 16;
+const minCards = 4;
+const maxQuestionLength = 280;
+const maxChoiceLength = 180;
+const maxCardFaceLength = 280;
 
 const sparkTypeLabels: Record<SparkType, string> = {
   scene: "Scene",
@@ -385,14 +462,13 @@ export function getSparkTypeLabel(sparkType: SparkType): string {
 
 export function normalizeSparkSceneDraft(
   draft: SparkDraft,
-  sparkType: SceneSparkType = "scene",
 ): SparkSceneArtifact {
   const html = clampCode(typeof draft.html === "string" ? draft.html : "");
 
   const title = clampText(
     typeof draft.title === "string" && draft.title.trim().length > 0
       ? draft.title
-      : getSparkTypeLabel(sparkType),
+      : getSparkTypeLabel("scene"),
     maxTitleLength,
   );
 
@@ -404,7 +480,7 @@ export function normalizeSparkSceneDraft(
   return {
     kind: "spark_scene",
     version: sparkSceneVersion,
-    sparkType,
+    sparkType: "scene",
     mode: "readonly",
     artifactId:
       typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
@@ -415,6 +491,263 @@ export function normalizeSparkSceneDraft(
     payload: {
       html,
     },
+  };
+}
+
+function normalizeQuizPayload(input: unknown): QuizSparkPayload {
+  const candidate = isPlainObject(input) ? input : {};
+
+  const rawQuestions = Array.isArray(candidate.questions)
+    ? candidate.questions
+    : [];
+
+  const questions = rawQuestions
+    .slice(0, maxQuizQuestions)
+    .map((rawQuestion, questionIndex) => {
+      if (!isPlainObject(rawQuestion)) {
+        return null;
+      }
+
+      const rawChoices = Array.isArray(rawQuestion.choices)
+        ? rawQuestion.choices
+        : [];
+
+      const choices = rawChoices
+        .slice(0, maxChoicesPerQuestion)
+        .map((rawChoice, choiceIndex) => {
+          if (!isPlainObject(rawChoice)) {
+            return null;
+          }
+
+          const text =
+            typeof rawChoice.text === "string" &&
+            rawChoice.text.trim().length > 0
+              ? clampText(rawChoice.text, maxChoiceLength)
+              : "";
+
+          if (!text) {
+            return null;
+          }
+
+          const fallbackId = `q${questionIndex + 1}_c${choiceIndex + 1}`;
+          const id =
+            typeof rawChoice.id === "string" && rawChoice.id.trim().length > 0
+              ? clampText(rawChoice.id, 40)
+              : fallbackId;
+
+          return {
+            id,
+            text,
+          } satisfies QuizChoice;
+        })
+        .filter((choice): choice is QuizChoice => choice !== null);
+
+      if (choices.length < minChoicesPerQuestion) {
+        return null;
+      }
+
+      const prompt =
+        typeof rawQuestion.prompt === "string" &&
+        rawQuestion.prompt.trim().length > 0
+          ? clampText(rawQuestion.prompt, maxQuestionLength)
+          : "";
+      if (!prompt) {
+        return null;
+      }
+
+      const fallbackQuestionId = `q${questionIndex + 1}`;
+      const id =
+        typeof rawQuestion.id === "string" && rawQuestion.id.trim().length > 0
+          ? clampText(rawQuestion.id, 40)
+          : fallbackQuestionId;
+
+      const providedCorrectChoiceId =
+        typeof rawQuestion.correctChoiceId === "string"
+          ? rawQuestion.correctChoiceId
+          : undefined;
+      const correctChoiceId =
+        providedCorrectChoiceId &&
+        choices.some((choice) => choice.id === providedCorrectChoiceId)
+          ? providedCorrectChoiceId
+          : choices[0].id;
+
+      const explanation =
+        typeof rawQuestion.explanation === "string" &&
+        rawQuestion.explanation.trim().length > 0
+          ? clampText(rawQuestion.explanation, maxSummaryLength)
+          : undefined;
+
+      const question: QuizQuestion = {
+        id,
+        prompt,
+        choices,
+        correctChoiceId,
+      };
+
+      if (explanation) {
+        question.explanation = explanation;
+      }
+
+      return question;
+    })
+    .filter((question): question is QuizQuestion => question !== null);
+
+  const fallbackQuestions: QuizQuestion[] =
+    questions.length >= minQuizQuestions
+      ? []
+      : [
+          {
+            id: "q1",
+            prompt: "What is the main idea from this lesson?",
+            choices: [
+              { id: "q1_c1", text: "Option A" },
+              { id: "q1_c2", text: "Option B" },
+            ],
+            correctChoiceId: "q1_c1",
+          },
+          {
+            id: "q2",
+            prompt: "Which statement is most accurate?",
+            choices: [
+              { id: "q2_c1", text: "Choice 1" },
+              { id: "q2_c2", text: "Choice 2" },
+            ],
+            correctChoiceId: "q2_c1",
+          },
+          {
+            id: "q3",
+            prompt: "What should you try next?",
+            choices: [
+              { id: "q3_c1", text: "Apply the concept" },
+              { id: "q3_c2", text: "Ignore the concept" },
+            ],
+            correctChoiceId: "q3_c1",
+          },
+        ];
+
+  return {
+    instructions:
+      typeof candidate.instructions === "string" &&
+      candidate.instructions.trim().length > 0
+        ? clampText(candidate.instructions, maxInstructionsLength)
+        : "Answer each question and check your understanding.",
+    questions:
+      questions.length >= minQuizQuestions ? questions : fallbackQuestions,
+  };
+}
+
+function normalizeFlashCardPayload(input: unknown): FlashCardSparkPayload {
+  const candidate = isPlainObject(input) ? input : {};
+
+  const rawCards = Array.isArray(candidate.cards) ? candidate.cards : [];
+  const cards = rawCards
+    .slice(0, maxCards)
+    .map((rawCard, index) => {
+      if (!isPlainObject(rawCard)) {
+        return null;
+      }
+
+      const front =
+        typeof rawCard.front === "string" && rawCard.front.trim().length > 0
+          ? clampText(rawCard.front, maxCardFaceLength)
+          : "";
+      const back =
+        typeof rawCard.back === "string" && rawCard.back.trim().length > 0
+          ? clampText(rawCard.back, maxCardFaceLength)
+          : "";
+
+      if (!front || !back) {
+        return null;
+      }
+
+      return {
+        id:
+          typeof rawCard.id === "string" && rawCard.id.trim().length > 0
+            ? clampText(rawCard.id, 40)
+            : `card_${index + 1}`,
+        front,
+        back,
+      } satisfies FlashCardItem;
+    })
+    .filter((card): card is FlashCardItem => card !== null);
+
+  const fallbackCards: FlashCardItem[] =
+    cards.length >= minCards
+      ? []
+      : [
+          { id: "card_1", front: "Term 1", back: "Definition 1" },
+          { id: "card_2", front: "Term 2", back: "Definition 2" },
+          { id: "card_3", front: "Term 3", back: "Definition 3" },
+          { id: "card_4", front: "Term 4", back: "Definition 4" },
+        ];
+
+  return {
+    instructions:
+      typeof candidate.instructions === "string" &&
+      candidate.instructions.trim().length > 0
+        ? clampText(candidate.instructions, maxInstructionsLength)
+        : "Flip each card, then move forward to practice active recall.",
+    cards: cards.length >= minCards ? cards : fallbackCards,
+  };
+}
+
+export function normalizeSparkQuizDraft(
+  draft: QuizSparkDraft,
+): SparkQuizArtifact {
+  const title = clampText(
+    typeof draft.title === "string" && draft.title.trim().length > 0
+      ? draft.title
+      : getSparkTypeLabel("quiz"),
+    maxTitleLength,
+  );
+
+  const summary =
+    typeof draft.summary === "string" && draft.summary.trim().length > 0
+      ? clampText(draft.summary, maxSummaryLength)
+      : undefined;
+
+  return {
+    kind: "spark_quiz",
+    version: sparkSceneVersion,
+    sparkType: "quiz",
+    mode: "readonly",
+    artifactId:
+      typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
+        ? clampText(draft.artifactId, 120)
+        : undefined,
+    title,
+    summary,
+    payload: normalizeQuizPayload(draft.payload),
+  };
+}
+
+export function normalizeSparkFlashCardDraft(
+  draft: FlashCardSparkDraft,
+): SparkFlashCardArtifact {
+  const title = clampText(
+    typeof draft.title === "string" && draft.title.trim().length > 0
+      ? draft.title
+      : getSparkTypeLabel("flash_card"),
+    maxTitleLength,
+  );
+
+  const summary =
+    typeof draft.summary === "string" && draft.summary.trim().length > 0
+      ? clampText(draft.summary, maxSummaryLength)
+      : undefined;
+
+  return {
+    kind: "spark_flash_card",
+    version: sparkSceneVersion,
+    sparkType: "flash_card",
+    mode: "readonly",
+    artifactId:
+      typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
+        ? clampText(draft.artifactId, 120)
+        : undefined,
+    title,
+    summary,
+    payload: normalizeFlashCardPayload(draft.payload),
   };
 }
 
@@ -544,9 +877,7 @@ export function isSparkSceneArtifact(
   if (
     candidate.kind !== "spark_scene" ||
     candidate.version !== sparkSceneVersion ||
-    (candidate.sparkType !== "scene" &&
-      candidate.sparkType !== "quiz" &&
-      candidate.sparkType !== "flash_card") ||
+    candidate.sparkType !== "scene" ||
     typeof candidate.title !== "string" ||
     (candidate.mode !== "readonly" && candidate.mode !== "editable")
   ) {
@@ -566,6 +897,125 @@ export function isSparkSceneArtifact(
 
   const payload = candidate.payload as Partial<SceneSparkPayload>;
   return typeof payload.html === "string";
+}
+
+function isQuizPayload(value: unknown): value is QuizSparkPayload {
+  if (!isPlainObject(value) || !Array.isArray(value.questions)) {
+    return false;
+  }
+
+  if (
+    value.instructions !== undefined &&
+    typeof value.instructions !== "string"
+  ) {
+    return false;
+  }
+
+  return value.questions.every((question) => {
+    if (!isPlainObject(question)) {
+      return false;
+    }
+
+    if (
+      typeof question.id !== "string" ||
+      typeof question.prompt !== "string" ||
+      typeof question.correctChoiceId !== "string" ||
+      !Array.isArray(question.choices)
+    ) {
+      return false;
+    }
+
+    if (
+      question.explanation !== undefined &&
+      typeof question.explanation !== "string"
+    ) {
+      return false;
+    }
+
+    return question.choices.every(
+      (choice) =>
+        isPlainObject(choice) &&
+        typeof choice.id === "string" &&
+        typeof choice.text === "string",
+    );
+  });
+}
+
+export function isSparkQuizArtifact(
+  value: unknown,
+): value is SparkQuizArtifact {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<SparkQuizArtifact>;
+  if (
+    candidate.kind !== "spark_quiz" ||
+    candidate.version !== sparkSceneVersion ||
+    candidate.sparkType !== "quiz" ||
+    typeof candidate.title !== "string" ||
+    (candidate.mode !== "readonly" && candidate.mode !== "editable")
+  ) {
+    return false;
+  }
+
+  if (
+    candidate.artifactId !== undefined &&
+    typeof candidate.artifactId !== "string"
+  ) {
+    return false;
+  }
+
+  return isQuizPayload(candidate.payload);
+}
+
+function isFlashCardPayload(value: unknown): value is FlashCardSparkPayload {
+  if (!isPlainObject(value) || !Array.isArray(value.cards)) {
+    return false;
+  }
+
+  if (
+    value.instructions !== undefined &&
+    typeof value.instructions !== "string"
+  ) {
+    return false;
+  }
+
+  return value.cards.every(
+    (card) =>
+      isPlainObject(card) &&
+      typeof card.id === "string" &&
+      typeof card.front === "string" &&
+      typeof card.back === "string",
+  );
+}
+
+export function isSparkFlashCardArtifact(
+  value: unknown,
+): value is SparkFlashCardArtifact {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<SparkFlashCardArtifact>;
+  if (
+    candidate.kind !== "spark_flash_card" ||
+    candidate.version !== sparkSceneVersion ||
+    candidate.sparkType !== "flash_card" ||
+    typeof candidate.title !== "string" ||
+    (candidate.mode !== "readonly" && candidate.mode !== "editable")
+  ) {
+    return false;
+  }
+
+  if (
+    candidate.artifactId !== undefined &&
+    typeof candidate.artifactId !== "string"
+  ) {
+    return false;
+  }
+
+  return isFlashCardPayload(candidate.payload);
 }
 
 export function isSparkDesmosGraphArtifact(
@@ -643,6 +1093,8 @@ export function isSparkCodePlaygroundArtifact(
 export function isSparkArtifact(value: unknown): value is SparkArtifact {
   return (
     isSparkSceneArtifact(value) ||
+    isSparkQuizArtifact(value) ||
+    isSparkFlashCardArtifact(value) ||
     isSparkDesmosGraphArtifact(value) ||
     isSparkCodePlaygroundArtifact(value)
   );
