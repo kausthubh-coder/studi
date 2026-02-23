@@ -7,12 +7,12 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000
     }
-    // {
-    //   "name": "Frontend (Next.js)",
-    //   "runtimeExecutable": "bun",
-    //   "runtimeArgs": ["run", "dev:frontend"],
-    //   "port": 3000
-    // },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:frontend"],
+      "port": 3000
+    },
     // {
     //   "name": "Backend (Convex)",
     //   "runtimeExecutable": "bun",

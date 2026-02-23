@@ -5,6 +5,7 @@ import type { DesmosGraphPayload } from "@/lib/sparks/contracts";
 
 type DesmosGraphSceneProps = {
   payload: DesmosGraphPayload;
+  isExpanded?: boolean;
 };
 
 type DesmosCalculator = {
@@ -90,7 +91,7 @@ function applyDesmosPayload(
   }
 }
 
-export default function DesmosGraphScene({ payload }: DesmosGraphSceneProps) {
+export default function DesmosGraphScene({ payload, isExpanded }: DesmosGraphSceneProps) {
   const apiKey = process.env.NEXT_PUBLIC_DESMOS_API_KEY;
   const hasApiKey = Boolean(apiKey && apiKey.trim().length > 0);
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -158,18 +159,10 @@ export default function DesmosGraphScene({ payload }: DesmosGraphSceneProps) {
   }, [payload, status]);
 
   return (
-    <div className="spark-scene">
-      <div className="spark-scene-bar">
-        <span className="font-heading text-[11px] text-fg-muted">
-          {status === "ready" ? "Desmos Graph" : "Loading Desmos"}
-        </span>
-        {payload.hint && (
-          <span className="ml-auto text-[11px] text-fg-faint">
-            {payload.hint}
-          </span>
-        )}
-      </div>
-
+    <div
+      className="spark-scene-content"
+      style={isExpanded ? { display: "flex", flexDirection: "column", flex: 1 } : undefined}
+    >
       {!hasApiKey && (
         <div className="spark-fail" style={{ borderRadius: 0 }}>
           <p className="text-sm text-fg-muted">
@@ -189,7 +182,8 @@ export default function DesmosGraphScene({ payload }: DesmosGraphSceneProps) {
       <div
         ref={mountRef}
         style={{
-          height: "460px",
+          height: isExpanded ? "100%" : "460px",
+          flex: isExpanded ? 1 : undefined,
           background: "#ffffff",
           display: hasApiKey ? "block" : "none",
         }}

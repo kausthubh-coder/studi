@@ -22,9 +22,12 @@ import {
 import { ThreadSidebar } from "@/components/studi-chat/ThreadSidebar";
 import { WelcomeView } from "@/components/studi-chat/WelcomeView";
 import type {
+  ExpandedSpark,
   PendingAttachment,
   ThreadSummary,
 } from "@/components/studi-chat/types";
+import { SparkPanel } from "@/components/sparks/SparkPanel";
+import type { SparkArtifact } from "@/lib/sparks/contracts";
 
 function makeRequestId(): string {
   if (
@@ -59,6 +62,7 @@ export default function StudiChat() {
   const saveAttachment = useMutation(api.chat.saveAttachment);
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [expandedSpark, setExpandedSpark] = useState<ExpandedSpark | null>(null);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -255,6 +259,7 @@ export default function StudiChat() {
 
   const handleNewThread = useCallback(() => {
     setSelectedThreadId(null);
+    setExpandedSpark(null);
     setInput("");
     setPendingAttachments((prev) => {
       releaseAttachmentPreviewUrls(prev);
@@ -263,16 +268,28 @@ export default function StudiChat() {
     setTimeout(() => textareaRef.current?.focus(), 50);
   }, []);
 
+  const handleSelectThread = useCallback((id: string | null) => {
+    setSelectedThreadId(id);
+    setExpandedSpark(null);
+  }, []);
+
+  const handleExpandSpark = useCallback(
+    (artifact: SparkArtifact, threadId: string | null, sparkInstanceId: string) => {
+      setExpandedSpark({ artifact, threadId, sparkInstanceId });
+    },
+    [],
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
       <ThreadSidebar
         threads={threads}
         selectedThreadId={selectedThreadId}
-        onSelectThread={setSelectedThreadId}
+        onSelectThread={handleSelectThread}
         onCreateThread={handleNewThread}
       />
 
-      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="relative flex min-w-0 flex-1 overflow-hidden">
         {isOnWelcome ? (
           <WelcomeView
             pendingAttachments={pendingAttachments}
@@ -288,25 +305,39 @@ export default function StudiChat() {
             onSuggestionClick={handleSuggestionClick}
           />
         ) : (
-          <>
-            <MessageColumn
-              listRef={listRef}
-              selectedThreadId={selectedThreadId}
-              messages={uiMessages.results}
-            />
-            <Composer
-              pendingAttachments={pendingAttachments}
-              input={input}
-              canSend={canSend}
-              isComposerBusy={isComposerBusy}
-              textareaRef={textareaRef}
-              onInputChange={setInput}
-              onSubmit={onSend}
-              onPaste={onPaste}
-              onUpload={uploadFiles}
-              onRemoveAttachment={removeAttachment}
-            />
-          </>
+          <div className="flex flex-1 overflow-hidden">
+            {/* Chat column */}
+            <div
+              className={`relative flex min-w-0 flex-col overflow-hidden transition-[width] duration-300 ease-out ${expandedSpark ? "w-[420px] shrink-0" : "flex-1"}`}
+            >
+              <MessageColumn
+                listRef={listRef}
+                selectedThreadId={selectedThreadId}
+                messages={uiMessages.results}
+                onExpandSpark={handleExpandSpark}
+                expandedSparkInstanceId={expandedSpark?.sparkInstanceId ?? null}
+              />
+              <Composer
+                pendingAttachments={pendingAttachments}
+                input={input}
+                canSend={canSend}
+                isComposerBusy={isComposerBusy}
+                textareaRef={textareaRef}
+                onInputChange={setInput}
+                onSubmit={onSend}
+                onPaste={onPaste}
+                onUpload={uploadFiles}
+                onRemoveAttachment={removeAttachment}
+              />
+            </div>
+            {/* Spark panel */}
+            {expandedSpark && (
+              <SparkPanel
+                spark={expandedSpark}
+                onClose={() => setExpandedSpark(null)}
+              />
+            )}
+          </div>
         )}
       </main>
     </div>

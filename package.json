@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "playground": "bunx @convex-dev/agent-playground",
     "agentic:test": "bun agentic-testing/agent-lab.ts",
-    "agentic:compare": "bun agentic-testing/model-compare.ts"
+    "agentic:compare": "bun agentic-testing/model-compare.ts",
+    "debug:desmos": "bun agentic-testing/debug-desmos.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

@@ -139,12 +139,23 @@ const desmosPayloadSchema: z.ZodType<DesmosGraphPayload> = z
         }
 
         const type = expression.type;
-        const columns = expression.columns;
-        return type === "table" && Array.isArray(columns) && columns.length > 0;
+
+        // Tables must have at least one column
+        if (type === "table") {
+          const columns = expression.columns;
+          return Array.isArray(columns) && columns.length > 0;
+        }
+
+        // Text notes and expression type without latex are valid
+        if (type === "text" || type === "expression") {
+          return true;
+        }
+
+        return false;
       }),
     {
       message:
-        "Each Desmos expression must include latex, or be a table with columns.",
+        "Each Desmos expression must include latex, be a table with columns, or be an expression/text type.",
     },
   );
 
@@ -760,6 +771,7 @@ async function generateWorkerObjectForModel<T>(params: {
   model: string;
   abortSignal?: AbortSignal;
   timeoutMs?: number;
+  mode?: "auto" | "json" | "tool";
 }): Promise<T> {
   const timeoutMs = params.timeoutMs ?? sparkWorkerTimeoutMs;
   const timeout = createTimeoutSignal(params.abortSignal, timeoutMs);
@@ -771,6 +783,7 @@ async function generateWorkerObjectForModel<T>(params: {
       prompt: params.prompt,
       temperature: 0.2,
       abortSignal: timeout.signal,
+      mode: params.mode,
     });
 
     return result.object;
@@ -815,6 +828,7 @@ async function generateWorkerObject<T>(params: {
   model: string;
   abortSignal?: AbortSignal;
   timeoutMs?: number;
+  mode?: "auto" | "json" | "tool";
 }): Promise<{ object: T; warnings: string[] }> {
   const object = await generateWorkerObjectForModel({
     schema: params.schema,
@@ -822,6 +836,7 @@ async function generateWorkerObject<T>(params: {
     model: params.model,
     abortSignal: params.abortSignal,
     timeoutMs: params.timeoutMs,
+    mode: params.mode,
   });
 
   return {
@@ -1023,6 +1038,9 @@ async function buildDesmosGraphSpark(
     }
   }
 
+  let firstDraft: DesmosDraft | null = null;
+  let firstErrors: string[] = [];
+
   try {
     const prompt = buildPrompt({
       sparkType: "desmos_graph",
@@ -1038,12 +1056,14 @@ async function buildDesmosGraphSpark(
       model: desmosWorkerModel,
       abortSignal,
       timeoutMs: desmosWorkerTimeoutMs,
+      mode: "json",
     });
-    const firstDraft = firstGeneration.object;
+    firstDraft = firstGeneration.object;
     firstWarnings.push(...firstGeneration.warnings);
 
     const firstValidation = validateDesmosPayload(firstDraft.payload);
     firstWarnings.push(...firstValidation.warnings);
+    firstErrors = firstValidation.errors;
 
     if (firstValidation.ok) {
       return {
@@ -1053,19 +1073,79 @@ async function buildDesmosGraphSpark(
         artifact: normalizeSparkDesmosGraphDraft(firstDraft),
       };
     }
+  } catch (error) {
+    if (
+      error instanceof SparkWorkerError &&
+      (error.kind === "provider" ||
+        error.kind === "timeout" ||
+        error.kind === "cancelled")
+    ) {
+      return {
+        status: "failed",
+        workerSummary: "Desmos generation failed due to provider fault.",
+        warnings: firstWarnings,
+        error: toProviderFaultMessage(error),
+      };
+    }
+
+    firstErrors = [toMessage(error)];
+  }
+
+  if (!firstDraft) {
+    return {
+      status: "failed",
+      workerSummary: "Desmos worker failed before repair.",
+      warnings: firstWarnings,
+      error:
+        firstErrors[0] ??
+        "Spark worker could not produce an initial Desmos draft.",
+    };
+  }
+
+  try {
+    const repairPrompt = buildPrompt({
+      sparkType: "desmos_graph",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+      previousOutput: JSON.stringify(firstDraft),
+      previousErrors: firstErrors,
+    });
+
+    const repairedGeneration = await generateWorkerObject<DesmosDraft>({
+      schema: desmosWorkerOutputSchema,
+      prompt: repairPrompt,
+      model: desmosWorkerModel,
+      abortSignal,
+      timeoutMs: desmosWorkerTimeoutMs,
+      mode: "json",
+    });
+    const repairedDraft = repairedGeneration.object;
+    firstWarnings.push(...repairedGeneration.warnings);
+
+    const repairedValidation = validateDesmosPayload(repairedDraft.payload);
+    if (repairedValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: repairedDraft.workerSummary,
+        warnings: [...firstWarnings, ...repairedValidation.warnings],
+        artifact: normalizeSparkDesmosGraphDraft(repairedDraft),
+      };
+    }
 
     return {
       status: "failed",
       workerSummary:
-        firstDraft.workerSummary ||
-        "Desmos spark payload failed validation in the first attempt.",
-      warnings: firstWarnings,
-      error: firstValidation.errors.join(" "),
+        repairedDraft.workerSummary ||
+        "Desmos spark payload failed validation in two attempts.",
+      warnings: [...firstWarnings, ...repairedValidation.warnings],
+      error: repairedValidation.errors.join(" "),
     };
   } catch (error) {
     return {
       status: "failed",
-      workerSummary: "Desmos generation failed due to provider fault.",
+      workerSummary: "Desmos repair failed due to provider fault.",
       warnings: firstWarnings,
       error: toProviderFaultMessage(error),
     };

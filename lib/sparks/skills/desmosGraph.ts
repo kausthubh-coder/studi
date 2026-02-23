@@ -27,6 +27,10 @@ Math and LaTeX:
 - For multi-character symbols (sin, pi, theta), use proper escaped backslashes.
 - Keep expressions simple and readable; avoid malformed escaping.
 
+JSON numbers:
+- All JSON values must be literal numbers. Never write arithmetic like -2 * 3.14159.
+- Express π as 3.14159 (or use it only inside a latex string, e.g. "\\pi").
+
 Safety and implementation constraints:
 - Output JSON only. Do not output HTML.
 - Do not include network URLs, scripts, or markup.

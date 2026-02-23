@@ -3,9 +3,10 @@
 import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "convex/react";
 import type { ComponentType } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { CodePlaygroundPayload } from "@/lib/sparks/contracts";
+import { IconSparkle, IconExpand } from "@/components/studi-chat/icons";
 
 type MonacoEditorProps = {
   height?: string | number;
@@ -31,6 +32,8 @@ type CodePlaygroundSceneProps = {
   sparkTitle: string;
   sparkInstanceId: string;
   threadId?: string | null;
+  onExpand?: () => void;
+  isExpanded?: boolean;
 };
 
 type WorkerRunResult = {
@@ -65,6 +68,8 @@ export default function CodePlaygroundScene({
   sparkTitle,
   sparkInstanceId,
   threadId,
+  onExpand,
+  isExpanded,
 }: CodePlaygroundSceneProps) {
   const persisted = useQuery(
     api.sparkFeedback.getCodeSparkState,
@@ -320,68 +325,69 @@ export default function CodePlaygroundScene({
     setDurationMs(null);
   }, [payload.starterCode]);
 
-  const runMeta = useMemo(() => {
-    if (runStatus === "running") {
-      return "Running...";
-    }
-    if (durationMs !== null && runStatus !== "idle") {
-      return `Last run: ${durationMs} ms`;
-    }
-    return "Ready";
-  }, [durationMs, runStatus]);
-
   return (
-    <div className="spark-scene">
-      {/* Bar */}
-      <div className="spark-scene-bar">
-        <span aria-hidden style={{ fontSize: "1rem", lineHeight: 1 }}>
-          🐍
-        </span>
-        <span
-          className="text-[11px] text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)", fontWeight: 500 }}
-        >
-          Python Playground
-        </span>
-
-        {/* Status pill */}
-        {runStatus !== "idle" && (
-          <span
-            className="code-spark-status-pill"
-            data-status={runStatus}
-          >
-            {runStatus === "running"
-              ? "Running…"
-              : runStatus === "success"
-                ? `Done ${durationMs}ms`
-                : "Error"}
+    <div
+      className="spark-scene-content"
+      style={
+        isExpanded
+          ? { flex: 1, display: "flex", flexDirection: "column" }
+          : undefined
+      }
+    >
+      {/* Dark toolbar: title on left, actions on right */}
+      <div className="code-spark-toolbar">
+        <div className="code-spark-toolbar-left">
+          <span className="spark-type-badge badge-code code-spark-toolbar-badge">
+            <IconSparkle className="h-3 w-3" />
+            Code
           </span>
-        )}
-        {runStatus === "idle" && durationMs !== null && (
-          <span className="code-spark-meta">{durationMs}ms</span>
-        )}
-
-        <button
-          type="button"
-          className="spark-scene-expand"
-          onClick={onResetClick}
-          disabled={runStatus === "running"}
-          style={{ marginLeft: "auto" }}
-        >
-          Reset
-        </button>
-        <button
-          type="button"
-          className="code-spark-run-btn"
-          onClick={onRunClick}
-          disabled={runStatus === "running"}
-        >
-          {runStatus === "running" ? "Running…" : "▶ Run"}
-        </button>
+          <span className="code-spark-toolbar-title">{sparkTitle}</span>
+          {runStatus !== "idle" && (
+            <span className="code-spark-status-pill" data-status={runStatus}>
+              {runStatus === "running"
+                ? "Running\u2026"
+                : runStatus === "success"
+                  ? `Done ${durationMs}ms`
+                  : "Error"}
+            </span>
+          )}
+        </div>
+        <div className="code-spark-toolbar-actions">
+          <button
+            type="button"
+            className="code-spark-reset-btn"
+            onClick={onResetClick}
+            disabled={runStatus === "running"}
+          >
+            Reset
+          </button>
+          {!isExpanded && onExpand && (
+            <button
+              type="button"
+              className="code-spark-toolbar-expand"
+              onClick={onExpand}
+              aria-label="Expand spark"
+            >
+              <IconExpand />
+              <span>Expand</span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="code-spark-run-btn"
+            onClick={onRunClick}
+            disabled={runStatus === "running"}
+          >
+            {runStatus === "running" ? "Running\u2026" : "\u25b6 Run"}
+          </button>
+        </div>
       </div>
 
-      {/* Notebook layout: instructions left | editor+output right */}
-      <div className="code-spark-layout">
+      {/* Layout: instructions left | editor + output right */}
+      <div
+        className="code-spark-layout"
+        style={isExpanded ? { flex: 1 } : undefined}
+      >
         <div className="code-spark-instructions">
           <p>{payload.instructions}</p>
           {payload.runHint && (
@@ -391,7 +397,7 @@ export default function CodePlaygroundScene({
 
         <div className="code-spark-editor-shell">
           <MonacoEditor
-            height="320px"
+            height={isExpanded ? "100%" : "320px"}
             language="python"
             value={code}
             onChange={(value: string | undefined) => setDraftCode(value ?? "")}

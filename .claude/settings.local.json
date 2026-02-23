@@ -20,7 +20,15 @@
       "mcp__plugin_playwright_playwright__browser_wait_for",
       "mcp__plugin_playwright_playwright__browser_click",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd //c \"taskkill /PID 52516 /F\")",
+      "Bash(bunx convex env set:*)",
+      "Bash(bunx convex logs:*)",
+      "Bash(cd /c/Users/kaust/Documents/coding/studi && bun --env-file=.env.local agentic-testing/debug-desmos.ts --batch 2>&1)",
+      "Bash(cd /c/Users/kaust/Documents/coding/studi && bun --env-file=.env.local agentic-testing/debug-desmos.ts --context \"show sine and cosine waves\" --retry 2>&1)"
     ]
   }
 }

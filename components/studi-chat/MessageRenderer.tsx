@@ -10,6 +10,7 @@ import {
   isCreateSparkToolResult,
   isSparkArtifact,
   type CreateSparkToolResult,
+  type SparkArtifact,
 } from "@/lib/sparks/contracts";
 import { IconChevronDown, IconPaperclip } from "@/components/studi-chat/icons";
 import { FlickeringGrid } from "@/components/studi-chat/FlickeringGrid";
@@ -800,9 +801,13 @@ const AssistantActivityPanel = memo(function AssistantActivityPanel({
 function AssistantParts({
   message,
   threadId,
+  onExpandSpark,
+  expandedSparkInstanceId,
 }: {
   message: UIMessage;
   threadId: string | null;
+  onExpandSpark: (artifact: SparkArtifact, threadId: string | null, sparkInstanceId: string) => void;
+  expandedSparkInstanceId: string | null;
 }) {
   const parts = useMemo(() => message.parts ?? [], [message.parts]);
   const textSegments = useMemo(
@@ -871,6 +876,8 @@ function AssistantParts({
               sparkResult.artifact.artifactId ??
               `${message.key}-spark-${partIndex}`
             }
+            onExpandSpark={onExpandSpark}
+            expandedSparkInstanceId={expandedSparkInstanceId}
           />
         </div>
       );
@@ -1023,10 +1030,14 @@ export const ArticleMessage = memo(function ArticleMessage({
   message,
   index,
   threadId,
+  onExpandSpark,
+  expandedSparkInstanceId,
 }: {
   message: UIMessage;
   index: number;
   threadId: string | null;
+  onExpandSpark: (artifact: SparkArtifact, threadId: string | null, sparkInstanceId: string) => void;
+  expandedSparkInstanceId: string | null;
 }) {
   const fileParts = useMemo(
     () => (message.parts ?? []).filter((p) => p.type === "file"),
@@ -1103,7 +1114,12 @@ export const ArticleMessage = memo(function ArticleMessage({
       style={{ animationDelay: `${Math.min(index * 30, 200)}ms` }}
     >
       <div className="article-prose">
-        <AssistantParts message={message} threadId={threadId} />
+        <AssistantParts
+          message={message}
+          threadId={threadId}
+          onExpandSpark={onExpandSpark}
+          expandedSparkInstanceId={expandedSparkInstanceId}
+        />
       </div>
     </div>
   );

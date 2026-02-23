@@ -1,15 +1,20 @@
 import type { RefObject } from "react";
 import type { UIMessage } from "@convex-dev/agent/react";
 import { ArticleMessage } from "@/components/studi-chat/MessageRenderer";
+import type { SparkArtifact } from "@/lib/sparks/contracts";
 
 export function MessageColumn({
   listRef,
   selectedThreadId,
   messages,
+  onExpandSpark,
+  expandedSparkInstanceId,
 }: {
   listRef: RefObject<HTMLDivElement | null>;
   selectedThreadId: string | null;
   messages: UIMessage[];
+  onExpandSpark: (artifact: SparkArtifact, threadId: string | null, sparkInstanceId: string) => void;
+  expandedSparkInstanceId: string | null;
 }) {
   return (
     <div ref={listRef} className="flex-1 overflow-y-auto">
@@ -31,6 +36,8 @@ export function MessageColumn({
             message={message}
             index={idx}
             threadId={selectedThreadId}
+            onExpandSpark={onExpandSpark}
+            expandedSparkInstanceId={expandedSparkInstanceId}
           />
         ))}
       </div>
