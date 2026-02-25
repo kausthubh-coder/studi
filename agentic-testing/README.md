@@ -35,6 +35,8 @@ Useful flags:
 - `--modelLabel <label>` attach a custom model tag for comparisons
 - `--saveSceneHtml` save successful scene spark HTML files to `.tmp/agent-lab/scenes/<runId>/`
 - `--sceneOutDir <path>` choose a custom output directory for scene HTML (implies `--saveSceneHtml`)
+- `--expectTools create_lab,run,glob` fail assertions if expected tools were not called
+- `--failOnToolError` set process exit to non-zero when any tool fails
 
 When a scene file is saved, the CLI prints a ready-to-run browser test command, for example:
 
@@ -53,6 +55,21 @@ This runs multiple prompts and writes one suite artifact with:
 - per-run timings and tool outcomes
 - spark failure counts
 - response hash comparisons across repeats
+- lab tool usage/failures and assertion failures
+
+## Lab Smoke (Recommended)
+
+```bash
+bun run agentic:test suite --file agentic-testing/suites/lab-smoke.json --userId dev-user
+```
+
+This validates the end-to-end lab startup path (`create_lab -> run/glob`) on the active deployment.
+
+For a deeper walkthrough:
+
+```bash
+bun run agentic:test suite --file agentic-testing/suites/lab-react-demo.json --userId dev-user
+```
 
 Notes:
 

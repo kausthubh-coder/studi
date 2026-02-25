@@ -1,0 +1,26 @@
+{
+  "name": "lab-react-demo",
+  "defaults": {
+    "agentName": "studi",
+    "newThread": true,
+    "title": "React Lab Demo",
+    "pollMs": 300,
+    "includeContext": false,
+    "expectTools": ["create_lab", "run", "glob"],
+    "failOnToolError": false
+  },
+  "cases": [
+    {
+      "name": "react-goals-and-setup",
+      "prompt": "I want to learn React from scratch. Create a lab, state today's learning goal, inspect the sandbox, and scaffold a first React file.",
+      "repeat": 1,
+      "modelLabel": "default"
+    },
+    {
+      "name": "react-follow-up",
+      "prompt": "Continue the lab. Add a small component with props and run a command to verify files.",
+      "repeat": 1,
+      "modelLabel": "default"
+    }
+  ]
+}

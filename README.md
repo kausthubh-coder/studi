@@ -196,11 +196,14 @@ Message flow:
 
 Key backend files:
 
-- `convex/agent.ts` - primary Studi agent definition and `create_spark` tool wiring
+- `convex/agent.ts` - tutor + lab agent definitions and tool wiring
 - `convex/chat.ts` - thread listing, message listing, uploads, send flow, auth checks
 - `convex/chatActions.ts` - actions for thread creation and assistant generation
+- `convex/labs.ts` - lab session records and internal lifecycle helpers
+- `convex/labTools.ts` - Daytona-backed lab tools for coding workflows
+- `convex/labIde.ts` - user-facing IDE actions (list/read/write/edit/run/grep/glob)
 - `convex/sparks/tools.ts` - Spark generation, validation, retries, fallback model handling
-- `convex/schema.ts` - `userThreads` and `attachments` tables
+- `convex/schema.ts` - `userThreads`, `attachments`, `sparkInteractions`, and `labSessions` tables
 
 Key frontend files:
 
@@ -246,6 +249,12 @@ NEXT_PUBLIC_DESMOS_API_KEY=...
 NEXT_PUBLIC_CONVEX_URL=...
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...
 CLERK_SECRET_KEY=...
+
+# Required for Daytona-powered coding labs
+DAYTONA_API_KEY=...
+
+# Optional Daytona API override
+DAYTONA_API_URL=https://app.daytona.io/api
 ```
 
 ## Getting Started

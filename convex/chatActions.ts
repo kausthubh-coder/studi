@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
-import { studiAgent } from "./agent";
+import { studiAgent, studiLabAgent } from "./agent";
 
 async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
@@ -106,7 +106,18 @@ export const generateAssistantReply = internalAction({
       threadId: args.threadId,
     });
 
-    const { thread } = await studiAgent.continueThread(ctx, {
+    const labSession = await ctx.runQuery(
+      internal.labs.getLabSessionByThreadForUserInternal,
+      {
+        userId: args.userId,
+        threadId: args.threadId,
+      },
+    );
+
+    const activeAgent =
+      labSession && !labSession.archivedAt ? studiLabAgent : studiAgent;
+
+    const { thread } = await activeAgent.continueThread(ctx, {
       threadId: args.threadId,
       userId: args.userId,
     });

@@ -269,6 +269,29 @@ function deriveAssistantActivity(
       }
     }
 
+    if (toolName !== "create_spark" && toolPart.state === "output-available") {
+      const structured = getStructuredToolOutput(
+        (toolPart as { output?: unknown }).output,
+      );
+
+      if (structured?.status === "failed") {
+        status = "error";
+      }
+
+      if (status === "error") {
+        detail =
+          structured?.errorMessage ??
+          structured?.summary ??
+          getToolOutputText((toolPart as { output?: unknown }).output) ??
+          detail;
+      } else {
+        detail =
+          structured?.summary ??
+          getToolOutputText((toolPart as { output?: unknown }).output) ??
+          detail;
+      }
+    }
+
     const label =
       toolName === "create_spark"
         ? status === "active"
@@ -301,7 +324,9 @@ function deriveAssistantActivity(
       detail:
         status === "error" && typeof toolPart.errorText === "string"
           ? truncate(toolPart.errorText, 120)
-          : detail,
+          : detail
+            ? truncate(detail, 160)
+            : undefined,
       status,
       summary,
     });
@@ -465,6 +490,57 @@ function getToolOutputText(output: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function getStructuredToolOutput(output: unknown): {
+  status?: string;
+  summary?: string;
+  errorMessage?: string;
+} | null {
+  if (!output || typeof output !== "object") {
+    return null;
+  }
+
+  const root = output as {
+    status?: unknown;
+    summary?: unknown;
+    error?: unknown;
+    value?: unknown;
+    output?: unknown;
+  };
+
+  const nested =
+    root.value && typeof root.value === "object"
+      ? (root.value as Record<string, unknown>)
+      : root.output && typeof root.output === "object"
+        ? (root.output as Record<string, unknown>)
+        : null;
+
+  const base: Record<string, unknown> =
+    nested ?? (root as Record<string, unknown>);
+  const errorRecord =
+    base.error && typeof base.error === "object"
+      ? (base.error as Record<string, unknown>)
+      : null;
+
+  const status = typeof base.status === "string" ? base.status : undefined;
+  const summary = typeof base.summary === "string" ? base.summary : undefined;
+  const errorMessage =
+    typeof errorRecord?.message === "string"
+      ? errorRecord.message
+      : typeof base.error === "string"
+        ? base.error
+        : undefined;
+
+  if (!status && !summary && !errorMessage) {
+    return null;
+  }
+
+  return {
+    status,
+    summary,
+    errorMessage,
+  };
 }
 
 function classifySparkFailure(error: string): string {
@@ -806,7 +882,11 @@ function AssistantParts({
 }: {
   message: UIMessage;
   threadId: string | null;
-  onExpandSpark: (artifact: SparkArtifact, threadId: string | null, sparkInstanceId: string) => void;
+  onExpandSpark: (
+    artifact: SparkArtifact,
+    threadId: string | null,
+    sparkInstanceId: string,
+  ) => void;
   expandedSparkInstanceId: string | null;
 }) {
   const parts = useMemo(() => message.parts ?? [], [message.parts]);
@@ -1036,7 +1116,11 @@ export const ArticleMessage = memo(function ArticleMessage({
   message: UIMessage;
   index: number;
   threadId: string | null;
-  onExpandSpark: (artifact: SparkArtifact, threadId: string | null, sparkInstanceId: string) => void;
+  onExpandSpark: (
+    artifact: SparkArtifact,
+    threadId: string | null,
+    sparkInstanceId: string,
+  ) => void;
   expandedSparkInstanceId: string | null;
 }) {
   const fileParts = useMemo(

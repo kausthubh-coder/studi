@@ -66,6 +66,10 @@ type ToolRun = {
   durationEstimated?: boolean;
   status: "pending" | "success" | "error";
   error?: string;
+  outputStatus?: string;
+  outputSummary?: string;
+  errorCategory?: string;
+  retriable?: boolean;
   sparkStatus?: string;
 };
 
@@ -99,6 +103,8 @@ type RunConfig = {
   debugRaw: boolean;
   saveSceneHtml: boolean;
   sceneOutDir?: string;
+  expectTools: string[];
+  failOnToolError: boolean;
 };
 
 type RunResult = {
@@ -131,6 +137,16 @@ type RunResult = {
     failures: number;
     totalDurationMs: number;
   };
+  lab: {
+    calls: number;
+    failures: number;
+    createLabCalls: number;
+    archiveLabCalls: number;
+    runCalls: number;
+    globCalls: number;
+    hadActivation: boolean;
+  };
+  assertionFailures: string[];
   sparkArtifacts: SparkArtifactSummary[];
   sceneFiles: SceneFileExport[];
   rawMessages?: PlaygroundMessage[];
@@ -147,6 +163,8 @@ type SuiteCase = {
   title?: string;
   repeat?: number;
   modelLabel?: string;
+  expectTools?: string[];
+  failOnToolError?: boolean;
 };
 
 type SuiteConfig = {
@@ -158,6 +176,8 @@ type SuiteConfig = {
     title?: string;
     pollMs?: number;
     includeContext?: boolean;
+    expectTools?: string[];
+    failOnToolError?: boolean;
   };
   cases: SuiteCase[];
 };
@@ -215,6 +235,8 @@ Shared flags:
   --modelLabel sonnet-4.6     Tag run metadata for comparison
   --saveSceneHtml             Save generated spark_scene HTML files locally
   --sceneOutDir <path>        Custom directory for saved scene files
+  --expectTools a,b,c         Assert these tools were called at least once
+  --failOnToolError           Exit with non-zero if any tool call fails
 
 Run-specific flags:
   --threadId <id>             Use existing thread
@@ -266,6 +288,18 @@ function parseNumberFlag(
     printUsageAndExit(`--${key} must be a positive integer`);
   }
   return parsed;
+}
+
+function parseCsvFlag(flags: Map<string, string[]>, key: string): string[] {
+  const value = getSingleFlag(flags, key);
+  if (!value || value === "true") {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 }
 
 function hashText(text: string): string {
@@ -489,6 +523,76 @@ function inspectSparkToolResult(part: Record<string, unknown>): {
   };
 }
 
+function inspectGenericToolResult(part: Record<string, unknown>): {
+  failed: boolean;
+  outputStatus?: string;
+  summary?: string;
+  errorMessage?: string;
+  errorCategory?: string;
+  retriable?: boolean;
+} {
+  const payload = extractToolResultPayload(part);
+  if (!payload || typeof payload !== "object") {
+    return {
+      failed: part.isError === true,
+    };
+  }
+
+  const record = payload as {
+    status?: unknown;
+    summary?: unknown;
+    error?: unknown;
+    value?: unknown;
+    output?: unknown;
+  };
+
+  const nested =
+    record.value && typeof record.value === "object"
+      ? (record.value as Record<string, unknown>)
+      : record.output && typeof record.output === "object"
+        ? (record.output as Record<string, unknown>)
+        : null;
+
+  const base = (nested ?? (record as Record<string, unknown>)) as Record<
+    string,
+    unknown
+  >;
+
+  const outputStatus =
+    typeof base.status === "string" ? base.status : undefined;
+  const summary = typeof base.summary === "string" ? base.summary : undefined;
+
+  const errorPayload =
+    base.error && typeof base.error === "object"
+      ? (base.error as Record<string, unknown>)
+      : null;
+
+  const errorMessage =
+    typeof errorPayload?.message === "string"
+      ? errorPayload.message
+      : typeof base.error === "string"
+        ? base.error
+        : undefined;
+
+  const errorCategory =
+    typeof errorPayload?.category === "string"
+      ? errorPayload.category
+      : undefined;
+  const retriable =
+    typeof errorPayload?.retriable === "boolean"
+      ? errorPayload.retriable
+      : undefined;
+
+  return {
+    failed: part.isError === true || outputStatus === "failed",
+    outputStatus,
+    summary,
+    errorMessage,
+    errorCategory,
+    retriable,
+  };
+}
+
 async function listAllMessages(
   client: ConvexHttpClient,
   apiKey: string,
@@ -616,6 +720,33 @@ function aggregateUsage(messages: PlaygroundMessage[]): {
   }
 
   return { promptTokens, completionTokens, totalTokens };
+}
+
+function computeAssertionFailures(
+  toolRuns: ToolRun[],
+  expectTools: string[],
+  failOnToolError: boolean,
+): string[] {
+  const failures: string[] = [];
+  const calledTools = new Set(toolRuns.map((tool) => tool.toolName));
+
+  for (const expected of expectTools) {
+    if (!calledTools.has(expected)) {
+      failures.push(`Expected tool '${expected}' was not called.`);
+    }
+  }
+
+  if (failOnToolError) {
+    for (const tool of toolRuns) {
+      if (tool.status === "error") {
+        failures.push(
+          `Tool '${tool.toolName}' failed (${tool.toolCallId}): ${tool.error ?? "unknown error"}`,
+        );
+      }
+    }
+  }
+
+  return failures;
 }
 
 function sanitizeFilenameSegment(value: string): string {
@@ -831,15 +962,29 @@ async function runSingle(
           const toolCallId = normalizeToolCallId(part, partIndex);
           const spark =
             toolName === "create_spark" ? inspectSparkToolResult(part) : null;
+          const generic = inspectGenericToolResult(part);
           const existing = toolsByCallId.get(toolCallId);
           const status: "success" | "error" =
-            part.isError === true || spark?.failed ? "error" : "success";
-          const detail = extractDetailFromPart(part) || `${toolName} finished`;
+            part.isError === true || spark?.failed || generic.failed
+              ? "error"
+              : "success";
+          const detail =
+            (generic.errorMessage ??
+              generic.summary ??
+              extractDetailFromPart(part)) ||
+            `${toolName} finished`;
 
           if (existing) {
             existing.endedAt = at;
             existing.durationMs = Math.max(0, at - existing.startedAt);
             existing.status = status;
+            existing.outputStatus = generic.outputStatus;
+            existing.outputSummary = generic.summary;
+            existing.errorCategory = generic.errorCategory;
+            existing.retriable = generic.retriable;
+            if (status === "error") {
+              existing.error = generic.errorMessage ?? existing.error;
+            }
           } else {
             const inferredStartAt =
               [...timeline]
@@ -859,6 +1004,11 @@ async function runSingle(
               durationMs: Math.max(0, at - inferredStartAt),
               durationEstimated: true,
               status,
+              outputStatus: generic.outputStatus,
+              outputSummary: generic.summary,
+              errorCategory: generic.errorCategory,
+              retriable: generic.retriable,
+              error: status === "error" ? generic.errorMessage : undefined,
             };
             toolsByCallId.set(toolCallId, fallbackRun);
             toolRuns.push(fallbackRun);
@@ -1002,6 +1152,26 @@ async function runSingle(
     0,
   );
 
+  const labTools = toolRuns.filter((tool) =>
+    [
+      "create_lab",
+      "archive_lab",
+      "list",
+      "read",
+      "grep",
+      "glob",
+      "run",
+      "edit",
+      "write",
+    ].includes(tool.toolName),
+  );
+
+  const assertionFailures = computeAssertionFailures(
+    toolRuns,
+    config.expectTools,
+    config.failOnToolError,
+  );
+
   const context = config.includeContext
     ? await fetchPromptContext(client, apiKey, {
         userId: config.userId,
@@ -1042,6 +1212,21 @@ async function runSingle(
       failures: sparkFailures,
       totalDurationMs: sparkTotalDurationMs,
     },
+    lab: {
+      calls: labTools.length,
+      failures: labTools.filter((tool) => tool.status === "error").length,
+      createLabCalls: labTools.filter((tool) => tool.toolName === "create_lab")
+        .length,
+      archiveLabCalls: labTools.filter(
+        (tool) => tool.toolName === "archive_lab",
+      ).length,
+      runCalls: labTools.filter((tool) => tool.toolName === "run").length,
+      globCalls: labTools.filter((tool) => tool.toolName === "glob").length,
+      hadActivation: labTools.some(
+        (tool) => tool.toolName === "create_lab" && tool.status === "success",
+      ),
+    },
+    assertionFailures,
     sparkArtifacts,
     sceneFiles,
     rawMessages: config.debugRaw ? newMessages : undefined,
@@ -1070,15 +1255,28 @@ function printRunSummary(run: RunResult): void {
   console.log(
     `- spark: calls=${run.spark.calls}, failures=${run.spark.failures}, totalDurationMs=${run.spark.totalDurationMs}`,
   );
+  console.log(
+    `- lab: calls=${run.lab.calls}, failures=${run.lab.failures}, create_lab=${run.lab.createLabCalls}, run=${run.lab.runCalls}, glob=${run.lab.globCalls}, activated=${run.lab.hadActivation}`,
+  );
 
   if (run.tools.length > 0) {
     console.log("- toolRuns:");
     for (const tool of run.tools) {
       const tail = tool.error ? ` error=${truncate(tool.error, 80)}` : "";
       const durationLabel = `${tool.durationMs ?? "n/a"}${tool.durationEstimated ? "~" : ""}`;
+      const outputTail = tool.outputStatus
+        ? ` outputStatus=${tool.outputStatus}`
+        : "";
       console.log(
-        `  - ${tool.toolName} (${tool.toolCallId}) status=${tool.status} durationMs=${durationLabel}${tail}`,
+        `  - ${tool.toolName} (${tool.toolCallId}) status=${tool.status} durationMs=${durationLabel}${outputTail}${tail}`,
       );
+    }
+  }
+
+  if (run.assertionFailures.length > 0) {
+    console.log("- assertions:");
+    for (const failure of run.assertionFailures) {
+      console.log(`  - ${failure}`);
     }
   }
 
@@ -1145,6 +1343,8 @@ async function runCommand(parsed: ParsedArgs): Promise<void> {
   const sceneOutDir = getSingleFlag(parsed.flags, "sceneOutDir");
   const saveSceneHtml =
     getBooleanFlag(parsed.flags, "saveSceneHtml") || Boolean(sceneOutDir);
+  const expectTools = parseCsvFlag(parsed.flags, "expectTools");
+  const failOnToolError = getBooleanFlag(parsed.flags, "failOnToolError");
 
   const run = await runSingle(client, apiKey, {
     userId,
@@ -1161,11 +1361,17 @@ async function runCommand(parsed: ParsedArgs): Promise<void> {
     debugRaw,
     saveSceneHtml,
     sceneOutDir,
+    expectTools,
+    failOnToolError,
   });
 
   printRunSummary(run);
   const artifactPath = await writeRunArtifact(run);
   console.log(`- artifact: ${artifactPath}`);
+
+  if (run.assertionFailures.length > 0) {
+    process.exitCode = 1;
+  }
 }
 
 function parseSuiteConfig(raw: unknown): SuiteConfig {
@@ -1217,6 +1423,11 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
   const sceneOutDir = getSingleFlag(parsed.flags, "sceneOutDir");
   const saveSceneHtml =
     getBooleanFlag(parsed.flags, "saveSceneHtml") || Boolean(sceneOutDir);
+  const expectToolsOverride = parseCsvFlag(parsed.flags, "expectTools");
+  const failOnToolErrorOverride = getBooleanFlag(
+    parsed.flags,
+    "failOnToolError",
+  );
 
   const results: RunResult[] = [];
 
@@ -1239,6 +1450,15 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
       const title =
         testCase.title ?? suite.defaults?.title ?? `Suite: ${testCase.name}`;
       const modelLabel = testCase.modelLabel;
+      const expectTools =
+        expectToolsOverride.length > 0
+          ? expectToolsOverride
+          : (testCase.expectTools ?? suite.defaults?.expectTools ?? []);
+      const failOnToolError =
+        failOnToolErrorOverride ||
+        testCase.failOnToolError ||
+        suite.defaults?.failOnToolError ||
+        false;
 
       console.log(`\nCase ${testCase.name} (${i + 1}/${repeats})`);
 
@@ -1258,6 +1478,8 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
         debugRaw,
         saveSceneHtml,
         sceneOutDir,
+        expectTools,
+        failOnToolError,
       });
 
       printRunSummary(run);
@@ -1280,6 +1502,8 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
     firstAssistantEventMs: run.firstAssistantEventMs,
     totalTokens: run.usage.totalTokens,
     sparkFailures: run.spark.failures,
+    labFailures: run.lab.failures,
+    assertionFailures: run.assertionFailures.length,
     responseHash: run.actionResultTextHash,
     actionError: run.actionError,
   }));
@@ -1296,6 +1520,11 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
     ([promptHash, runs]) => {
       const durations = runs.map((r) => r.totalDurationMs);
       const sparkFailures = runs.reduce((sum, r) => sum + r.spark.failures, 0);
+      const labFailures = runs.reduce((sum, r) => sum + r.lab.failures, 0);
+      const assertionFailures = runs.reduce(
+        (sum, r) => sum + r.assertionFailures.length,
+        0,
+      );
       const responses = runs
         .map((r) => r.actionResultTextHash)
         .filter((value): value is string => Boolean(value));
@@ -1311,6 +1540,8 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
           ),
         },
         sparkFailures,
+        labFailures,
+        assertionFailures,
         distinctResponseHashes: Array.from(new Set(responses)).length,
       };
     },
@@ -1332,9 +1563,19 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
   console.log(`- runs: ${results.length}`);
   console.log(`- artifact: ${suitePath}`);
 
+  const totalAssertionFailures = results.reduce(
+    (sum, run) => sum + run.assertionFailures.length,
+    0,
+  );
+  console.log(`- assertionFailures: ${totalAssertionFailures}`);
+
+  if (totalAssertionFailures > 0) {
+    process.exitCode = 1;
+  }
+
   for (const comparison of comparisons) {
     console.log(
-      `- prompt ${comparison.promptHash}: runs=${comparison.runs}, avgDurationMs=${comparison.durationMs.avg}, sparkFailures=${comparison.sparkFailures}, distinctResponses=${comparison.distinctResponseHashes}`,
+      `- prompt ${comparison.promptHash}: runs=${comparison.runs}, avgDurationMs=${comparison.durationMs.avg}, sparkFailures=${comparison.sparkFailures}, labFailures=${comparison.labFailures}, assertionFailures=${comparison.assertionFailures}, distinctResponses=${comparison.distinctResponseHashes}`,
     );
   }
 }

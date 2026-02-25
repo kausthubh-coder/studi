@@ -28,6 +28,7 @@ import type {
 } from "@/components/studi-chat/types";
 import { SparkPanel } from "@/components/sparks/SparkPanel";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
+import { LabWorkspace } from "@/components/lab/LabWorkspace";
 
 function makeRequestId(): string {
   if (
@@ -110,6 +111,14 @@ export default function StudiChat() {
   );
   const hasActiveAgentWork = currentAgentState.phase !== "idle";
   const isComposerBusy = isSending || isUploading;
+
+  const activeLabSession = useQuery(
+    api.labs.getLabSession,
+    selectedThreadId ? { threadId: selectedThreadId } : "skip",
+  );
+  const isLabActive = Boolean(
+    selectedThreadId && activeLabSession && !activeLabSession.archivedAt,
+  );
 
   const isOnWelcome = selectedThreadId === null;
 
@@ -284,6 +293,12 @@ export default function StudiChat() {
     [],
   );
 
+  useEffect(() => {
+    if (isLabActive && expandedSpark) {
+      setExpandedSpark(null);
+    }
+  }, [expandedSpark, isLabActive]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
       <ThreadSidebar
@@ -309,15 +324,30 @@ export default function StudiChat() {
             onSuggestionClick={handleSuggestionClick}
           />
         ) : (
-          <div className="relative flex flex-1 overflow-hidden">
+          <div
+            className={`flex flex-1 overflow-hidden ${isLabActive ? "flex-col lg:flex-row" : ""}`}
+          >
+            {/* Chat column */}
             <div
-              className={`relative flex min-w-0 flex-1 flex-col overflow-hidden transition-[flex-basis] duration-300 ease-out ${expandedSpark ? "lg:basis-[clamp(360px,42vw,620px)] lg:shrink-0" : ""}`}
+              className={`relative flex min-w-0 flex-col overflow-hidden transition-[width] duration-300 ease-out ${
+                isLabActive
+                  ? "flex-1 lg:w-[44%] lg:max-w-[44%]"
+                  : expandedSpark
+                    ? "w-[420px] shrink-0"
+                    : "flex-1"
+              }`}
             >
               <MessageColumn
                 listRef={listRef}
                 selectedThreadId={selectedThreadId}
                 messages={uiMessages.results}
-                onExpandSpark={handleExpandSpark}
+                onExpandSpark={
+                  isLabActive
+                    ? () => {
+                        return;
+                      }
+                    : handleExpandSpark
+                }
                 expandedSparkInstanceId={expandedSpark?.sparkInstanceId ?? null}
               />
               <Composer
@@ -333,23 +363,15 @@ export default function StudiChat() {
                 onRemoveAttachment={removeAttachment}
               />
             </div>
-            {expandedSpark && (
-              <div
-                className="spark-panel-shell"
-                role="dialog"
-                aria-label="Expanded spark"
-              >
-                <button
-                  type="button"
-                  className="spark-panel-backdrop"
-                  onClick={() => setExpandedSpark(null)}
-                  aria-label="Close spark"
-                />
-                <SparkPanel
-                  spark={expandedSpark}
-                  onClose={() => setExpandedSpark(null)}
-                />
-              </div>
+            {isLabActive && selectedThreadId ? (
+              <LabWorkspace threadId={selectedThreadId} />
+            ) : null}
+            {/* Spark panel */}
+            {!isLabActive && expandedSpark && (
+              <SparkPanel
+                spark={expandedSpark}
+                onClose={() => setExpandedSpark(null)}
+              />
             )}
           </div>
         )}

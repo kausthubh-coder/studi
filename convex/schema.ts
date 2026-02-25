@@ -52,4 +52,22 @@ export default defineSchema({
       "threadId",
       "sparkInstanceId",
     ]),
+
+  labSessions: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    sandboxId: v.string(),
+    metadata: v.object({
+      topic: v.optional(v.string()),
+      objective: v.optional(v.string()),
+    }),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastActiveAt: v.number(),
+    archivedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_threadId", ["threadId"])
+    .index("by_userId_and_threadId", ["userId", "threadId"]),
 });

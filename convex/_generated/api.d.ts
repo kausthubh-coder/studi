@@ -11,6 +11,10 @@
 import type * as agent from "../agent.js";
 import type * as chat from "../chat.js";
 import type * as chatActions from "../chatActions.js";
+import type * as daytona from "../daytona.js";
+import type * as labIde from "../labIde.js";
+import type * as labTools from "../labTools.js";
+import type * as labs from "../labs.js";
 import type * as playground from "../playground.js";
 import type * as sparkFeedback from "../sparkFeedback.js";
 import type * as sparks_tools from "../sparks/tools.js";
@@ -25,6 +29,10 @@ declare const fullApi: ApiFromModules<{
   agent: typeof agent;
   chat: typeof chat;
   chatActions: typeof chatActions;
+  daytona: typeof daytona;
+  labIde: typeof labIde;
+  labTools: typeof labTools;
+  labs: typeof labs;
   playground: typeof playground;
   sparkFeedback: typeof sparkFeedback;
   "sparks/tools": typeof sparks_tools;

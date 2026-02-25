@@ -1,6 +1,6 @@
 import { definePlaygroundAPI } from "@convex-dev/agent";
 import { components } from "./_generated/api";
-import { studiAgent } from "./agent";
+import { studiAgent, studiLabAgent } from "./agent";
 
 /**
  * Exposes the Agent Playground API.
@@ -18,5 +18,5 @@ export const {
   generateText,
   fetchPromptContext,
 } = definePlaygroundAPI(components.agent, {
-  agents: [studiAgent],
+  agents: [studiAgent, studiLabAgent],
 });

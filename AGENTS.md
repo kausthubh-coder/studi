@@ -26,6 +26,8 @@ OPENROUTER_API_KEY=...
 OPENROUTER_MODEL=anthropic/claude-sonnet-4.6   # optional, this is the default
 SPARK_WORKER_MODEL=z-ai/glm-5                  # optional, model for Spark generation
 NEXT_PUBLIC_DESMOS_API_KEY=...                 # required for desmos_graph sparks
+DAYTONA_API_KEY=...                             # required for lab sandboxes
+DAYTONA_API_URL=https://app.daytona.io/api      # optional override
 ```
 
 `predev` runs `convex dev --until-success` before starting — Convex must be configured before `bun run dev` works.
@@ -40,7 +42,8 @@ Studi is an **agentic tutor**: a Next.js 16 + React 19 frontend, a Convex backen
 User submits → chat.sendMessage (mutation)
   → saves user message via @convex-dev/agent saveMessage
   → schedules chatActions.generateAssistantReply (internalAction)
-     → studiAgent.continueThread → thread.streamText
+     → routes to studiAgent or studiLabAgent based on active lab session
+     → selectedAgent.continueThread → thread.streamText
      → streams deltas back to client via syncStreams
 ```
 
@@ -54,6 +57,9 @@ User submits → chat.sendMessage (mutation)
 | `agent.ts`         | `studiAgent` — `@convex-dev/agent` Agent wired to OpenRouter with `create_spark` tool                                                     |
 | `chat.ts`          | Public queries/mutations: `listThreads`, `listThreadMessages`, `sendMessage`, `generateUploadUrl`, `saveAttachment` plus internal helpers |
 | `chatActions.ts`   | Actions: `createThread` (public), `generateAssistantReply` (internal)                                                                     |
+| `labs.ts`          | `labSessions` ownership + metadata helpers for lab lifecycle                                                                              |
+| `labTools.ts`      | Lab tools (`create_lab`, `read`, `grep`, `glob`, `run`, `edit`, `write`, `archive_lab`) backed by Daytona APIs                            |
+| `labIde.ts`        | Public IDE actions (`listLabFiles`, `readLabFile`, `writeLabFile`, `editLabFile`, `runLabCommand`, `grepLabFiles`, `globLabFiles`)        |
 | `sparks/tools.ts`  | `createSparkTool` — Convex tool that calls a spark-worker LLM, validates HTML, retries once on failure                                    |
 | `convex.config.ts` | Registers `@convex-dev/agent` component                                                                                                   |
 | `playground.ts`    | Exposes Agent Playground API (for debugging)                                                                                              |
