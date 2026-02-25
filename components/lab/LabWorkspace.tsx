@@ -11,6 +11,9 @@ import {
   type ComponentType,
 } from "react";
 import { api } from "@/convex/_generated/api";
+import { LabSidebar } from "./LabSidebar";
+import { LabEditorHeader } from "./LabEditorHeader";
+import { LabTerminal } from "./LabTerminal";
 
 type MonacoEditorProps = {
   height?: string | number;
@@ -68,19 +71,6 @@ function pickLanguage(path: string): string {
   return "plaintext";
 }
 
-function buildParentPath(path: string): string {
-  const trimmed = path.replace(/\/+$/, "");
-  if (trimmed === "workspace") {
-    return "workspace";
-  }
-  const parts = trimmed.split("/");
-  parts.pop();
-  if (parts.length === 0) {
-    return "workspace";
-  }
-  return parts.join("/");
-}
-
 export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const listFilesAction = useAction(api.labIde.listLabFiles);
   const readFileAction = useAction(api.labIde.readLabFile);
@@ -105,41 +95,32 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const [baselineValue, setBaselineValue] = useState("");
   const isDirty = selectedFilePath !== null && editorValue !== baselineValue;
 
+  // Hydrate persisted state
   useEffect(() => {
-    if (initialHydratedRef.current) {
-      return;
-    }
+    if (initialHydratedRef.current) return;
     initialHydratedRef.current = true;
 
     const raw = window.localStorage.getItem(getStorageKey(threadId));
-    if (!raw) {
-      return;
-    }
+    if (!raw) return;
 
     try {
       const parsed = JSON.parse(raw) as PersistedState;
-      if (parsed.currentPath) {
-        setCurrentPath(parsed.currentPath);
-      }
-      if (parsed.selectedFilePath) {
-        setSelectedFilePath(parsed.selectedFilePath);
-      }
-      if (parsed.commandInput) {
-        setCommandInput(parsed.commandInput);
-      }
-    } catch {}
+      if (parsed.currentPath) setCurrentPath(parsed.currentPath);
+      if (parsed.selectedFilePath) setSelectedFilePath(parsed.selectedFilePath);
+      if (parsed.commandInput) setCommandInput(parsed.commandInput);
+    } catch {
+      /* ignore */
+    }
   }, [threadId]);
 
+  // Persist state
   useEffect(() => {
     const payload: PersistedState = {
       currentPath,
       selectedFilePath: selectedFilePath ?? undefined,
       commandInput,
     };
-    window.localStorage.setItem(
-      getStorageKey(threadId),
-      JSON.stringify(payload),
-    );
+    window.localStorage.setItem(getStorageKey(threadId), JSON.stringify(payload));
   }, [threadId, currentPath, selectedFilePath, commandInput]);
 
   const refreshEntries = useCallback(
@@ -148,20 +129,14 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
       setIsLoadingFiles(true);
       setWorkspaceError(null);
       try {
-        const response = await listFilesAction({
-          threadId,
-          path: targetPath,
-        });
-
+        const response = await listFilesAction({ threadId, path: targetPath });
         if (response.status === "failed") {
           setWorkspaceError(response.summary);
           return;
         }
 
         const sorted = [...response.entries].sort((a, b) => {
-          if (a.isDir !== b.isDir) {
-            return a.isDir ? -1 : 1;
-          }
+          if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
           return a.name.localeCompare(b.name);
         });
 
@@ -179,18 +154,11 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
       setIsLoadingFile(true);
       setWorkspaceError(null);
       try {
-        const response = await readFileAction({
-          threadId,
-          path,
-          offset: 1,
-          limit: 2000,
-        });
-
+        const response = await readFileAction({ threadId, path, offset: 1, limit: 2000 });
         if (response.status === "failed") {
           setWorkspaceError(response.summary);
           return;
         }
-
         setSelectedFilePath(response.path);
         setEditorValue(response.content);
         setBaselineValue(response.content);
@@ -207,25 +175,15 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   }, [refreshEntries]);
 
   useEffect(() => {
-    if (!selectedFilePath) {
-      return;
-    }
-
+    if (!selectedFilePath) return;
     const exists = entries.some((entry) => entry.path === selectedFilePath);
-    if (!exists) {
-      return;
-    }
-
+    if (!exists) return;
     void openFile(selectedFilePath);
   }, [entries, openFile, selectedFilePath]);
 
-  const breadcrumbs = useMemo(() => currentPath.split("/"), [currentPath]);
-
   const runCommand = useCallback(async () => {
     const command = commandInput.trim();
-    if (!command) {
-      return;
-    }
+    if (!command) return;
 
     setIsRunningCommand(true);
     setWorkspaceError(null);
@@ -252,9 +210,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   }, [commandInput, currentPath, refreshEntries, runCommandAction, threadId]);
 
   const saveFile = useCallback(async () => {
-    if (!selectedFilePath || isBinary) {
-      return;
-    }
+    if (!selectedFilePath || isBinary) return;
 
     setIsSavingFile(true);
     setWorkspaceError(null);
@@ -264,113 +220,82 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
         path: selectedFilePath,
         content: editorValue,
       });
-
       if (response.status === "failed") {
         setWorkspaceError(response.summary);
         return;
       }
-
       setBaselineValue(editorValue);
       await refreshEntries(currentPath);
     } finally {
       setIsSavingFile(false);
     }
-  }, [
-    currentPath,
-    editorValue,
-    isBinary,
-    refreshEntries,
-    selectedFilePath,
-    threadId,
-    writeFileAction,
-  ]);
+  }, [currentPath, editorValue, isBinary, refreshEntries, selectedFilePath, threadId, writeFileAction]);
+
+  // Ctrl+S / Cmd+S keyboard shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        void saveFile();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [saveFile]);
+
+  const handleNavigate = useCallback(
+    (path: string) => {
+      void refreshEntries(path);
+    },
+    [refreshEntries],
+  );
+
+  const handleOpenFile = useCallback(
+    (path: string) => {
+      void openFile(path);
+    },
+    [openFile],
+  );
+
+  const handleRefresh = useCallback(() => {
+    void refreshEntries();
+  }, [refreshEntries]);
+
+  const handleSave = useCallback(() => {
+    void saveFile();
+  }, [saveFile]);
+
+  const handleRunCommand = useCallback(() => {
+    void runCommand();
+  }, [runCommand]);
+
+  const editorLanguage = useMemo(
+    () => (selectedFilePath ? pickLanguage(selectedFilePath) : "plaintext"),
+    [selectedFilePath],
+  );
 
   return (
-    <section className="flex min-w-0 flex-1 border-l border-border bg-bg-card">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-border-faint bg-bg-alt">
-        <div className="flex items-center justify-between border-b border-border-faint px-3 py-2">
-          <p className="font-heading text-xs uppercase tracking-[0.08em] text-fg-faint">
-            Files
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              void refreshEntries();
-            }}
-            className="text-xs text-fg-muted hover:text-fg"
-          >
-            Refresh
-          </button>
-        </div>
+    <section className="lab-workspace">
+      <LabSidebar
+        currentPath={currentPath}
+        entries={entries}
+        selectedFilePath={selectedFilePath}
+        isLoadingFiles={isLoadingFiles}
+        onNavigate={handleNavigate}
+        onOpenFile={handleOpenFile}
+        onRefresh={handleRefresh}
+      />
 
-        <div className="border-b border-border-faint px-3 py-2 text-[11px] text-fg-faint">
-          <button
-            type="button"
-            onClick={() => {
-              const parent = buildParentPath(currentPath);
-              void refreshEntries(parent);
-            }}
-            className="rounded border border-border-faint px-1.5 py-0.5 text-[10px] text-fg-muted hover:text-fg"
-          >
-            Up
-          </button>
-          <div className="mt-1 truncate">{currentPath}</div>
-        </div>
+      <div className="lab-main">
+        <LabEditorHeader
+          selectedFilePath={selectedFilePath}
+          isDirty={isDirty}
+          isSaving={isSavingFile}
+          isBinary={isBinary}
+          onSave={handleSave}
+        />
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-          {isLoadingFiles ? (
-            <p className="px-1 py-2 text-xs text-fg-faint">Loading...</p>
-          ) : entries.length === 0 ? (
-            <p className="px-1 py-2 text-xs text-fg-faint">No files.</p>
-          ) : (
-            <ul className="space-y-0.5">
-              {entries.map((entry) => (
-                <li key={entry.path}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (entry.isDir) {
-                        void refreshEntries(entry.path);
-                        return;
-                      }
-                      void openFile(entry.path);
-                    }}
-                    className={`w-full truncate rounded px-2 py-1 text-left text-xs transition ${selectedFilePath === entry.path ? "bg-accent-dim text-accent" : "text-fg-muted hover:bg-bg-card hover:text-fg"}`}
-                    title={entry.path}
-                  >
-                    {entry.isDir ? "[dir]" : "[file]"} {entry.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-border-faint px-3 py-2">
-          <div className="min-w-0">
-            <p className="truncate font-heading text-sm text-fg">
-              {selectedFilePath ?? "Select a file"}
-            </p>
-            <p className="truncate text-[11px] text-fg-faint">
-              {breadcrumbs.join(" / ")}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              void saveFile();
-            }}
-            disabled={!isDirty || isSavingFile || isBinary || !selectedFilePath}
-            className="rounded border border-border px-2 py-1 text-xs text-fg-muted disabled:opacity-40"
-          >
-            {isSavingFile ? "Saving..." : "Save"}
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1">
+        <div style={{ flex: 1, minHeight: 0 }}>
           {!selectedFilePath ? (
             <div className="flex h-full items-center justify-center text-xs text-fg-faint">
               Select a file to open it.
@@ -386,11 +311,9 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           ) : (
             <MonacoEditor
               height="100%"
-              language={pickLanguage(selectedFilePath)}
+              language={editorLanguage}
               value={editorValue}
-              onChange={(value: string | undefined) =>
-                setEditorValue(value ?? "")
-              }
+              onChange={(value: string | undefined) => setEditorValue(value ?? "")}
               theme="vs-dark"
               options={{
                 minimap: { enabled: false },
@@ -404,49 +327,18 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           )}
         </div>
 
-        <div className="border-t border-border-faint">
-          <div className="flex items-center gap-2 px-3 py-2">
-            <input
-              value={commandInput}
-              onChange={(event) => setCommandInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void runCommand();
-                }
-              }}
-              placeholder="Run command in sandbox"
-              className="h-8 min-w-0 flex-1 rounded border border-border bg-bg px-2 text-xs text-fg outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                void runCommand();
-              }}
-              disabled={isRunningCommand}
-              className="h-8 rounded border border-border px-3 text-xs text-fg-muted disabled:opacity-50"
-            >
-              {isRunningCommand ? "Running..." : "Run"}
-            </button>
-          </div>
+        <LabTerminal
+          commandInput={commandInput}
+          onCommandInputChange={setCommandInput}
+          onRunCommand={handleRunCommand}
+          isRunning={isRunningCommand}
+          terminalOutput={terminalOutput}
+          lastExitCode={lastExitCode}
+        />
 
-          <div className="max-h-40 overflow-y-auto border-t border-border-faint bg-[#111318] px-3 py-2 font-mono text-[11px] text-[#d8d8d8]">
-            {lastExitCode !== null ? (
-              <p className="mb-1 text-[10px] text-[#9ea3b2]">
-                Exit code: {lastExitCode}
-              </p>
-            ) : null}
-            <pre className="whitespace-pre-wrap break-words">
-              {terminalOutput || "No command output yet."}
-            </pre>
-          </div>
-        </div>
-
-        {workspaceError ? (
-          <div className="border-t border-border-faint bg-accent-dim px-3 py-2 text-xs text-accent">
-            {workspaceError}
-          </div>
-        ) : null}
+        {workspaceError && (
+          <div className="lab-error-bar">{workspaceError}</div>
+        )}
       </div>
     </section>
   );

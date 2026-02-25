@@ -18,13 +18,38 @@ import { z } from "zod";
 
 // ─── inline copies of the types/schemas from contracts + tools ─────────────
 
-type JsonPrimitive = string | number | boolean | null;
-type JsonValue =
-  | JsonPrimitive
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+type DesmosTableValue = string | number | null;
 
-type DesmosExpressionState = Record<string, JsonValue>;
+type DesmosTableColumn = {
+  latex?: string;
+  values?: DesmosTableValue[];
+};
+
+type DesmosEquationExpression = {
+  id?: string;
+  type?: "expression";
+  latex: string;
+  color?: string;
+  hidden?: boolean;
+};
+
+type DesmosTableExpression = {
+  id?: string;
+  type: "table";
+  columns?: DesmosTableColumn[];
+  hidden?: boolean;
+};
+
+type DesmosTextExpression = {
+  id?: string;
+  type: "text";
+  text: string;
+};
+
+type DesmosExpressionState =
+  | DesmosEquationExpression
+  | DesmosTableExpression
+  | DesmosTextExpression;
 
 type DesmosGraphPayload = {
   expressions: DesmosExpressionState[];
@@ -33,53 +58,56 @@ type DesmosGraphPayload = {
   hint?: string;
 };
 
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number().finite(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValueSchema),
-    z.record(z.string(), jsonValueSchema),
-  ]),
-);
+const desmosTableValueSchema = z.union([
+  z.string(),
+  z.number().finite(),
+  z.null(),
+]);
 
-const desmosExpressionSchema = z.record(z.string(), jsonValueSchema);
+const desmosTableColumnSchema = z.object({
+  latex: z.string().optional(),
+  values: z.array(desmosTableValueSchema).optional(),
+});
 
-const desmosPayloadSchema: z.ZodType<DesmosGraphPayload> = z
-  .object({
-    expressions: z.array(desmosExpressionSchema).min(1),
-    settings: z
-      .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-      .optional(),
-    viewport: z
-      .object({
-        left: z.number(),
-        right: z.number(),
-        bottom: z.number(),
-        top: z.number(),
-      })
-      .optional(),
-    hint: z.string().optional(),
-  })
-  .refine(
-    (p) =>
-      p.expressions.every((expr) => {
-        const latex = expr.latex;
-        if (typeof latex === "string" && latex.trim().length > 0) return true;
-        const type = expr.type;
-        if (type === "table") {
-          const cols = expr.columns;
-          return Array.isArray(cols) && cols.length > 0;
-        }
-        // Text notes and expression type without latex are valid
-        if (type === "text" || type === "expression") return true;
-        return false;
-      }),
-    {
-      message: "Each expression must include latex, be a table with columns, or be an expression/text type.",
-    },
-  );
+const desmosEquationExpressionSchema = z.object({
+  id: z.string().optional(),
+  type: z.literal("expression").optional(),
+  latex: z.string().min(1),
+  color: z.string().optional(),
+  hidden: z.boolean().optional(),
+});
+
+const desmosTableExpressionSchema = z.object({
+  id: z.string().optional(),
+  type: z.literal("table"),
+  columns: z.array(desmosTableColumnSchema).min(1),
+  hidden: z.boolean().optional(),
+});
+
+const desmosTextExpressionSchema = z.object({
+  id: z.string().optional(),
+  type: z.literal("text"),
+  text: z.string().min(1),
+});
+
+const desmosExpressionSchema = z.union([
+  desmosEquationExpressionSchema,
+  desmosTableExpressionSchema,
+  desmosTextExpressionSchema,
+]);
+
+const desmosPayloadSchema: z.ZodType<DesmosGraphPayload> = z.object({
+  expressions: z.array(desmosExpressionSchema).min(1),
+  viewport: z
+    .object({
+      left: z.number(),
+      right: z.number(),
+      bottom: z.number(),
+      top: z.number(),
+    })
+    .optional(),
+  hint: z.string().optional(),
+});
 
 const desmosWorkerOutputSchema = z.object({
   title: z.string(),
@@ -91,20 +119,54 @@ const desmosWorkerOutputSchema = z.object({
 // ─── simple deterministic draft builder (mirrors tools.ts) ─────────────────
 
 const allowedIdentifiers = new Set([
-  "x","y","a","b","t","n","f","g","h",
-  "sin","cos","tan","cot","sec","csc","asin","acos","atan",
-  "log","ln","sqrt","abs","theta","pi","e",
+  "x",
+  "y",
+  "a",
+  "b",
+  "t",
+  "n",
+  "f",
+  "g",
+  "h",
+  "sin",
+  "cos",
+  "tan",
+  "cot",
+  "sec",
+  "csc",
+  "asin",
+  "acos",
+  "atan",
+  "log",
+  "ln",
+  "sqrt",
+  "abs",
+  "theta",
+  "pi",
+  "e",
 ]);
 
 function extractEquationCandidates(context: string): string[] {
-  const blockers = ["table","parametric","polar","inequality","piecewise","regression"];
+  const blockers = [
+    "table",
+    "parametric",
+    "polar",
+    "inequality",
+    "piecewise",
+    "regression",
+  ];
   const lowered = context.replace(/\s+/g, " ").trim().toLowerCase();
   if (blockers.some((t) => lowered.includes(t))) return [];
 
   const chunks = context
     .replace(/i\.e\./gi, "")
     .split(/\n|,|;|\band\b|\bplus\b|\bwith\b/gi)
-    .map((p) => p.replace(/^[^a-zA-Z0-9(\-]+/, "").replace(/[^a-zA-Z0-9)\]}]+$/, "").trim())
+    .map((p) =>
+      p
+        .replace(/^[^a-zA-Z0-9(\-]+/, "")
+        .replace(/[^a-zA-Z0-9)\]}]+$/, "")
+        .trim(),
+    )
     .filter(Boolean);
 
   const results: string[] = [];
@@ -114,7 +176,8 @@ function extractEquationCandidates(context: string): string[] {
   for (const chunk of chunks) {
     if (!chunk.includes("=")) continue;
     for (const match of chunk.matchAll(eqPattern)) {
-      let candidate = (match[1] ?? "").trim()
+      let candidate = (match[1] ?? "")
+        .trim()
         .replace(/\s+\b(and|with|where|for|to|in)\b\s+.*$/i, "")
         .replace(/\.\s+[a-zA-Z].*$/, "")
         .replace(/\s+\(or\b[\s\S]*$/i, "")
@@ -163,7 +226,11 @@ function buildSimpleDesmosDraft(context: string): DesmosGraphPayload | null {
 
 // ─── validation mirrors tools.ts validateDesmosPayload ─────────────────────
 
-function validateDesmosPayload(payload: DesmosGraphPayload): { ok: boolean; errors: string[]; warnings: string[] } {
+function validateDesmosPayload(payload: DesmosGraphPayload): {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+} {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -178,7 +245,8 @@ function validateDesmosPayload(payload: DesmosGraphPayload): { ok: boolean; erro
   }
 
   const hasLatex = payload.expressions.some(
-    (e) => typeof e.latex === "string" && (e.latex as string).trim().length > 0,
+    (e) =>
+      "latex" in e && typeof e.latex === "string" && e.latex.trim().length > 0,
   );
   if (!hasLatex) warnings.push("No latex equations found.");
 
@@ -194,7 +262,6 @@ Output requirements:
 - payload must be a JSON object with this shape:
   {
     "expressions": [ ... ],
-    "settings": { ... optional ... },
     "viewport": { "left": number, "right": number, "bottom": number, "top": number } optional,
     "hint": "short learner instruction" optional
   }
@@ -245,7 +312,11 @@ function buildDesmosPrompt(context: string): string {
   ].join("\n");
 }
 
-async function callDesmosWorker(context: string, model: string, timeoutMs: number): Promise<{
+async function callDesmosWorker(
+  context: string,
+  model: string,
+  timeoutMs: number,
+): Promise<{
   object: z.infer<typeof desmosWorkerOutputSchema> | null;
   rawError: unknown;
   durationMs: number;
@@ -265,7 +336,11 @@ async function callDesmosWorker(context: string, model: string, timeoutMs: numbe
       mode: "json",
     });
 
-    return { object: result.object, rawError: null, durationMs: Date.now() - t0 };
+    return {
+      object: result.object,
+      rawError: null,
+      durationMs: Date.now() - t0,
+    };
   } catch (error) {
     return { object: null, rawError: error, durationMs: Date.now() - t0 };
   } finally {
@@ -282,19 +357,31 @@ const CYAN = "\x1b[36m";
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";
 
-function ok(msg: string) { console.log(`${GREEN}✔ ${msg}${RESET}`); }
-function fail(msg: string) { console.log(`${RED}✘ ${msg}${RESET}`); }
-function warn(msg: string) { console.log(`${YELLOW}⚠ ${msg}${RESET}`); }
-function info(msg: string) { console.log(`${CYAN}  ${msg}${RESET}`); }
-function header(msg: string) { console.log(`\n${BOLD}${msg}${RESET}`); }
+function ok(msg: string) {
+  console.log(`${GREEN}✔ ${msg}${RESET}`);
+}
+function fail(msg: string) {
+  console.log(`${RED}✘ ${msg}${RESET}`);
+}
+function warn(msg: string) {
+  console.log(`${YELLOW}⚠ ${msg}${RESET}`);
+}
+function info(msg: string) {
+  console.log(`${CYAN}  ${msg}${RESET}`);
+}
+function header(msg: string) {
+  console.log(`\n${BOLD}${msg}${RESET}`);
+}
 
 function printExpressionsTable(expressions: DesmosExpressionState[]) {
   for (const expr of expressions) {
     const id = expr.id ?? "(no id)";
-    const latex = expr.latex ?? "(no latex)";
+    const latex = "latex" in expr ? expr.latex : "(no latex)";
     const type = expr.type;
     if (type === "table") {
-      info(`  [table] id=${id} columns=${JSON.stringify(expr.columns).slice(0, 80)}`);
+      info(
+        `  [table] id=${id} columns=${JSON.stringify(expr.columns).slice(0, 80)}`,
+      );
     } else {
       info(`  id=${id}  latex=${String(latex).slice(0, 80)}`);
     }
@@ -303,7 +390,12 @@ function printExpressionsTable(expressions: DesmosExpressionState[]) {
 
 // ─── single test run ─────────────────────────────────────────────────────────
 
-async function runTest(context: string, model: string, timeoutMs: number, withRetry = false): Promise<boolean> {
+async function runTest(
+  context: string,
+  model: string,
+  timeoutMs: number,
+  withRetry = false,
+): Promise<boolean> {
   header(`Testing: "${context}"`);
   info(`Model: ${model}  Timeout: ${timeoutMs}ms`);
 
@@ -319,7 +411,9 @@ async function runTest(context: string, model: string, timeoutMs: number, withRe
       }
       return true;
     }
-    warn(`Deterministic path produced invalid payload: ${validation.errors.join(", ")}`);
+    warn(
+      `Deterministic path produced invalid payload: ${validation.errors.join(", ")}`,
+    );
     info("  Falling through to LLM worker...");
   } else {
     info("No equations extracted from context. Using LLM worker.");
@@ -327,7 +421,11 @@ async function runTest(context: string, model: string, timeoutMs: number, withRe
 
   // Step 2: LLM call via generateObject with mode: 'json'
   info(`Calling LLM worker (generateObject mode: json)...`);
-  const { object, rawError, durationMs } = await callDesmosWorker(context, model, timeoutMs);
+  const { object, rawError, durationMs } = await callDesmosWorker(
+    context,
+    model,
+    timeoutMs,
+  );
 
   info(`LLM call took ${durationMs}ms`);
 
@@ -345,10 +443,12 @@ async function runTest(context: string, model: string, timeoutMs: number, withRe
       if (statusCode) info(`  statusCode: ${statusCode}`);
       if (code) info(`  code: ${code}`);
       if (message) info(`  message: ${String(message).slice(0, 300)}`);
-      if (responseBody) info(`  responseBody: ${String(responseBody).slice(0, 400)}`);
+      if (responseBody)
+        info(`  responseBody: ${String(responseBody).slice(0, 400)}`);
       if (cause && typeof cause === "object") {
         const causeMsg = (cause as Record<string, unknown>).message;
-        if (causeMsg) info(`  cause.message: ${String(causeMsg).slice(0, 200)}`);
+        if (causeMsg)
+          info(`  cause.message: ${String(causeMsg).slice(0, 200)}`);
       }
     } else {
       info(`  raw: ${String(rawError).slice(0, 300)}`);
@@ -369,7 +469,9 @@ async function runTest(context: string, model: string, timeoutMs: number, withRe
   printExpressionsTable(object.payload.expressions);
   if (object.payload.viewport) {
     const vp = object.payload.viewport;
-    info(`  viewport: left=${vp.left} right=${vp.right} bottom=${vp.bottom} top=${vp.top}`);
+    info(
+      `  viewport: left=${vp.left} right=${vp.right} bottom=${vp.bottom} top=${vp.top}`,
+    );
   }
 
   // Step 3: validate
@@ -388,16 +490,26 @@ async function runTest(context: string, model: string, timeoutMs: number, withRe
   info("\n  Per-expression diagnosis:");
   for (let i = 0; i < object.payload.expressions.length; i++) {
     const expr = object.payload.expressions[i];
-    const hasLatex = typeof expr.latex === "string" && (expr.latex as string).trim().length > 0;
+    const hasLatex =
+      "latex" in expr &&
+      typeof expr.latex === "string" &&
+      expr.latex.trim().length > 0;
     const type = expr.type;
-    const isTable = type === "table" && Array.isArray(expr.columns) && (expr.columns as unknown[]).length > 0;
+    const isTable =
+      type === "table" &&
+      Array.isArray(expr.columns) &&
+      (expr.columns as unknown[]).length > 0;
     const isTextOrExpr = type === "text" || type === "expression";
     const isValid = hasLatex || isTable || isTextOrExpr;
     if (!isValid) {
       info(`  [${i}] INVALID — keys: ${Object.keys(expr).join(", ")}`);
       info(`       full: ${JSON.stringify(expr).slice(0, 200)}`);
     } else {
-      const label = hasLatex ? `latex: ${expr.latex}` : isTable ? "table" : `type=${type}`;
+      const label = hasLatex
+        ? `latex: ${"latex" in expr ? expr.latex : ""}`
+        : isTable
+          ? "table"
+          : `type=${type}`;
       info(`  [${i}] ok — ${label}`);
     }
   }
@@ -407,19 +519,29 @@ async function runTest(context: string, model: string, timeoutMs: number, withRe
   // Retry path (mirrors production repair logic)
   warn("  Retrying with repair prompt...");
   const r2 = await callDesmosWorker(
-    context + "\n\nPrevious attempt produced invalid output. Please output clean, valid JSON only.",
+    context +
+      "\n\nPrevious attempt produced invalid output. Please output clean, valid JSON only.",
     model,
     timeoutMs,
   );
   info(`  Retry took ${r2.durationMs}ms`);
 
-  if (r2.rawError) { fail("  Retry also errored"); return false; }
-  if (!r2.object) { fail("  Retry returned null"); return false; }
+  if (r2.rawError) {
+    fail("  Retry also errored");
+    return false;
+  }
+  if (!r2.object) {
+    fail("  Retry returned null");
+    return false;
+  }
 
   ok("  Retry succeeded");
   printExpressionsTable(r2.object.payload.expressions);
   const rv = validateDesmosPayload(r2.object.payload);
-  if (rv.ok) { ok("Retry payload validation passed"); return true; }
+  if (rv.ok) {
+    ok("Retry payload validation passed");
+    return true;
+  }
   fail(`Retry validation failed: ${rv.errors.join(", ")}`);
   return false;
 }
@@ -450,7 +572,9 @@ const BATCH_CASES = [
 
 async function main() {
   if (!OPENROUTER_API_KEY) {
-    console.error(`${RED}Error: OPENROUTER_API_KEY is not set in .env.local${RESET}`);
+    console.error(
+      `${RED}Error: OPENROUTER_API_KEY is not set in .env.local${RESET}`,
+    );
     process.exit(1);
   }
 
@@ -463,11 +587,17 @@ async function main() {
   let retry = false;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--context" && args[i + 1]) { context = args[++i]; }
-    else if (args[i] === "--model" && args[i + 1]) { model = args[++i]; }
-    else if (args[i] === "--timeout" && args[i + 1]) { timeoutMs = Number(args[++i]) || timeoutMs; }
-    else if (args[i] === "--batch") { batch = true; }
-    else if (args[i] === "--retry") { retry = true; }
+    if (args[i] === "--context" && args[i + 1]) {
+      context = args[++i];
+    } else if (args[i] === "--model" && args[i + 1]) {
+      model = args[++i];
+    } else if (args[i] === "--timeout" && args[i + 1]) {
+      timeoutMs = Number(args[++i]) || timeoutMs;
+    } else if (args[i] === "--batch") {
+      batch = true;
+    } else if (args[i] === "--retry") {
+      retry = true;
+    }
   }
 
   if (!batch && !context) {
@@ -495,7 +625,8 @@ Flags:
 
   for (const c of cases) {
     const success = await runTest(c, model, timeoutMs, retry);
-    if (success) passed++; else failed++;
+    if (success) passed++;
+    else failed++;
   }
 
   if (cases.length > 1) {

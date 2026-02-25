@@ -11,7 +11,6 @@ Output requirements:
 - payload must be a JSON object with this shape:
   {
     "expressions": [ ... ],
-    "settings": { ... optional ... },
     "viewport": { "left": number, "right": number, "bottom": number, "top": number } optional,
     "hint": "short learner instruction" optional
   }
