@@ -23,12 +23,12 @@ bun run playground       # launch Convex Agent Playground locally
 
 ```
 OPENROUTER_API_KEY=...
-OPENROUTER_MODEL=anthropic/claude-sonnet-4.6   # optional, this is the default
-SPARK_WORKER_MODEL=z-ai/glm-5                  # optional, model for Spark generation
 NEXT_PUBLIC_DESMOS_API_KEY=...                 # required for desmos_graph sparks
 DAYTONA_API_KEY=...                             # required for lab sandboxes
 DAYTONA_API_URL=https://app.daytona.io/api      # optional override
 ```
+
+Model routing is configured in `lib/model-config.ts` (profiles + active profile).
 
 `predev` runs `convex dev --until-success` before starting — Convex must be configured before `bun run dev` works.
 

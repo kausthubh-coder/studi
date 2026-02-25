@@ -4,6 +4,12 @@ import { createTool } from "@convex-dev/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod";
+import {
+  getActiveModelConfig,
+  getModelConfig,
+  type ModelConfig,
+  type ModelProfile,
+} from "../../lib/model-config";
 import { renderPrompt } from "../../lib/prompts";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
@@ -36,26 +42,20 @@ if (!openRouterApiKey) {
   );
 }
 
-const sceneWorkerModel =
-  process.env.SPARK_WORKER_SCENE_MODEL ??
-  process.env.SPARK_WORKER_MODEL ??
-  "google/gemini-3-flash-preview";
+type SparkWorkerModels = Pick<
+  ModelConfig,
+  "sparkScene" | "sparkDesmos" | "sparkCode" | "sparkQuiz" | "sparkFlash"
+>;
 
-const desmosWorkerModel =
-  process.env.SPARK_WORKER_DESMOS_MODEL ??
-  process.env.SPARK_WORKER_MODEL ??
-  "google/gemini-3-flash-preview";
-
-const codeWorkerModel =
-  process.env.SPARK_WORKER_CODE_MODEL ??
-  process.env.SPARK_WORKER_MODEL ??
-  "google/gemini-3-flash-preview";
-
-const quizWorkerModel =
-  process.env.SPARK_WORKER_QUIZ_MODEL ?? "google/gemini-3-flash-preview";
-
-const flashWorkerModel =
-  process.env.SPARK_WORKER_FLASH_MODEL ?? "google/gemini-3-flash-preview";
+function toSparkWorkerModels(modelConfig: ModelConfig): SparkWorkerModels {
+  return {
+    sparkScene: modelConfig.sparkScene,
+    sparkDesmos: modelConfig.sparkDesmos,
+    sparkCode: modelConfig.sparkCode,
+    sparkQuiz: modelConfig.sparkQuiz,
+    sparkFlash: modelConfig.sparkFlash,
+  };
+}
 
 function parseSparkWorkerTimeoutMs(
   value: string | undefined,
@@ -1017,6 +1017,7 @@ function buildPrompt(params: {
 
 async function buildSceneSpark(
   input: CreateSparkToolInput,
+  workerModels: SparkWorkerModels,
   abortSignal?: AbortSignal,
 ): Promise<CreateSparkToolResult> {
   const skill = sparkSkillById.scene;
@@ -1037,7 +1038,7 @@ async function buildSceneSpark(
     const firstGeneration = await generateWorkerObject<SceneDraft>({
       schema: sceneWorkerOutputSchema,
       prompt,
-      model: sceneWorkerModel,
+      model: workerModels.sparkScene,
       abortSignal,
       timeoutMs: sceneWorkerTimeoutMs,
     });
@@ -1102,7 +1103,7 @@ async function buildSceneSpark(
     const repairedGeneration = await generateWorkerObject<SceneDraft>({
       schema: sceneWorkerOutputSchema,
       prompt: repairPrompt,
-      model: sceneWorkerModel,
+      model: workerModels.sparkScene,
       abortSignal,
       timeoutMs: sceneWorkerTimeoutMs,
     });
@@ -1142,6 +1143,7 @@ async function buildSceneSpark(
 
 async function buildDesmosGraphSpark(
   input: CreateSparkToolInput,
+  workerModels: SparkWorkerModels,
   abortSignal?: AbortSignal,
 ): Promise<CreateSparkToolResult> {
   const skill = sparkSkillById.desmos_graph;
@@ -1177,7 +1179,7 @@ async function buildDesmosGraphSpark(
     const firstGeneration = await generateWorkerObject<DesmosDraft>({
       schema: desmosWorkerOutputSchema,
       prompt,
-      model: desmosWorkerModel,
+      model: workerModels.sparkDesmos,
       abortSignal,
       timeoutMs: desmosWorkerTimeoutMs,
       mode: "json",
@@ -1240,7 +1242,7 @@ async function buildDesmosGraphSpark(
     const repairedGeneration = await generateWorkerObject<DesmosDraft>({
       schema: desmosWorkerOutputSchema,
       prompt: repairPrompt,
-      model: desmosWorkerModel,
+      model: workerModels.sparkDesmos,
       abortSignal,
       timeoutMs: desmosWorkerTimeoutMs,
       mode: "json",
@@ -1278,6 +1280,7 @@ async function buildDesmosGraphSpark(
 
 async function buildCodePlaygroundSpark(
   input: CreateSparkToolInput,
+  workerModels: SparkWorkerModels,
   abortSignal?: AbortSignal,
 ): Promise<CreateSparkToolResult> {
   const skill = sparkSkillById.code_playground;
@@ -1297,7 +1300,7 @@ async function buildCodePlaygroundSpark(
     const firstGeneration = await generateWorkerObject<CodePlaygroundDraft>({
       schema: codePlaygroundWorkerOutputSchema,
       prompt,
-      model: codeWorkerModel,
+      model: workerModels.sparkCode,
       abortSignal,
       timeoutMs: codeWorkerTimeoutMs,
     });
@@ -1352,7 +1355,7 @@ async function buildCodePlaygroundSpark(
     const repairedGeneration = await generateWorkerObject<CodePlaygroundDraft>({
       schema: codePlaygroundWorkerOutputSchema,
       prompt: repairPrompt,
-      model: codeWorkerModel,
+      model: workerModels.sparkCode,
       abortSignal,
       timeoutMs: codeWorkerTimeoutMs,
     });
@@ -1396,6 +1399,7 @@ async function buildCodePlaygroundSpark(
 
 async function buildQuizSpark(
   input: CreateSparkToolInput,
+  workerModels: SparkWorkerModels,
   abortSignal?: AbortSignal,
 ): Promise<CreateSparkToolResult> {
   const skill = sparkSkillById.quiz;
@@ -1415,7 +1419,7 @@ async function buildQuizSpark(
     const firstGeneration = await generateWorkerObject<QuizDraft>({
       schema: quizWorkerOutputSchema,
       prompt,
-      model: quizWorkerModel,
+      model: workerModels.sparkQuiz,
       abortSignal,
       timeoutMs: quizWorkerTimeoutMs,
     });
@@ -1470,7 +1474,7 @@ async function buildQuizSpark(
     const repairedGeneration = await generateWorkerObject<QuizDraft>({
       schema: quizWorkerOutputSchema,
       prompt: repairPrompt,
-      model: quizWorkerModel,
+      model: workerModels.sparkQuiz,
       abortSignal,
       timeoutMs: quizWorkerTimeoutMs,
     });
@@ -1512,6 +1516,7 @@ async function buildQuizSpark(
 
 async function buildFlashCardSpark(
   input: CreateSparkToolInput,
+  workerModels: SparkWorkerModels,
   abortSignal?: AbortSignal,
 ): Promise<CreateSparkToolResult> {
   const skill = sparkSkillById.flash_card;
@@ -1531,7 +1536,7 @@ async function buildFlashCardSpark(
     const firstGeneration = await generateWorkerObject<FlashCardDraft>({
       schema: flashCardWorkerOutputSchema,
       prompt,
-      model: flashWorkerModel,
+      model: workerModels.sparkFlash,
       abortSignal,
       timeoutMs: flashWorkerTimeoutMs,
     });
@@ -1586,7 +1591,7 @@ async function buildFlashCardSpark(
     const repairedGeneration = await generateWorkerObject<FlashCardDraft>({
       schema: flashCardWorkerOutputSchema,
       prompt: repairPrompt,
-      model: flashWorkerModel,
+      model: workerModels.sparkFlash,
       abortSignal,
       timeoutMs: flashWorkerTimeoutMs,
     });
@@ -1626,49 +1631,77 @@ async function buildFlashCardSpark(
   }
 }
 
-const sparkTool = createTool<CreateSparkToolInput, CreateSparkToolResult>({
-  description:
-    "Create a Spark artifact for inline learning interaction. Provide the sparkId and focused learner context.",
-  args: createSparkInputSchema,
-  handler: async (_ctx, args, options) => {
-    const input = normalizeCreateSparkInput(args);
+function createSparkToolWithModels(workerModels: SparkWorkerModels) {
+  return createTool<CreateSparkToolInput, CreateSparkToolResult>({
+    description:
+      "Create a Spark artifact for inline learning interaction. Provide the sparkId and focused learner context.",
+    args: createSparkInputSchema,
+    handler: async (_ctx, args, options) => {
+      const input = normalizeCreateSparkInput(args);
 
-    try {
-      if (input.sparkId === "scene") {
-        return await buildSceneSpark(input, options.abortSignal);
+      try {
+        if (input.sparkId === "scene") {
+          return await buildSceneSpark(
+            input,
+            workerModels,
+            options.abortSignal,
+          );
+        }
+
+        if (input.sparkId === "quiz") {
+          return await buildQuizSpark(input, workerModels, options.abortSignal);
+        }
+
+        if (input.sparkId === "flash_card") {
+          return await buildFlashCardSpark(
+            input,
+            workerModels,
+            options.abortSignal,
+          );
+        }
+
+        if (input.sparkId === "desmos_graph") {
+          return await buildDesmosGraphSpark(
+            input,
+            workerModels,
+            options.abortSignal,
+          );
+        }
+
+        if (input.sparkId === "code_playground") {
+          return await buildCodePlaygroundSpark(
+            input,
+            workerModels,
+            options.abortSignal,
+          );
+        }
+
+        return {
+          status: "failed",
+          workerSummary: "Unsupported spark type.",
+          warnings: [],
+          error: `Unsupported sparkId: ${input.sparkId}`,
+        };
+      } catch (error) {
+        return {
+          status: "failed",
+          workerSummary: "Spark worker crashed while building the artifact.",
+          warnings: [],
+          error: toMessage(error),
+        };
       }
+    },
+  });
+}
 
-      if (input.sparkId === "quiz") {
-        return await buildQuizSpark(input, options.abortSignal);
-      }
+export function createSparkToolForProfile(profile: ModelProfile) {
+  return createSparkToolWithModels(
+    toSparkWorkerModels(getModelConfig(profile)),
+  );
+}
 
-      if (input.sparkId === "flash_card") {
-        return await buildFlashCardSpark(input, options.abortSignal);
-      }
+const activeSparkWorkerModels = toSparkWorkerModels(getActiveModelConfig());
 
-      if (input.sparkId === "desmos_graph") {
-        return await buildDesmosGraphSpark(input, options.abortSignal);
-      }
-
-      if (input.sparkId === "code_playground") {
-        return await buildCodePlaygroundSpark(input, options.abortSignal);
-      }
-
-      return {
-        status: "failed",
-        workerSummary: "Unsupported spark type.",
-        warnings: [],
-        error: `Unsupported sparkId: ${input.sparkId}`,
-      };
-    } catch (error) {
-      return {
-        status: "failed",
-        workerSummary: "Spark worker crashed while building the artifact.",
-        warnings: [],
-        error: toMessage(error),
-      };
-    }
-  },
-});
-
-export const createSparkTool = sparkTool;
+export const createSparkTool = createSparkToolWithModels(
+  activeSparkWorkerModels,
+);

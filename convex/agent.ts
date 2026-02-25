@@ -3,11 +3,17 @@
 import { Agent } from "@convex-dev/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { stepCountIs } from "ai";
-import { components } from "./_generated/api";
-import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
-import { loadPrompt, renderPrompt } from "../lib/prompts";
-import { createSparkTool } from "./sparks/tools";
+import {
+  activeModelProfile,
+  getCodiAgentName,
+  getModelConfig,
+  getStudiAgentName,
+  type ModelProfile,
+} from "../lib/model-config";
 import { getCodeSparkContextTool } from "../lib/agent-tools/getCodeSparkContextTool";
+import { loadPrompt, renderPrompt } from "../lib/prompts";
+import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
+import { components } from "./_generated/api";
 import {
   archiveLabTool,
   createLabTool,
@@ -19,6 +25,7 @@ import {
   runTool,
   writeTool,
 } from "./labTools";
+import { createSparkToolForProfile } from "./sparks/tools";
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
@@ -32,43 +39,71 @@ const openrouter = createOpenRouter({
   apiKey: openRouterApiKey,
 });
 
-const defaultModel =
-  process.env.OPENROUTER_MODEL ?? "anthropic/claude-sonnet-4.6";
-
 const studiAgentInstructions = renderPrompt("agents/studi.md", {
   sparkCatalogPromptBlock: sparkCatalogPromptBlock(),
 });
 
 const codiAgentInstructions = loadPrompt("agents/codi.md");
 
-export const studiAgent: Agent = new Agent(components.agent, {
-  name: "studi",
-  languageModel: openrouter.chat(defaultModel),
-  stopWhen: stepCountIs(6),
-  tools: {
-    create_spark: createSparkTool,
-    get_code_spark_context: getCodeSparkContextTool,
-    create_lab: createLabTool,
-    archive_lab: archiveLabTool,
-    glob: globTool,
-    run: runTool,
-  },
-  instructions: studiAgentInstructions,
-});
+function createStudiAgent(profile: ModelProfile): Agent {
+  const modelConfig = getModelConfig(profile);
+  return new Agent(components.agent, {
+    name: getStudiAgentName(profile),
+    languageModel: openrouter.chat(modelConfig.studiAgent),
+    stopWhen: stepCountIs(6),
+    tools: {
+      create_spark: createSparkToolForProfile(profile),
+      get_code_spark_context: getCodeSparkContextTool,
+      create_lab: createLabTool,
+      archive_lab: archiveLabTool,
+      glob: globTool,
+      run: runTool,
+    },
+    instructions: studiAgentInstructions,
+  });
+}
 
-export const codiAgent: Agent = new Agent(components.agent, {
-  name: "codi",
-  languageModel: openrouter.chat(defaultModel),
-  stopWhen: stepCountIs(10),
-  tools: {
-    list: listTool,
-    read: readTool,
-    grep: grepTool,
-    glob: globTool,
-    run: runTool,
-    edit: editTool,
-    write: writeTool,
-    archive_lab: archiveLabTool,
-  },
-  instructions: codiAgentInstructions,
-});
+function createCodiAgent(profile: ModelProfile): Agent {
+  const modelConfig = getModelConfig(profile);
+  return new Agent(components.agent, {
+    name: getCodiAgentName(profile),
+    languageModel: openrouter.chat(modelConfig.codiAgent),
+    stopWhen: stepCountIs(10),
+    tools: {
+      list: listTool,
+      read: readTool,
+      grep: grepTool,
+      glob: globTool,
+      run: runTool,
+      edit: editTool,
+      write: writeTool,
+      archive_lab: archiveLabTool,
+    },
+    instructions: codiAgentInstructions,
+  });
+}
+
+export const studiAgentsByProfile: Record<ModelProfile, Agent> = {
+  balanced: createStudiAgent("balanced"),
+  fast: createStudiAgent("fast"),
+  quality: createStudiAgent("quality"),
+};
+
+export const codiAgentsByProfile: Record<ModelProfile, Agent> = {
+  balanced: createCodiAgent("balanced"),
+  fast: createCodiAgent("fast"),
+  quality: createCodiAgent("quality"),
+};
+
+export const studiAgent: Agent = studiAgentsByProfile[activeModelProfile];
+
+export const codiAgent: Agent = codiAgentsByProfile[activeModelProfile];
+
+export const playgroundAgents: Agent[] = [
+  studiAgentsByProfile.balanced,
+  codiAgentsByProfile.balanced,
+  studiAgentsByProfile.fast,
+  codiAgentsByProfile.fast,
+  studiAgentsByProfile.quality,
+  codiAgentsByProfile.quality,
+];

@@ -16,6 +16,8 @@
     "playground": "bunx @convex-dev/agent-playground",
     "agentic:test": "bun agentic-testing/agent-lab.ts",
     "agentic:compare": "bun agentic-testing/model-compare.ts",
+    "agentic:models": "bun agentic-testing/models.ts",
+    "agentic:use-profile": "bun agentic-testing/use-model-profile.ts",
     "debug:desmos": "bun agentic-testing/debug-desmos.ts"
   },
   "dependencies": {

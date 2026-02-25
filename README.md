@@ -88,9 +88,10 @@ Labs give learners real artifacts — proof of what they built, not just what th
 
 ```bash
 OPENROUTER_API_KEY=...
-OPENROUTER_MODEL=anthropic/claude-sonnet-4.6
 NEXT_PUBLIC_DESMOS_API_KEY=... # required for desmos_graph sparks
 ```
+
+Model routing is configured in `lib/model-config.ts`.
 
 1. Install dependencies:
 
@@ -233,11 +234,6 @@ Set frontend vars in `.env.local` and backend vars in Convex environment setting
 ```bash
 # Required (agent + spark worker)
 OPENROUTER_API_KEY=...
-
-# Optional model overrides
-OPENROUTER_MODEL=anthropic/claude-sonnet-4.6
-SPARK_WORKER_SCENE_MODEL=google/gemini-3-flash-preview
-SPARK_WORKER_DESMOS_MODEL=google/gemini-3-flash-preview
 SPARK_WORKER_TIMEOUT_MS=18000
 SPARK_WORKER_SCENE_TIMEOUT_MS=35000
 SPARK_WORKER_DESMOS_TIMEOUT_MS=20000
@@ -256,6 +252,8 @@ DAYTONA_API_KEY=...
 # Optional Daytona API override
 DAYTONA_API_URL=https://app.daytona.io/api
 ```
+
+Model routing is configured in `lib/model-config.ts` (profile map + active profile).
 
 ## Getting Started
 

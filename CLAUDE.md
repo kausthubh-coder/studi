@@ -20,11 +20,12 @@ bun run playground       # launch Convex Agent Playground locally
 **Package manager**: always use `bun` / `bunx`. Never use `npm` / `npx`.
 
 **Environment variables** (`.env.local` + Convex env):
+
 ```
 OPENROUTER_API_KEY=...
-OPENROUTER_MODEL=anthropic/claude-sonnet-4.6   # optional, this is the default
-SPARK_WORKER_MODEL=z-ai/glm-5                  # optional, model for Spark generation
 ```
+
+Model routing is configured in `lib/model-config.ts` (profiles + active profile).
 
 `predev` runs `convex dev --until-success` before starting — Convex must be configured before `bun run dev` works.
 
@@ -46,15 +47,15 @@ User submits → chat.sendMessage (mutation)
 
 ### Convex backend (`convex/`)
 
-| File | Role |
-|---|---|
-| `schema.ts` | `userThreads` table (maps Clerk userId → Agent threadId) + `attachments` table |
-| `agent.ts` | `studiAgent` — `@convex-dev/agent` Agent wired to OpenRouter with `create_spark` tool |
-| `chat.ts` | Public queries/mutations: `listThreads`, `listThreadMessages`, `sendMessage`, `generateUploadUrl`, `saveAttachment` plus internal helpers |
-| `chatActions.ts` | Actions: `createThread` (public), `generateAssistantReply` (internal) |
-| `sparks/tools.ts` | `createSparkTool` — Convex tool that calls a spark-worker LLM, validates HTML, retries once on failure |
-| `convex.config.ts` | Registers `@convex-dev/agent` component |
-| `playground.ts` | Exposes Agent Playground API (for debugging) |
+| File               | Role                                                                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema.ts`        | `userThreads` table (maps Clerk userId → Agent threadId) + `attachments` table                                                            |
+| `agent.ts`         | `studiAgent` — `@convex-dev/agent` Agent wired to OpenRouter with `create_spark` tool                                                     |
+| `chat.ts`          | Public queries/mutations: `listThreads`, `listThreadMessages`, `sendMessage`, `generateUploadUrl`, `saveAttachment` plus internal helpers |
+| `chatActions.ts`   | Actions: `createThread` (public), `generateAssistantReply` (internal)                                                                     |
+| `sparks/tools.ts`  | `createSparkTool` — Convex tool that calls a spark-worker LLM, validates HTML, retries once on failure                                    |
+| `convex.config.ts` | Registers `@convex-dev/agent` component                                                                                                   |
+| `playground.ts`    | Exposes Agent Playground API (for debugging)                                                                                              |
 
 `userThreads` is the ownership bridge: Convex Agent manages the actual thread/message storage, while `userThreads` lets us do auth checks and list/sort threads per user.
 

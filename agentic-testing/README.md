@@ -81,18 +81,26 @@ Notes:
 Use this to compare model speed and spark output quality across the same prompts.
 
 ```bash
-bun run agentic:compare --models "anthropic/claude-sonnet-4.6,x-ai/grok-code-fast-1,x-ai/grok-4.1-fast,google/gemini-3-flash-preview,google/gemini-2.5-flash" --prompt "Create a derivative tangent-line scene with draggable point and secant-to-tangent intuition." --prompt "Create a projectile-motion physics scene with angle/speed sliders and trajectory." --repeats 1
+bun run agentic:compare --profiles "balanced,fast,quality" --prompt "Create a derivative tangent-line scene with draggable point and secant-to-tangent intuition." --prompt "Create a projectile-motion physics scene with angle/speed sliders and trajectory." --repeats 1
 ```
 
 What it does:
 
-- updates `SPARK_WORKER_SCENE_MODEL` per model during the run (and restores it afterward)
-- runs `agentic:test run` for each model+prompt combination
+- runs `agentic:test run` for each profile+prompt combination using the profile-specific Playground agent name
 - saves generated scene HTML files for manual inspection
 - writes a consolidated report JSON with latency + quality heuristics
 
 Optional flags:
 
-- `--scope both` also sets `OPENROUTER_MODEL` to the tested model for full pipeline comparison
+- `--scope both` includes both the scene model and agent model in run labels
 - `--context` include prompt context snapshots in each run artifact
 - `--debugRaw` include raw playground message payloads
+
+## Model Profiles
+
+All model routing now lives in `lib/model-config.ts`.
+
+- change `activeModelProfile` to switch default models used by app/runtime
+- use profile-specific Playground agents for CLI testing: `studi`, `studi-fast`, `studi-quality` (the active profile always maps to plain `studi`)
+- inspect profile mappings quickly: `bun run agentic:models`
+- switch active profile from CLI: `bun run agentic:use-profile --profile fast`

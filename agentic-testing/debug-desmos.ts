@@ -8,13 +8,13 @@
  *
  * Env vars (loaded from .env.local automatically by Bun):
  *   OPENROUTER_API_KEY  (required)
- *   SPARK_WORKER_DESMOS_MODEL  (optional override)
  *   SPARK_WORKER_DESMOS_TIMEOUT_MS  (optional override)
  */
 
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { getActiveModelConfig } from "../lib/model-config";
 import { loadPrompt, renderPrompt } from "../lib/prompts";
 
 // ─── inline copies of the types/schemas from contracts + tools ─────────────
@@ -261,10 +261,7 @@ const desmosSkillInstructions = loadPrompt("sparks/skills/desmos-graph.md");
 // ─── LLM call ───────────────────────────────────────────────────────────────
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
-const DEFAULT_MODEL =
-  process.env.SPARK_WORKER_DESMOS_MODEL ??
-  process.env.SPARK_WORKER_MODEL ??
-  "google/gemini-3-flash-preview";
+const DEFAULT_MODEL = getActiveModelConfig().sparkDesmos;
 const DEFAULT_TIMEOUT_MS = Math.min(
   20_000,
   Number.parseInt(

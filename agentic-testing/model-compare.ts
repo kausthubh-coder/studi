@@ -1,11 +1,18 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  getModelConfig,
+  getStudiAgentName,
+  isModelProfile,
+  listModelProfiles,
+  type ModelProfile,
+} from "../lib/model-config";
 
 type CompareScope = "scene" | "both";
 
 type CompareOptions = {
-  models: string[];
+  models: ModelProfile[];
   prompts: string[];
   userId: string;
   repeats: number;
@@ -25,7 +32,7 @@ type HtmlMetrics = {
 };
 
 type TrialResult = {
-  model: string;
+  model: ModelProfile;
   prompt: string;
   repeat: number;
   artifactPath?: string;
@@ -55,10 +62,6 @@ type CompareReport = {
   runId: string;
   createdAt: string;
   options: CompareOptions;
-  previousEnv: {
-    OPENROUTER_MODEL: string | null;
-    SPARK_WORKER_SCENE_MODEL: string | null;
-  };
   trials: TrialResult[];
 };
 
@@ -70,18 +73,19 @@ function printUsageAndExit(message?: string): never {
   console.log(`
 Model Compare CLI
 
-Compares spark scene generation speed + output quality across models.
+Compares spark scene generation speed + output quality across model profiles.
 
 Usage:
-  bun agentic-testing/model-compare.ts --models "anthropic/claude-sonnet-4.6,x-ai/grok-code-fast-1" --prompt "Create a derivative tangent scene"
+  bun agentic-testing/model-compare.ts --profiles "balanced,fast,quality" --prompt "Create a derivative tangent scene"
 
 Flags:
-  --models <csv>          Required comma-separated model list
+  --profiles <csv>        Optional profile list from lib/model-config.ts (default: all)
+  --models <csv>          Alias for --profiles
   --prompt <text>         Prompt (repeat flag for multiple prompts)
   --userId <id>           User id (default: model-compare-user)
-  --repeats <n>           Repeats per model+prompt (default: 1)
+  --repeats <n>           Repeats per profile+prompt (default: 1)
   --pollMs <n>            Poll interval ms for agentic:test (default: 250)
-  --scope <scene|both>    scene=only SPARK_WORKER_SCENE_MODEL, both=also OPENROUTER_MODEL
+  --scope <scene|both>    scene=labels scene model, both=labels scene+agent models
   --context               Pass --context to agentic:test runs
   --debugRaw              Pass --debugRaw to agentic:test runs
 
@@ -131,16 +135,25 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 }
 
 function parseOptions(argv: string[]): CompareOptions {
-  const modelsRaw = getLastFlagValue(argv, "models");
-  if (!modelsRaw) {
-    printUsageAndExit("Missing required --models");
-  }
-  const models = modelsRaw
+  const modelsRaw =
+    getLastFlagValue(argv, "profiles") ??
+    getLastFlagValue(argv, "models") ??
+    listModelProfiles().join(",");
+  const modelTokens = modelsRaw
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+  const invalidProfiles = modelTokens.filter((item) => !isModelProfile(item));
+  if (invalidProfiles.length > 0) {
+    printUsageAndExit(
+      `Unknown profile(s): ${invalidProfiles.join(", ")}. Use balanced, fast, quality.`,
+    );
+  }
+  const models = modelTokens as ModelProfile[];
   if (models.length === 0) {
-    printUsageAndExit("--models must include at least one model");
+    printUsageAndExit(
+      "Profile list is empty or invalid. Use balanced, fast, quality.",
+    );
   }
 
   const prompts = getFlagValues(argv, "prompt")
@@ -187,33 +200,6 @@ function runCommand(
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
   };
-}
-
-function getConvexEnvVar(name: string): string | null {
-  const result = runCommand("bunx", ["convex", "env", "get", name]);
-  if (!result.ok) {
-    return null;
-  }
-  const value = result.stdout.trim();
-  return value.length > 0 ? value : null;
-}
-
-function setConvexEnvVar(name: string, value: string): void {
-  const result = runCommand("bunx", ["convex", "env", "set", name, value]);
-  if (!result.ok) {
-    throw new Error(
-      `Failed to set Convex env ${name}: ${result.stderr || result.stdout}`,
-    );
-  }
-}
-
-function removeConvexEnvVar(name: string): void {
-  const result = runCommand("bunx", ["convex", "env", "remove", name]);
-  if (!result.ok) {
-    throw new Error(
-      `Failed to remove Convex env ${name}: ${result.stderr || result.stdout}`,
-    );
-  }
 }
 
 function sanitizePathSegment(value: string): string {
@@ -275,12 +261,15 @@ function scoreQuality(params: {
 }
 
 async function runTrial(params: {
-  model: string;
+  model: ModelProfile;
   prompt: string;
   repeat: number;
   options: CompareOptions;
   outputDir: string;
 }): Promise<TrialResult> {
+  const modelConfig = getModelConfig(params.model);
+  const agentName = getStudiAgentName(params.model);
+
   const modelDir = path.join(
     params.outputDir,
     sanitizePathSegment(params.model),
@@ -296,8 +285,12 @@ async function runTrial(params: {
     "--saveSceneHtml",
     "--sceneOutDir",
     promptDir,
+    "--agentName",
+    agentName,
     "--modelLabel",
-    params.model,
+    params.options.scope === "both"
+      ? `${params.model} (agent=${modelConfig.studiAgent}, scene=${modelConfig.sparkScene})`
+      : `${params.model} (scene=${modelConfig.sparkScene})`,
     "--pollMs",
     String(params.options.pollMs),
     "--prompt",
@@ -463,18 +456,6 @@ function printSummary(report: CompareReport): void {
   }
 }
 
-async function restoreEnv(name: string, value: string | null): Promise<void> {
-  if (value === null) {
-    try {
-      removeConvexEnvVar(name);
-    } catch {
-      // no-op
-    }
-    return;
-  }
-  setConvexEnvVar(name, value);
-}
-
 async function main(): Promise<void> {
   const options = parseOptions(process.argv.slice(2));
 
@@ -488,54 +469,41 @@ async function main(): Promise<void> {
   );
   await mkdir(baseDir, { recursive: true });
 
-  const previousOpenRouterModel = getConvexEnvVar("OPENROUTER_MODEL");
-  const previousSceneModel = getConvexEnvVar("SPARK_WORKER_SCENE_MODEL");
-
   const report: CompareReport = {
     runId,
     createdAt: new Date().toISOString(),
     options,
-    previousEnv: {
-      OPENROUTER_MODEL: previousOpenRouterModel,
-      SPARK_WORKER_SCENE_MODEL: previousSceneModel,
-    },
     trials: [],
   };
 
-  try {
-    for (const model of options.models) {
-      console.log(`\n=== Model: ${model} ===`);
-      setConvexEnvVar("SPARK_WORKER_SCENE_MODEL", model);
-      if (options.scope === "both") {
-        setConvexEnvVar("OPENROUTER_MODEL", model);
-      }
+  for (const model of options.models) {
+    const modelConfig = getModelConfig(model);
+    const modelLabel =
+      options.scope === "both"
+        ? `agent=${modelConfig.studiAgent}, scene=${modelConfig.sparkScene}`
+        : `scene=${modelConfig.sparkScene}`;
+    console.log(`\n=== Model Profile: ${model} (${modelLabel}) ===`);
 
-      for (const prompt of options.prompts) {
-        for (let repeat = 1; repeat <= options.repeats; repeat += 1) {
-          console.log(`- Running prompt (repeat ${repeat}/${options.repeats})`);
-          const trial = await runTrial({
-            model,
-            prompt,
-            repeat,
-            options,
-            outputDir: path.join(baseDir, "scenes"),
-          });
-          report.trials.push(trial);
+    for (const prompt of options.prompts) {
+      for (let repeat = 1; repeat <= options.repeats; repeat += 1) {
+        console.log(`- Running prompt (repeat ${repeat}/${options.repeats})`);
+        const trial = await runTrial({
+          model,
+          prompt,
+          repeat,
+          options,
+          outputDir: path.join(baseDir, "scenes"),
+        });
+        report.trials.push(trial);
 
-          if (trial.error) {
-            console.log(`  error: ${trial.error}`);
-          } else {
-            console.log(
-              `  totalMs=${trial.totalDurationMs ?? "n/a"}, sparkMs=${trial.sparkDurationMs ?? "n/a"}, quality=${trial.qualityScore ?? 0}`,
-            );
-          }
+        if (trial.error) {
+          console.log(`  error: ${trial.error}`);
+        } else {
+          console.log(
+            `  totalMs=${trial.totalDurationMs ?? "n/a"}, sparkMs=${trial.sparkDurationMs ?? "n/a"}, quality=${trial.qualityScore ?? 0}`,
+          );
         }
       }
-    }
-  } finally {
-    await restoreEnv("SPARK_WORKER_SCENE_MODEL", previousSceneModel);
-    if (options.scope === "both") {
-      await restoreEnv("OPENROUTER_MODEL", previousOpenRouterModel);
     }
   }
 
