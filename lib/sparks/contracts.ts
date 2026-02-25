@@ -6,6 +6,7 @@ export const sparkTypes = [
   "flash_card",
   "desmos_graph",
   "code_playground",
+  "web_playground",
 ] as const;
 
 export type SparkType = (typeof sparkTypes)[number];
@@ -78,6 +79,14 @@ export type CodePlaygroundPayload = {
   runHint?: string;
 };
 
+export type WebPlaygroundPayload = {
+  html: string;
+  css?: string;
+  js?: string;
+  instructions?: string;
+  runHint?: string;
+};
+
 export type SparkSceneArtifact = {
   kind: "spark_scene";
   version: typeof sparkSceneVersion;
@@ -133,12 +142,24 @@ export type SparkCodePlaygroundArtifact = {
   payload: CodePlaygroundPayload;
 };
 
+export type SparkWebPlaygroundArtifact = {
+  kind: "spark_web_playground";
+  version: typeof sparkSceneVersion;
+  sparkType: "web_playground";
+  mode: SparkMode;
+  artifactId?: string;
+  title: string;
+  summary?: string;
+  payload: WebPlaygroundPayload;
+};
+
 export type SparkArtifact =
   | SparkSceneArtifact
   | SparkQuizArtifact
   | SparkFlashCardArtifact
   | SparkDesmosGraphArtifact
-  | SparkCodePlaygroundArtifact;
+  | SparkCodePlaygroundArtifact
+  | SparkWebPlaygroundArtifact;
 
 export type CreateSparkToolInput = {
   sparkId: SparkType;
@@ -201,6 +222,14 @@ export type CodePlaygroundSparkDraft = {
   workerSummary?: string;
 };
 
+export type WebPlaygroundSparkDraft = {
+  payload: WebPlaygroundPayload;
+  artifactId?: string;
+  title?: string;
+  summary?: string;
+  workerSummary?: string;
+};
+
 export type SparkValidationResult = {
   ok: boolean;
   errors: string[];
@@ -231,6 +260,7 @@ const sparkTypeLabels: Record<SparkType, string> = {
   flash_card: "Flash Card",
   desmos_graph: "Desmos Graph",
   code_playground: "Code Playground",
+  web_playground: "Web Playground",
 };
 
 function clampText(value: string, maxLength: number): string {
@@ -297,6 +327,9 @@ function normalizeSparkType(sparkType: string | undefined): SparkType {
     return sparkType;
   }
   if (sparkType === "code_playground") {
+    return sparkType;
+  }
+  if (sparkType === "web_playground") {
     return sparkType;
   }
   return "scene";
@@ -691,6 +724,48 @@ function normalizeFlashCardPayload(input: unknown): FlashCardSparkPayload {
   };
 }
 
+function normalizeWebPlaygroundPayload(input: unknown): WebPlaygroundPayload {
+  const candidate = isPlainObject(input) ? input : {};
+
+  const htmlRaw =
+    typeof candidate.html === "string"
+      ? clampPlaygroundCode(candidate.html)
+      : "";
+  const html =
+    htmlRaw.trim().length > 0
+      ? htmlRaw
+      : '<!doctype html>\n<html>\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>Web Playground</title>\n  </head>\n  <body>\n    <h1>Hello, Studi!</h1>\n    <p>Edit this HTML, CSS, and JavaScript to learn frontend basics.</p>\n  </body>\n</html>';
+
+  const css =
+    typeof candidate.css === "string" && candidate.css.trim().length > 0
+      ? clampPlaygroundCode(candidate.css)
+      : undefined;
+
+  const js =
+    typeof candidate.js === "string" && candidate.js.trim().length > 0
+      ? clampPlaygroundCode(candidate.js)
+      : undefined;
+
+  const instructions =
+    typeof candidate.instructions === "string" &&
+    candidate.instructions.trim().length > 0
+      ? clampText(candidate.instructions, maxInstructionsLength)
+      : "Edit the files and click Run to preview your webpage.";
+
+  const runHint =
+    typeof candidate.runHint === "string" && candidate.runHint.trim().length > 0
+      ? clampText(candidate.runHint, maxRunHintLength)
+      : undefined;
+
+  return {
+    html,
+    css,
+    js,
+    instructions,
+    runHint,
+  };
+}
+
 export function normalizeSparkQuizDraft(
   draft: QuizSparkDraft,
 ): SparkQuizArtifact {
@@ -842,6 +917,36 @@ export function normalizeSparkCodePlaygroundDraft(
     title,
     summary,
     payload: normalizedPayload,
+  };
+}
+
+export function normalizeSparkWebPlaygroundDraft(
+  draft: WebPlaygroundSparkDraft,
+): SparkWebPlaygroundArtifact {
+  const title = clampText(
+    typeof draft.title === "string" && draft.title.trim().length > 0
+      ? draft.title
+      : getSparkTypeLabel("web_playground"),
+    maxTitleLength,
+  );
+
+  const summary =
+    typeof draft.summary === "string" && draft.summary.trim().length > 0
+      ? clampText(draft.summary, maxSummaryLength)
+      : undefined;
+
+  return {
+    kind: "spark_web_playground",
+    version: sparkSceneVersion,
+    sparkType: "web_playground",
+    mode: "editable",
+    artifactId:
+      typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
+        ? clampText(draft.artifactId, 120)
+        : undefined,
+    title,
+    summary,
+    payload: normalizeWebPlaygroundPayload(draft.payload),
   };
 }
 
@@ -1062,6 +1167,21 @@ function isCodePlaygroundPayload(
   );
 }
 
+function isWebPlaygroundPayload(value: unknown): value is WebPlaygroundPayload {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.html === "string" &&
+    (value.css === undefined || typeof value.css === "string") &&
+    (value.js === undefined || typeof value.js === "string") &&
+    (value.instructions === undefined ||
+      typeof value.instructions === "string") &&
+    (value.runHint === undefined || typeof value.runHint === "string")
+  );
+}
+
 export function isSparkCodePlaygroundArtifact(
   value: unknown,
 ): value is SparkCodePlaygroundArtifact {
@@ -1090,13 +1210,42 @@ export function isSparkCodePlaygroundArtifact(
   return isCodePlaygroundPayload(candidate.payload);
 }
 
+export function isSparkWebPlaygroundArtifact(
+  value: unknown,
+): value is SparkWebPlaygroundArtifact {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<SparkWebPlaygroundArtifact>;
+  if (
+    candidate.kind !== "spark_web_playground" ||
+    candidate.version !== sparkSceneVersion ||
+    candidate.sparkType !== "web_playground" ||
+    typeof candidate.title !== "string" ||
+    (candidate.mode !== "readonly" && candidate.mode !== "editable")
+  ) {
+    return false;
+  }
+
+  if (
+    candidate.artifactId !== undefined &&
+    typeof candidate.artifactId !== "string"
+  ) {
+    return false;
+  }
+
+  return isWebPlaygroundPayload(candidate.payload);
+}
+
 export function isSparkArtifact(value: unknown): value is SparkArtifact {
   return (
     isSparkSceneArtifact(value) ||
     isSparkQuizArtifact(value) ||
     isSparkFlashCardArtifact(value) ||
     isSparkDesmosGraphArtifact(value) ||
-    isSparkCodePlaygroundArtifact(value)
+    isSparkCodePlaygroundArtifact(value) ||
+    isSparkWebPlaygroundArtifact(value)
   );
 }
 

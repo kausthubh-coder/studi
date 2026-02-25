@@ -1,0 +1,26 @@
+{
+  "name": "web-playground-smoke",
+  "defaults": {
+    "agentName": "studi",
+    "newThread": true,
+    "title": "Web Playground Smoke",
+    "pollMs": 250,
+    "includeContext": false,
+    "expectTools": ["create_spark"],
+    "failOnToolError": true
+  },
+  "cases": [
+    {
+      "name": "html-css-js-playground",
+      "prompt": "Create a web_playground spark that teaches CSS hover transitions with a simple button. Include editable HTML, CSS, and JS.",
+      "repeat": 1,
+      "modelLabel": "cheap-fast"
+    },
+    {
+      "name": "html-only-playground",
+      "prompt": "Create a web_playground spark for learning semantic HTML headings and lists. Keep JavaScript optional.",
+      "repeat": 1,
+      "modelLabel": "cheap-fast"
+    }
+  ]
+}

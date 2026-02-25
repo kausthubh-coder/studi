@@ -4,6 +4,7 @@ import { memo, useCallback } from "react";
 import DesmosGraphScene from "@/components/sparks/scenes/DesmosGraphScene";
 import CodePlaygroundScene from "@/components/sparks/scenes/CodePlaygroundScene";
 import HtmlCssJsSandboxScene from "@/components/sparks/scenes/HtmlCssJsSandboxScene";
+import WebPlaygroundScene from "@/components/sparks/scenes/WebPlaygroundScene";
 import QuizScene from "@/components/sparks/scenes/QuizScene";
 import FlashCardScene from "@/components/sparks/scenes/FlashCardScene";
 import { getSparkTypeLabel, type SparkArtifact } from "@/lib/sparks/contracts";
@@ -26,6 +27,7 @@ function getBadgeClass(kind: SparkArtifact["kind"]): string {
   if (kind === "spark_quiz") return "badge-quiz";
   if (kind === "spark_flash_card") return "badge-flash";
   if (kind === "spark_code_playground") return "badge-code";
+  if (kind === "spark_web_playground") return "badge-quiz";
   if (kind === "spark_desmos_graph") return "badge-desmos";
   return "badge-scene";
 }
@@ -40,7 +42,8 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
   const isExpandable =
     artifact.kind === "spark_scene" ||
     artifact.kind === "spark_desmos_graph" ||
-    artifact.kind === "spark_code_playground";
+    artifact.kind === "spark_code_playground" ||
+    artifact.kind === "spark_web_playground";
   const isExpanded =
     isExpandable && expandedSparkInstanceId === sparkInstanceId;
   const isCodePlayground = artifact.kind === "spark_code_playground";
@@ -77,6 +80,8 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
       <FlashCardScene payload={artifact.payload} isExpanded={false} />
     ) : artifact.kind === "spark_desmos_graph" ? (
       <DesmosGraphScene payload={artifact.payload} isExpanded={false} />
+    ) : artifact.kind === "spark_web_playground" ? (
+      <WebPlaygroundScene payload={artifact.payload} isExpanded={false} />
     ) : (
       <CodePlaygroundScene
         payload={artifact.payload}

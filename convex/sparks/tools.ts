@@ -3,6 +3,7 @@
 import { createTool } from "@convex-dev/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
+import type { FunctionReference } from "convex/server";
 import { z } from "zod";
 import {
   getActiveModelConfig,
@@ -16,6 +17,7 @@ import {
   getSparkTypeLabel,
   normalizeSparkFlashCardDraft,
   normalizeSparkCodePlaygroundDraft,
+  normalizeSparkWebPlaygroundDraft,
   normalizeCreateSparkInput,
   normalizeSparkQuizDraft,
   type CodePlaygroundPayload,
@@ -32,7 +34,17 @@ import {
   type QuizSparkPayload,
   type SparkType,
   type SparkValidationResult,
+  type WebPlaygroundPayload,
+  type WebPlaygroundSparkDraft,
 } from "../../lib/sparks/contracts";
+import { internal } from "../_generated/api";
+import { capturePosthogEvent } from "../posthog";
+
+const internalApi = internal as unknown as {
+  telemetry: {
+    insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
+  };
+};
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
@@ -106,9 +118,16 @@ const openrouter = createOpenRouter({
 
 const createSparkInputSchema = z.object({
   sparkId: z
-    .enum(["scene", "quiz", "flash_card", "desmos_graph", "code_playground"])
+    .enum([
+      "scene",
+      "quiz",
+      "flash_card",
+      "desmos_graph",
+      "code_playground",
+      "web_playground",
+    ])
     .describe(
-      "Spark id to generate. Use scene, quiz, flash_card, desmos_graph, or code_playground.",
+      "Spark id to generate. Use scene, quiz, flash_card, desmos_graph, code_playground, or web_playground.",
     ),
   context: z
     .string()
@@ -183,6 +202,14 @@ const codePlaygroundPayloadSchema: z.ZodType<CodePlaygroundPayload> = z.object({
   runHint: z.string().optional(),
 });
 
+const webPlaygroundPayloadSchema: z.ZodType<WebPlaygroundPayload> = z.object({
+  html: z.string().min(1),
+  css: z.string().optional(),
+  js: z.string().optional(),
+  instructions: z.string().optional(),
+  runHint: z.string().optional(),
+});
+
 const quizChoiceSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1),
@@ -233,6 +260,13 @@ const codePlaygroundWorkerOutputSchema = z.object({
   payload: codePlaygroundPayloadSchema,
 });
 
+const webPlaygroundWorkerOutputSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  workerSummary: z.string(),
+  payload: webPlaygroundPayloadSchema,
+});
+
 const quizWorkerOutputSchema = z.object({
   title: z.string(),
   summary: z.string(),
@@ -250,6 +284,7 @@ const flashCardWorkerOutputSchema = z.object({
 type SceneDraft = z.infer<typeof sceneWorkerOutputSchema>;
 type DesmosDraft = z.infer<typeof desmosWorkerOutputSchema>;
 type CodePlaygroundDraft = z.infer<typeof codePlaygroundWorkerOutputSchema>;
+type WebPlaygroundDraft = z.infer<typeof webPlaygroundWorkerOutputSchema>;
 type QuizDraft = z.infer<typeof quizWorkerOutputSchema>;
 type FlashCardDraft = z.infer<typeof flashCardWorkerOutputSchema>;
 
@@ -604,6 +639,51 @@ function validateCodePlaygroundPayload(
 
   if (/\brequests\b|\burllib\b|\bsocket\b/i.test(payload.starterCode)) {
     warnings.push("Starter code may rely on network-related modules.");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+function validateWebPlaygroundPayload(
+  payload: WebPlaygroundPayload,
+): SparkValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!payload.html.trim()) {
+    errors.push("Web playground html is required.");
+  }
+
+  if (payload.html.length > 22_000) {
+    errors.push("Web playground html is too large.");
+  }
+
+  if (payload.css && payload.css.length > 22_000) {
+    errors.push("Web playground css is too large.");
+  }
+
+  if (payload.js && payload.js.length > 22_000) {
+    errors.push("Web playground js is too large.");
+  }
+
+  if (payload.instructions && payload.instructions.length > 1_200) {
+    errors.push("Web playground instructions are too long.");
+  }
+
+  if (payload.runHint && payload.runHint.length > 240) {
+    errors.push("Web playground runHint is too long.");
+  }
+
+  if (/\bfetch\(/i.test(payload.html)) {
+    warnings.push("Web playground html uses fetch(). Avoid network calls.");
+  }
+
+  if (payload.js && /\bfetch\(|\bXMLHttpRequest\b/i.test(payload.js)) {
+    warnings.push("Web playground js may rely on network requests.");
   }
 
   return {
@@ -1397,6 +1477,125 @@ async function buildCodePlaygroundSpark(
   }
 }
 
+async function buildWebPlaygroundSpark(
+  input: CreateSparkToolInput,
+  workerModels: SparkWorkerModels,
+  abortSignal?: AbortSignal,
+): Promise<CreateSparkToolResult> {
+  const skill = sparkSkillById.web_playground;
+  const warnings: string[] = [];
+  let firstDraft: WebPlaygroundSparkDraft | null = null;
+  let firstErrors: string[] = [];
+
+  try {
+    const prompt = buildPrompt({
+      sparkType: "web_playground",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+    });
+
+    const firstGeneration = await generateWorkerObject<WebPlaygroundDraft>({
+      schema: webPlaygroundWorkerOutputSchema,
+      prompt,
+      model: workerModels.sparkCode,
+      abortSignal,
+      timeoutMs: codeWorkerTimeoutMs,
+    });
+
+    warnings.push(...firstGeneration.warnings);
+    firstDraft = {
+      ...firstGeneration.object,
+      artifactId: createArtifactId(),
+    };
+
+    const firstValidation = validateWebPlaygroundPayload(firstDraft.payload);
+    warnings.push(...firstValidation.warnings);
+    firstErrors = firstValidation.errors;
+
+    if (firstValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: firstGeneration.object.workerSummary,
+        warnings,
+        artifact: normalizeSparkWebPlaygroundDraft(firstDraft),
+      };
+    }
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Web playground generation failed due to provider fault.",
+      warnings,
+      error: toProviderFaultMessage(error),
+    };
+  }
+
+  if (!firstDraft) {
+    return {
+      status: "failed",
+      workerSummary: "Web playground worker failed before repair.",
+      warnings,
+      error: "Spark worker could not produce an initial web playground draft.",
+    };
+  }
+
+  try {
+    const repairPrompt = buildPrompt({
+      sparkType: "web_playground",
+      context: input.context,
+      title: input.title,
+      summary: input.summary,
+      skillInstructions: skill.instructions,
+      previousOutput: JSON.stringify(firstDraft),
+      previousErrors: firstErrors,
+    });
+
+    const repairedGeneration = await generateWorkerObject<WebPlaygroundDraft>({
+      schema: webPlaygroundWorkerOutputSchema,
+      prompt: repairPrompt,
+      model: workerModels.sparkCode,
+      abortSignal,
+      timeoutMs: codeWorkerTimeoutMs,
+    });
+
+    warnings.push(...repairedGeneration.warnings);
+    const repairedDraft: WebPlaygroundSparkDraft = {
+      ...repairedGeneration.object,
+      artifactId: firstDraft.artifactId,
+    };
+    const repairedValidation = validateWebPlaygroundPayload(
+      repairedDraft.payload,
+    );
+    warnings.push(...repairedValidation.warnings);
+
+    if (repairedValidation.ok) {
+      return {
+        status: "success",
+        workerSummary: repairedGeneration.object.workerSummary,
+        warnings,
+        artifact: normalizeSparkWebPlaygroundDraft(repairedDraft),
+      };
+    }
+
+    return {
+      status: "failed",
+      workerSummary:
+        repairedGeneration.object.workerSummary ||
+        "Web playground payload failed validation in two attempts.",
+      warnings,
+      error: repairedValidation.errors.join(" "),
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      workerSummary: "Web playground repair failed due to provider fault.",
+      warnings,
+      error: toProviderFaultMessage(error),
+    };
+  }
+}
+
 async function buildQuizSpark(
   input: CreateSparkToolInput,
   workerModels: SparkWorkerModels,
@@ -1636,60 +1835,134 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
     description:
       "Create a Spark artifact for inline learning interaction. Provide the sparkId and focused learner context.",
     args: createSparkInputSchema,
-    handler: async (_ctx, args, options) => {
+    handler: async (ctx, args, options) => {
+      const startedAt = Date.now();
       const input = normalizeCreateSparkInput(args);
+      let result: CreateSparkToolResult;
+
+      const workerModelForSpark =
+        input.sparkId === "scene"
+          ? workerModels.sparkScene
+          : input.sparkId === "desmos_graph"
+            ? workerModels.sparkDesmos
+            : input.sparkId === "code_playground"
+              ? workerModels.sparkCode
+              : input.sparkId === "web_playground"
+                ? workerModels.sparkCode
+                : input.sparkId === "quiz"
+                  ? workerModels.sparkQuiz
+                  : workerModels.sparkFlash;
 
       try {
         if (input.sparkId === "scene") {
-          return await buildSceneSpark(
+          result = await buildSceneSpark(
             input,
             workerModels,
             options.abortSignal,
           );
-        }
-
-        if (input.sparkId === "quiz") {
-          return await buildQuizSpark(input, workerModels, options.abortSignal);
-        }
-
-        if (input.sparkId === "flash_card") {
-          return await buildFlashCardSpark(
+        } else if (input.sparkId === "quiz") {
+          result = await buildQuizSpark(
             input,
             workerModels,
             options.abortSignal,
           );
-        }
-
-        if (input.sparkId === "desmos_graph") {
-          return await buildDesmosGraphSpark(
+        } else if (input.sparkId === "flash_card") {
+          result = await buildFlashCardSpark(
             input,
             workerModels,
             options.abortSignal,
           );
-        }
-
-        if (input.sparkId === "code_playground") {
-          return await buildCodePlaygroundSpark(
+        } else if (input.sparkId === "desmos_graph") {
+          result = await buildDesmosGraphSpark(
             input,
             workerModels,
             options.abortSignal,
           );
+        } else if (input.sparkId === "code_playground") {
+          result = await buildCodePlaygroundSpark(
+            input,
+            workerModels,
+            options.abortSignal,
+          );
+        } else if (input.sparkId === "web_playground") {
+          result = await buildWebPlaygroundSpark(
+            input,
+            workerModels,
+            options.abortSignal,
+          );
+        } else {
+          result = {
+            status: "failed",
+            workerSummary: "Unsupported spark type.",
+            warnings: [],
+            error: `Unsupported sparkId: ${input.sparkId}`,
+          };
         }
-
-        return {
-          status: "failed",
-          workerSummary: "Unsupported spark type.",
-          warnings: [],
-          error: `Unsupported sparkId: ${input.sparkId}`,
-        };
       } catch (error) {
-        return {
+        result = {
           status: "failed",
           workerSummary: "Spark worker crashed while building the artifact.",
           warnings: [],
           error: toMessage(error),
         };
       }
+
+      const durationMs = Date.now() - startedAt;
+      const status = result.status === "success" ? "success" : "failed";
+
+      if (ctx.userId) {
+        await ctx
+          .runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
+            userId: ctx.userId,
+            threadId: ctx.threadId,
+            source: "spark",
+            name: input.sparkId,
+            status,
+            durationMs,
+            errorCategory:
+              result.status === "failed"
+                ? result.error.toLowerCase().includes("timeout")
+                  ? "timeout"
+                  : result.error.toLowerCase().includes("provider")
+                    ? "provider"
+                    : "generation_error"
+                : undefined,
+            retriable:
+              result.status === "failed"
+                ? result.error.toLowerCase().includes("provider") ||
+                  result.error.toLowerCase().includes("timeout") ||
+                  result.error.toLowerCase().includes("cancelled")
+                : undefined,
+            model: workerModelForSpark,
+            metadata: {
+              sparkId: input.sparkId,
+              warnings: result.warnings,
+              workerSummary: result.workerSummary,
+              error: result.status === "failed" ? result.error : undefined,
+              artifactKind:
+                result.status === "success" ? result.artifact.kind : undefined,
+            },
+          })
+          .catch((error) => {
+            console.error("Failed to store spark telemetry", error);
+          });
+
+        await capturePosthogEvent({
+          event: "spark_generation_result",
+          distinctId: ctx.userId,
+          properties: {
+            thread_id: ctx.threadId,
+            spark_id: input.sparkId,
+            status,
+            duration_ms: durationMs,
+            worker_model: workerModelForSpark,
+            warnings_count: result.warnings.length,
+            error: result.status === "failed" ? result.error : undefined,
+          },
+        });
+      }
+
+      return result;
     },
   });
 }

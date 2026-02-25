@@ -21,13 +21,13 @@ const modelProfiles: Record<ModelProfile, ModelConfig> = {
     sparkFlash: "google/gemini-3-flash-preview",
   },
   fast: {
-    studiAgent: "x-ai/grok-code-fast-1",
-    codiAgent: "x-ai/grok-code-fast-1",
-    sparkScene: "google/gemini-2.5-flash",
-    sparkDesmos: "google/gemini-2.5-flash",
-    sparkCode: "google/gemini-2.5-flash",
-    sparkQuiz: "google/gemini-2.5-flash",
-    sparkFlash: "google/gemini-2.5-flash",
+    studiAgent: "openai/gpt-4o-mini",
+    codiAgent: "openai/gpt-4o-mini",
+    sparkScene: "openai/gpt-4o-mini",
+    sparkDesmos: "openai/gpt-4o-mini",
+    sparkCode: "openai/gpt-4o-mini",
+    sparkQuiz: "openai/gpt-4o-mini",
+    sparkFlash: "openai/gpt-4o-mini",
   },
   quality: {
     studiAgent: "x-ai/grok-4.1-fast",
@@ -40,7 +40,7 @@ const modelProfiles: Record<ModelProfile, ModelConfig> = {
   },
 };
 
-export const activeModelProfile: ModelProfile = "balanced";
+export const activeModelProfile: ModelProfile = "fast";
 
 export function listModelProfiles(): ModelProfile[] {
   return Object.keys(modelProfiles) as ModelProfile[];

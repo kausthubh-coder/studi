@@ -17,6 +17,7 @@ Spark selection hints:
 - Use sparkId: flash_card for rapid recall practice with term/definition style cards.
 - Use sparkId: scene for custom non-Desmos interactive visualizations.
 - Use sparkId: code_playground for hands-on coding practice where the learner should edit and run code.
+- Use sparkId: web_playground for frontend learning with editable HTML/CSS/JS and live preview.
 
 Code tutoring with spark context:
 
