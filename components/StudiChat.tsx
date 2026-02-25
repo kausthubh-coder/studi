@@ -9,6 +9,7 @@ import {
   type ClipboardEvent,
   type FormEvent,
 } from "react";
+import type { FunctionReference } from "convex/server";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useUIMessages } from "@convex-dev/agent/react";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -24,11 +25,20 @@ import { WelcomeView } from "@/components/studi-chat/WelcomeView";
 import type {
   ExpandedSpark,
   PendingAttachment,
+  ThreadPlan,
   ThreadSummary,
 } from "@/components/studi-chat/types";
 import { SparkPanel } from "@/components/sparks/SparkPanel";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { LabWorkspace } from "@/components/lab/LabWorkspace";
+
+const plansApi = (
+  api as unknown as {
+    plans: {
+      getThreadPlan: FunctionReference<"query", "public">;
+    };
+  }
+).plans;
 
 function makeRequestId(): string {
   if (
@@ -130,6 +140,12 @@ export default function StudiChat() {
   );
 
   const isOnWelcome = selectedThreadId === null;
+
+  const threadPlanQuery = useQuery(
+    plansApi.getThreadPlan,
+    selectedThreadId ? { threadId: selectedThreadId } : "skip",
+  );
+  const threadPlan = threadPlanQuery as ThreadPlan | null | undefined;
 
   const canSend = useMemo(
     () =>
@@ -272,6 +288,11 @@ export default function StudiChat() {
 
   const handleSuggestionClick = useCallback((prompt: string) => {
     setInput(prompt);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
+
+  const handlePrefillPlanInput = useCallback((value: string) => {
+    setInput(value);
     setTimeout(() => textareaRef.current?.focus(), 50);
   }, []);
 
@@ -427,6 +448,8 @@ export default function StudiChat() {
                 listRef={listRef}
                 selectedThreadId={selectedThreadId}
                 messages={uiMessages.results}
+                threadPlan={threadPlan}
+                onPrefillPlanInput={handlePrefillPlanInput}
                 onExpandSpark={
                   isLabActive
                     ? () => {

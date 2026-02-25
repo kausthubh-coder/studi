@@ -26,6 +26,12 @@ import {
   type DaytonaToolError,
 } from "./daytona";
 
+const internalApi = internal as unknown as {
+  plans: {
+    ensureLabPlanInternal: FunctionReference<"mutation", "internal">;
+  };
+};
+
 type QueryRunner = <
   Query extends FunctionReference<"query", "public" | "internal">,
 >(
@@ -193,6 +199,13 @@ export const createLabTool = createTool<
           objective: args.objective,
         },
         unarchive: true,
+      });
+
+      await ctx.runMutation(internalApi.plans.ensureLabPlanInternal, {
+        userId,
+        threadId,
+        topic: args.topic,
+        objective: args.objective,
       });
 
       return {

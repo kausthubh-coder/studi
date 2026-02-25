@@ -70,4 +70,27 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_threadId", ["threadId"])
     .index("by_userId_and_threadId", ["userId", "threadId"]),
+
+  learningPlans: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    phase: v.union(
+      v.literal("discovery"),
+      v.literal("draft_review"),
+      v.literal("active"),
+      v.literal("completed"),
+    ),
+    revision: v.number(),
+    title: v.optional(v.string()),
+    acceptedPlan: v.optional(v.any()),
+    draftPlan: v.optional(v.any()),
+    latestChangeRequest: v.optional(v.string()),
+    progressPercent: v.number(),
+    totalItems: v.number(),
+    completedItems: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_threadId", ["userId", "threadId"])
+    .index("by_userId_and_updatedAt", ["userId", "updatedAt"]),
 });

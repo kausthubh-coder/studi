@@ -36,7 +36,11 @@ Useful flags:
 - `--saveSceneHtml` save successful scene spark HTML files to `.tmp/agent-lab/scenes/<runId>/`
 - `--sceneOutDir <path>` choose a custom output directory for scene HTML (implies `--saveSceneHtml`)
 - `--expectTools create_lab,run,glob` fail assertions if expected tools were not called
+- `--expectPlanTools start_plan_mode,generate_plan_draft` fail if expected plan tools were not called
 - `--failOnToolError` set process exit to non-zero when any tool fails
+- `--requirePlan` fail if no plan exists by end of run
+- `--expectPlanPhase active` assert final plan phase (`discovery|draft_review|active|completed`)
+- `--minPlanProgress 10` assert final plan progress percentage
 
 When a scene file is saved, the CLI prints a ready-to-run browser test command, for example:
 
@@ -69,6 +73,26 @@ For a deeper walkthrough:
 
 ```bash
 bun run agentic:test suite --file agentic-testing/suites/lab-react-demo.json --userId dev-user
+```
+
+## Plan Mode Suites
+
+Create and validate draft flow:
+
+```bash
+bun run agentic:test suite --file agentic-testing/suites/plan-smoke.json --userId dev-user
+```
+
+Iterative revision flow in the same thread:
+
+```bash
+bun run agentic:test suite --file agentic-testing/suites/plan-iterate.json --userId dev-user
+```
+
+Lab auto-plan path:
+
+```bash
+bun run agentic:test suite --file agentic-testing/suites/plan-lab-auto.json --userId dev-user
 ```
 
 Notes:

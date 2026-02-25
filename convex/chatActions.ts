@@ -1,11 +1,24 @@
 "use node";
 
 import { v } from "convex/values";
+import type { FunctionReference } from "convex/server";
+import { activeModelProfile } from "../lib/model-config";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalAction } from "./_generated/server";
 import { api, components, internal } from "./_generated/api";
-import { codiAgent, studiAgent } from "./agent";
+import {
+  buildCodiToolset,
+  buildStudiToolset,
+  codiAgent,
+  studiAgent,
+} from "./agent";
 import { classifyDaytonaError, getSandbox, stopSandbox } from "./daytona";
+
+const internalApi = internal as unknown as {
+  plans: {
+    getPlanSummaryForThreadInternal: FunctionReference<"query", "internal">;
+  };
+};
 
 async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
@@ -189,13 +202,31 @@ export const generateAssistantReply = internalAction({
     const activeAgent =
       labSession && !labSession.archivedAt ? codiAgent : studiAgent;
 
+    const planSummary = await ctx.runQuery(
+      internalApi.plans.getPlanSummaryForThreadInternal,
+      {
+        userId: args.userId,
+        threadId: args.threadId,
+      },
+    );
+    const includePlanTools = Boolean(planSummary);
+
+    const tools =
+      labSession && !labSession.archivedAt
+        ? buildCodiToolset(includePlanTools)
+        : buildStudiToolset(activeModelProfile, includePlanTools);
+
     const { thread } = await activeAgent.continueThread(ctx, {
       threadId: args.threadId,
       userId: args.userId,
     });
 
     await thread.streamText(
-      { promptMessageId: args.promptMessageId },
+      {
+        promptMessageId: args.promptMessageId,
+        tools,
+        maxOutputTokens: 4000,
+      },
       {
         saveStreamDeltas: {
           chunking: "line",

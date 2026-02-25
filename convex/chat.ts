@@ -4,7 +4,7 @@ import {
   syncStreams,
   vStreamArgs,
 } from "@convex-dev/agent";
-import { paginationOptsValidator } from "convex/server";
+import { paginationOptsValidator, type FunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import {
@@ -14,6 +14,12 @@ import {
   query,
 } from "./_generated/server";
 
+const internalApi = internal as unknown as {
+  plans: {
+    deletePlanForThreadInternal: FunctionReference<"mutation", "internal">;
+  };
+};
+
 const threadSummaryValidator = v.object({
   _id: v.id("userThreads"),
   _creationTime: v.number(),
@@ -22,6 +28,16 @@ const threadSummaryValidator = v.object({
   lastMessageAt: v.optional(v.number()),
   hasLab: v.boolean(),
   hasActiveLab: v.boolean(),
+  hasPlan: v.boolean(),
+  planProgressPercent: v.optional(v.number()),
+  planPhase: v.optional(
+    v.union(
+      v.literal("discovery"),
+      v.literal("draft_review"),
+      v.literal("active"),
+      v.literal("completed"),
+    ),
+  ),
 });
 
 const imageAttachmentForModelValidator = v.object({
@@ -67,6 +83,13 @@ export const listThreads = query({
       .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
       .collect();
 
+    const plans = await ctx.db
+      .query("learningPlans")
+      .withIndex("by_userId_and_updatedAt", (q) =>
+        q.eq("userId", identity.subject),
+      )
+      .collect();
+
     const labStatusByThreadId = new Map<
       string,
       {
@@ -85,6 +108,23 @@ export const listThreads = query({
       labStatusByThreadId.set(session.threadId, existing);
     }
 
+    const planByThreadId = new Map<
+      string,
+      {
+        hasPlan: boolean;
+        planProgressPercent?: number;
+        planPhase?: "discovery" | "draft_review" | "active" | "completed";
+      }
+    >();
+
+    for (const plan of plans) {
+      planByThreadId.set(plan.threadId, {
+        hasPlan: true,
+        planProgressPercent: plan.progressPercent,
+        planPhase: plan.phase,
+      });
+    }
+
     return threads.map((thread) => ({
       _id: thread._id,
       _creationTime: thread._creationTime,
@@ -94,6 +134,10 @@ export const listThreads = query({
       hasLab: labStatusByThreadId.get(thread.threadId)?.hasLab ?? false,
       hasActiveLab:
         labStatusByThreadId.get(thread.threadId)?.hasActiveLab ?? false,
+      hasPlan: planByThreadId.get(thread.threadId)?.hasPlan ?? false,
+      planProgressPercent: planByThreadId.get(thread.threadId)
+        ?.planProgressPercent,
+      planPhase: planByThreadId.get(thread.threadId)?.planPhase,
     }));
   },
 });
@@ -448,6 +492,11 @@ export const deleteThreadRecordInternal = internalMutation({
     for (const interaction of sparkInteractions) {
       await ctx.db.delete(interaction._id);
     }
+
+    await ctx.runMutation(internalApi.plans.deletePlanForThreadInternal, {
+      userId: args.userId,
+      threadId: args.threadId,
+    });
 
     await ctx.db.delete(thread._id);
     return true;

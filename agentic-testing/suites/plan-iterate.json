@@ -1,0 +1,45 @@
+{
+  "name": "plan-iterate-suite",
+  "defaults": {
+    "agentName": "studi",
+    "newThread": true,
+    "title": "Plan Iterate",
+    "pollMs": 300,
+    "includeContext": false,
+    "requirePlan": true,
+    "failOnToolError": true
+  },
+  "cases": [
+    {
+      "name": "enable-plan-mode",
+      "prompt": "Call start_plan_mode now for a long-term linear algebra learning track in this thread.",
+      "expectPlanTools": ["start_plan_mode"],
+      "expectPlanPhase": "discovery",
+      "repeat": 1
+    },
+    {
+      "name": "draft-v1",
+      "reusePreviousThread": true,
+      "prompt": "Generate the first draft now by calling generate_plan_draft with a brief focused on geometric intuition first, then formal proof skill.",
+      "expectPlanTools": ["generate_plan_draft"],
+      "expectPlanPhase": "draft_review",
+      "repeat": 1
+    },
+    {
+      "name": "draft-v2-revision",
+      "reusePreviousThread": true,
+      "prompt": "Request plan changes to include one weekly checkpoint, then regenerate a revised draft.",
+      "expectPlanTools": ["request_plan_changes", "generate_plan_draft"],
+      "expectPlanPhase": "draft_review",
+      "repeat": 1
+    },
+    {
+      "name": "accept-draft",
+      "reusePreviousThread": true,
+      "prompt": "Accept the current plan draft now using accept_plan_draft.",
+      "expectPlanTools": ["accept_plan_draft"],
+      "expectPlanPhase": "active",
+      "repeat": 1
+    }
+  ]
+}

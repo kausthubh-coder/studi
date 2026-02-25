@@ -25,6 +25,7 @@ import {
   runTool,
   writeTool,
 } from "./labTools";
+import { planToolsAlways, planToolsWhenPresent } from "./planTools";
 import { createSparkToolForProfile } from "./sparks/tools";
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -45,20 +46,44 @@ const studiAgentInstructions = renderPrompt("agents/studi.md", {
 
 const codiAgentInstructions = loadPrompt("agents/codi.md");
 
+export function buildStudiToolset(
+  profile: ModelProfile,
+  includePlanTools: boolean,
+) {
+  return {
+    create_spark: createSparkToolForProfile(profile),
+    get_code_spark_context: getCodeSparkContextTool,
+    create_lab: createLabTool,
+    archive_lab: archiveLabTool,
+    glob: globTool,
+    run: runTool,
+    ...planToolsAlways,
+    ...(includePlanTools ? planToolsWhenPresent : {}),
+  };
+}
+
+export function buildCodiToolset(includePlanTools: boolean) {
+  return {
+    list: listTool,
+    read: readTool,
+    grep: grepTool,
+    glob: globTool,
+    run: runTool,
+    edit: editTool,
+    write: writeTool,
+    archive_lab: archiveLabTool,
+    ...planToolsAlways,
+    ...(includePlanTools ? planToolsWhenPresent : {}),
+  };
+}
+
 function createStudiAgent(profile: ModelProfile): Agent {
   const modelConfig = getModelConfig(profile);
   return new Agent(components.agent, {
     name: getStudiAgentName(profile),
     languageModel: openrouter.chat(modelConfig.studiAgent),
     stopWhen: stepCountIs(6),
-    tools: {
-      create_spark: createSparkToolForProfile(profile),
-      get_code_spark_context: getCodeSparkContextTool,
-      create_lab: createLabTool,
-      archive_lab: archiveLabTool,
-      glob: globTool,
-      run: runTool,
-    },
+    tools: buildStudiToolset(profile, true),
     instructions: studiAgentInstructions,
   });
 }
@@ -69,16 +94,7 @@ function createCodiAgent(profile: ModelProfile): Agent {
     name: getCodiAgentName(profile),
     languageModel: openrouter.chat(modelConfig.codiAgent),
     stopWhen: stepCountIs(10),
-    tools: {
-      list: listTool,
-      read: readTool,
-      grep: grepTool,
-      glob: globTool,
-      run: runTool,
-      edit: editTool,
-      write: writeTool,
-      archive_lab: archiveLabTool,
-    },
+    tools: buildCodiToolset(true),
     instructions: codiAgentInstructions,
   });
 }

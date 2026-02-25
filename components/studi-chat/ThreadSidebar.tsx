@@ -96,14 +96,24 @@ export function ThreadSidebar({
                         </span>
                       )}
                     </p>
-                    {thread.hasLab ? (
-                      <span
-                        className="sidebar-thread-lab-tag"
-                        data-active-lab={thread.hasActiveLab}
-                      >
-                        Lab
-                      </span>
-                    ) : null}
+                    <span className="flex items-center gap-1.5">
+                      {thread.hasLab ? (
+                        <span
+                          className="sidebar-thread-lab-tag"
+                          data-active-lab={thread.hasActiveLab}
+                        >
+                          Lab
+                        </span>
+                      ) : null}
+                      {thread.hasPlan ? (
+                        <span
+                          className="sidebar-thread-plan-tag"
+                          data-phase={thread.planPhase ?? "active"}
+                        >
+                          Plan {thread.planProgressPercent ?? 0}%
+                        </span>
+                      ) : null}
+                    </span>
                   </div>
                   {thread.lastMessageAt && (
                     <p

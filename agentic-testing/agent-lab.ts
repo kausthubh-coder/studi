@@ -104,7 +104,21 @@ type RunConfig = {
   saveSceneHtml: boolean;
   sceneOutDir?: string;
   expectTools: string[];
+  expectPlanTools: string[];
   failOnToolError: boolean;
+  requirePlan: boolean;
+  expectPlanPhase?: "discovery" | "draft_review" | "active" | "completed";
+  minPlanProgress?: number;
+};
+
+type PlanSnapshot = {
+  exists: boolean;
+  phase?: "discovery" | "draft_review" | "active" | "completed";
+  progressPercent?: number;
+  totalItems?: number;
+  completedItems?: number;
+  hasDraft?: boolean;
+  title?: string;
 };
 
 type RunResult = {
@@ -146,6 +160,17 @@ type RunResult = {
     globCalls: number;
     hadActivation: boolean;
   };
+  plan: {
+    calls: number;
+    failures: number;
+    startPlanModeCalls: number;
+    getPlanContextCalls: number;
+    generatePlanDraftCalls: number;
+    acceptPlanDraftCalls: number;
+    requestPlanChangesCalls: number;
+    setPlanItemStatusCalls: number;
+    finalSnapshot: PlanSnapshot;
+  };
   assertionFailures: string[];
   sparkArtifacts: SparkArtifactSummary[];
   sceneFiles: SceneFileExport[];
@@ -163,8 +188,13 @@ type SuiteCase = {
   title?: string;
   repeat?: number;
   modelLabel?: string;
+  reusePreviousThread?: boolean;
   expectTools?: string[];
+  expectPlanTools?: string[];
   failOnToolError?: boolean;
+  requirePlan?: boolean;
+  expectPlanPhase?: "discovery" | "draft_review" | "active" | "completed";
+  minPlanProgress?: number;
 };
 
 type SuiteConfig = {
@@ -177,7 +207,11 @@ type SuiteConfig = {
     pollMs?: number;
     includeContext?: boolean;
     expectTools?: string[];
+    expectPlanTools?: string[];
     failOnToolError?: boolean;
+    requirePlan?: boolean;
+    expectPlanPhase?: "discovery" | "draft_review" | "active" | "completed";
+    minPlanProgress?: number;
   };
   cases: SuiteCase[];
 };
@@ -236,7 +270,11 @@ Shared flags:
   --saveSceneHtml             Save generated spark_scene HTML files locally
   --sceneOutDir <path>        Custom directory for saved scene files
   --expectTools a,b,c         Assert these tools were called at least once
+  --expectPlanTools a,b,c     Assert plan tools were called (plan-only)
   --failOnToolError           Exit with non-zero if any tool call fails
+  --requirePlan               Assert a plan exists by end of run
+  --expectPlanPhase <phase>   Assert final plan phase (discovery|draft_review|active|completed)
+  --minPlanProgress <0-100>   Assert minimum final plan progress percent
 
 Run-specific flags:
   --threadId <id>             Use existing thread
@@ -300,6 +338,42 @@ function parseCsvFlag(flags: Map<string, string[]>, key: string): string[] {
     .split(",")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+}
+
+function parseOptionalPercentFlag(
+  flags: Map<string, string[]>,
+  key: string,
+): number | undefined {
+  const raw = getSingleFlag(flags, key);
+  if (!raw || raw === "true") {
+    return undefined;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+    printUsageAndExit(`--${key} must be an integer between 0 and 100`);
+  }
+  return parsed;
+}
+
+function parsePlanPhaseFlag(
+  flags: Map<string, string[]>,
+  key: string,
+): "discovery" | "draft_review" | "active" | "completed" | undefined {
+  const raw = getSingleFlag(flags, key);
+  if (!raw || raw === "true") {
+    return undefined;
+  }
+  if (
+    raw === "discovery" ||
+    raw === "draft_review" ||
+    raw === "active" ||
+    raw === "completed"
+  ) {
+    return raw;
+  }
+  printUsageAndExit(
+    `--${key} must be one of discovery, draft_review, active, completed`,
+  );
 }
 
 function hashText(text: string): string {
@@ -722,10 +796,88 @@ function aggregateUsage(messages: PlaygroundMessage[]): {
   return { promptTokens, completionTokens, totalTokens };
 }
 
+const PLAN_TOOL_NAMES = new Set([
+  "start_plan_mode",
+  "get_plan_context",
+  "generate_plan_draft",
+  "accept_plan_draft",
+  "request_plan_changes",
+  "set_plan_item_status",
+]);
+
+function parsePlanPhase(
+  value: unknown,
+): "discovery" | "draft_review" | "active" | "completed" | undefined {
+  if (
+    value === "discovery" ||
+    value === "draft_review" ||
+    value === "active" ||
+    value === "completed"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function mergePlanSnapshotFromPayload(
+  current: PlanSnapshot,
+  payload: unknown,
+): PlanSnapshot {
+  if (!payload || typeof payload !== "object") {
+    return current;
+  }
+
+  const record = payload as Record<string, unknown>;
+  if (record.status === "missing") {
+    return {
+      ...current,
+      exists: false,
+    };
+  }
+
+  const next: PlanSnapshot = {
+    ...current,
+    exists: true,
+  };
+
+  const phase = parsePlanPhase(record.phase);
+  if (phase) {
+    next.phase = phase;
+  }
+
+  if (typeof record.progressPercent === "number") {
+    next.progressPercent = record.progressPercent;
+  }
+  if (typeof record.totalItems === "number") {
+    next.totalItems = record.totalItems;
+  }
+  if (typeof record.completedItems === "number") {
+    next.completedItems = record.completedItems;
+  }
+  if (typeof record.hasDraft === "boolean") {
+    next.hasDraft = record.hasDraft;
+  }
+  if (typeof record.title === "string") {
+    next.title = record.title;
+  }
+
+  return next;
+}
+
 function computeAssertionFailures(
   toolRuns: ToolRun[],
   expectTools: string[],
+  expectPlanTools: string[],
   failOnToolError: boolean,
+  planSnapshot: PlanSnapshot,
+  requirePlan: boolean,
+  expectPlanPhase:
+    | "discovery"
+    | "draft_review"
+    | "active"
+    | "completed"
+    | undefined,
+  minPlanProgress: number | undefined,
 ): string[] {
   const failures: string[] = [];
   const calledTools = new Set(toolRuns.map((tool) => tool.toolName));
@@ -733,6 +885,12 @@ function computeAssertionFailures(
   for (const expected of expectTools) {
     if (!calledTools.has(expected)) {
       failures.push(`Expected tool '${expected}' was not called.`);
+    }
+  }
+
+  for (const expected of expectPlanTools) {
+    if (!calledTools.has(expected)) {
+      failures.push(`Expected plan tool '${expected}' was not called.`);
     }
   }
 
@@ -744,6 +902,25 @@ function computeAssertionFailures(
         );
       }
     }
+  }
+
+  if (requirePlan && !planSnapshot.exists) {
+    failures.push("Expected plan to exist by end of run.");
+  }
+
+  if (expectPlanPhase && planSnapshot.phase !== expectPlanPhase) {
+    failures.push(
+      `Expected plan phase '${expectPlanPhase}', got '${planSnapshot.phase ?? "missing"}'.`,
+    );
+  }
+
+  if (
+    typeof minPlanProgress === "number" &&
+    (planSnapshot.progressPercent ?? -1) < minPlanProgress
+  ) {
+    failures.push(
+      `Expected plan progress >= ${minPlanProgress}, got ${planSnapshot.progressPercent ?? "missing"}.`,
+    );
   }
 
   return failures;
@@ -795,6 +972,7 @@ async function runSingle(
   const toolRuns: ToolRun[] = [];
   const sparkArtifacts: SparkArtifactSummary[] = [];
   const sceneFiles: SceneFileExport[] = [];
+  let planSnapshot: PlanSnapshot = { exists: false };
   const savedSceneToolCalls = new Set<string>();
   const savedSparkArtifactToolCalls = new Set<string>();
   const sceneOutDir =
@@ -973,6 +1151,22 @@ async function runSingle(
               generic.summary ??
               extractDetailFromPart(part)) ||
             `${toolName} finished`;
+
+          if (PLAN_TOOL_NAMES.has(toolName)) {
+            const payload = extractToolResultPayload(part);
+            planSnapshot = mergePlanSnapshotFromPayload(planSnapshot, payload);
+            if (
+              toolName === "generate_plan_draft" &&
+              generic.outputStatus === "draft_ready"
+            ) {
+              planSnapshot = {
+                ...planSnapshot,
+                exists: true,
+                phase: "draft_review",
+                hasDraft: true,
+              };
+            }
+          }
 
           if (existing) {
             existing.endedAt = at;
@@ -1166,10 +1360,19 @@ async function runSingle(
     ].includes(tool.toolName),
   );
 
+  const planTools = toolRuns.filter((tool) =>
+    PLAN_TOOL_NAMES.has(tool.toolName),
+  );
+
   const assertionFailures = computeAssertionFailures(
     toolRuns,
     config.expectTools,
+    config.expectPlanTools,
     config.failOnToolError,
+    planSnapshot,
+    config.requirePlan,
+    config.expectPlanPhase,
+    config.minPlanProgress,
   );
 
   const context = config.includeContext
@@ -1226,6 +1429,29 @@ async function runSingle(
         (tool) => tool.toolName === "create_lab" && tool.status === "success",
       ),
     },
+    plan: {
+      calls: planTools.length,
+      failures: planTools.filter((tool) => tool.status === "error").length,
+      startPlanModeCalls: planTools.filter(
+        (tool) => tool.toolName === "start_plan_mode",
+      ).length,
+      getPlanContextCalls: planTools.filter(
+        (tool) => tool.toolName === "get_plan_context",
+      ).length,
+      generatePlanDraftCalls: planTools.filter(
+        (tool) => tool.toolName === "generate_plan_draft",
+      ).length,
+      acceptPlanDraftCalls: planTools.filter(
+        (tool) => tool.toolName === "accept_plan_draft",
+      ).length,
+      requestPlanChangesCalls: planTools.filter(
+        (tool) => tool.toolName === "request_plan_changes",
+      ).length,
+      setPlanItemStatusCalls: planTools.filter(
+        (tool) => tool.toolName === "set_plan_item_status",
+      ).length,
+      finalSnapshot: planSnapshot,
+    },
     assertionFailures,
     sparkArtifacts,
     sceneFiles,
@@ -1257,6 +1483,9 @@ function printRunSummary(run: RunResult): void {
   );
   console.log(
     `- lab: calls=${run.lab.calls}, failures=${run.lab.failures}, create_lab=${run.lab.createLabCalls}, run=${run.lab.runCalls}, glob=${run.lab.globCalls}, activated=${run.lab.hadActivation}`,
+  );
+  console.log(
+    `- plan: calls=${run.plan.calls}, failures=${run.plan.failures}, start=${run.plan.startPlanModeCalls}, draft=${run.plan.generatePlanDraftCalls}, accept=${run.plan.acceptPlanDraftCalls}, set_item=${run.plan.setPlanItemStatusCalls}, phase=${run.plan.finalSnapshot.phase ?? "n/a"}, progress=${run.plan.finalSnapshot.progressPercent ?? "n/a"}`,
   );
 
   if (run.tools.length > 0) {
@@ -1344,7 +1573,14 @@ async function runCommand(parsed: ParsedArgs): Promise<void> {
   const saveSceneHtml =
     getBooleanFlag(parsed.flags, "saveSceneHtml") || Boolean(sceneOutDir);
   const expectTools = parseCsvFlag(parsed.flags, "expectTools");
+  const expectPlanTools = parseCsvFlag(parsed.flags, "expectPlanTools");
   const failOnToolError = getBooleanFlag(parsed.flags, "failOnToolError");
+  const requirePlan = getBooleanFlag(parsed.flags, "requirePlan");
+  const expectPlanPhase = parsePlanPhaseFlag(parsed.flags, "expectPlanPhase");
+  const minPlanProgress = parseOptionalPercentFlag(
+    parsed.flags,
+    "minPlanProgress",
+  );
 
   const run = await runSingle(client, apiKey, {
     userId,
@@ -1362,7 +1598,11 @@ async function runCommand(parsed: ParsedArgs): Promise<void> {
     saveSceneHtml,
     sceneOutDir,
     expectTools,
+    expectPlanTools,
     failOnToolError,
+    requirePlan,
+    expectPlanPhase,
+    minPlanProgress,
   });
 
   printRunSummary(run);
@@ -1424,12 +1664,23 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
   const saveSceneHtml =
     getBooleanFlag(parsed.flags, "saveSceneHtml") || Boolean(sceneOutDir);
   const expectToolsOverride = parseCsvFlag(parsed.flags, "expectTools");
+  const expectPlanToolsOverride = parseCsvFlag(parsed.flags, "expectPlanTools");
   const failOnToolErrorOverride = getBooleanFlag(
     parsed.flags,
     "failOnToolError",
   );
+  const requirePlanOverride = getBooleanFlag(parsed.flags, "requirePlan");
+  const expectPlanPhaseOverride = parsePlanPhaseFlag(
+    parsed.flags,
+    "expectPlanPhase",
+  );
+  const minPlanProgressOverride = parseOptionalPercentFlag(
+    parsed.flags,
+    "minPlanProgress",
+  );
 
   const results: RunResult[] = [];
+  let previousThreadId: string | undefined;
 
   console.log(`Running suite: ${suite.name ?? "unnamed-suite"}`);
 
@@ -1447,6 +1698,7 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
         suite.defaults?.agentName ??
         "studi";
       const newThread = testCase.newThread ?? suite.defaults?.newThread ?? true;
+      const reusePreviousThread = testCase.reusePreviousThread ?? false;
       const title =
         testCase.title ?? suite.defaults?.title ?? `Suite: ${testCase.name}`;
       const modelLabel = testCase.modelLabel;
@@ -1454,11 +1706,39 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
         expectToolsOverride.length > 0
           ? expectToolsOverride
           : (testCase.expectTools ?? suite.defaults?.expectTools ?? []);
+      const expectPlanTools =
+        expectPlanToolsOverride.length > 0
+          ? expectPlanToolsOverride
+          : (testCase.expectPlanTools ?? suite.defaults?.expectPlanTools ?? []);
       const failOnToolError =
         failOnToolErrorOverride ||
         testCase.failOnToolError ||
         suite.defaults?.failOnToolError ||
         false;
+      const requirePlan =
+        requirePlanOverride ||
+        testCase.requirePlan ||
+        suite.defaults?.requirePlan ||
+        false;
+      const expectPlanPhase =
+        expectPlanPhaseOverride ??
+        testCase.expectPlanPhase ??
+        suite.defaults?.expectPlanPhase;
+      const minPlanProgress =
+        minPlanProgressOverride ??
+        testCase.minPlanProgress ??
+        suite.defaults?.minPlanProgress;
+
+      let resolvedThreadId = testCase.threadId;
+      let resolvedNewThread = newThread;
+      if (reusePreviousThread) {
+        if (!resolvedThreadId && previousThreadId) {
+          resolvedThreadId = previousThreadId;
+        }
+        if (resolvedThreadId) {
+          resolvedNewThread = false;
+        }
+      }
 
       console.log(`\nCase ${testCase.name} (${i + 1}/${repeats})`);
 
@@ -1466,8 +1746,8 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
         userId,
         prompt: testCase.prompt,
         agentName,
-        threadId: testCase.threadId,
-        newThread,
+        threadId: resolvedThreadId,
+        newThread: resolvedNewThread,
         title,
         pollMs,
         includeContext:
@@ -1479,11 +1759,16 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
         saveSceneHtml,
         sceneOutDir,
         expectTools,
+        expectPlanTools,
         failOnToolError,
+        requirePlan,
+        expectPlanPhase,
+        minPlanProgress,
       });
 
       printRunSummary(run);
       results.push(run);
+      previousThreadId = run.threadId;
     }
   }
 
@@ -1503,6 +1788,9 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
     totalTokens: run.usage.totalTokens,
     sparkFailures: run.spark.failures,
     labFailures: run.lab.failures,
+    planFailures: run.plan.failures,
+    planPhase: run.plan.finalSnapshot.phase,
+    planProgress: run.plan.finalSnapshot.progressPercent,
     assertionFailures: run.assertionFailures.length,
     responseHash: run.actionResultTextHash,
     actionError: run.actionError,
@@ -1521,6 +1809,7 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
       const durations = runs.map((r) => r.totalDurationMs);
       const sparkFailures = runs.reduce((sum, r) => sum + r.spark.failures, 0);
       const labFailures = runs.reduce((sum, r) => sum + r.lab.failures, 0);
+      const planFailures = runs.reduce((sum, r) => sum + r.plan.failures, 0);
       const assertionFailures = runs.reduce(
         (sum, r) => sum + r.assertionFailures.length,
         0,
@@ -1541,6 +1830,7 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
         },
         sparkFailures,
         labFailures,
+        planFailures,
         assertionFailures,
         distinctResponseHashes: Array.from(new Set(responses)).length,
       };
@@ -1575,7 +1865,7 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
 
   for (const comparison of comparisons) {
     console.log(
-      `- prompt ${comparison.promptHash}: runs=${comparison.runs}, avgDurationMs=${comparison.durationMs.avg}, sparkFailures=${comparison.sparkFailures}, labFailures=${comparison.labFailures}, assertionFailures=${comparison.assertionFailures}, distinctResponses=${comparison.distinctResponseHashes}`,
+      `- prompt ${comparison.promptHash}: runs=${comparison.runs}, avgDurationMs=${comparison.durationMs.avg}, sparkFailures=${comparison.sparkFailures}, labFailures=${comparison.labFailures}, planFailures=${comparison.planFailures}, assertionFailures=${comparison.assertionFailures}, distinctResponses=${comparison.distinctResponseHashes}`,
     );
   }
 }
