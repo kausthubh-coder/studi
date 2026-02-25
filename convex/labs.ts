@@ -194,3 +194,26 @@ export const archiveLabSessionInternal = internalMutation({
     return null;
   },
 });
+
+export const deleteLabSessionInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("labSessions")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+
+    if (!session) {
+      return false;
+    }
+
+    await ctx.db.delete(session._id);
+    return true;
+  },
+});

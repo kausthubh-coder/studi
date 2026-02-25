@@ -42,7 +42,7 @@ Studi is an **agentic tutor**: a Next.js 16 + React 19 frontend, a Convex backen
 User submits → chat.sendMessage (mutation)
   → saves user message via @convex-dev/agent saveMessage
   → schedules chatActions.generateAssistantReply (internalAction)
-     → routes to studiAgent or studiLabAgent based on active lab session
+     → routes to studiAgent or codiAgent based on active lab session
      → selectedAgent.continueThread → thread.streamText
      → streams deltas back to client via syncStreams
 ```

@@ -1,5 +1,5 @@
 import { UserButton } from "@clerk/nextjs";
-import { IconCompose } from "@/components/studi-chat/icons";
+import { IconCompose, IconX } from "@/components/studi-chat/icons";
 import type { ThreadSummary } from "@/components/studi-chat/types";
 
 export function ThreadSidebar({
@@ -7,11 +7,15 @@ export function ThreadSidebar({
   selectedThreadId,
   onSelectThread,
   onCreateThread,
+  onDeleteThread,
+  deletingThreadId,
 }: {
   threads: ThreadSummary[];
   selectedThreadId: string | null;
   onSelectThread: (threadId: string) => void;
   onCreateThread: () => void;
+  onDeleteThread: (thread: ThreadSummary) => void;
+  deletingThreadId: string | null;
 }) {
   return (
     <aside
@@ -63,47 +67,75 @@ export function ThreadSidebar({
         ) : (
           threads.map((thread) => {
             const isActive = thread.threadId === selectedThreadId;
+            const isDeleting = deletingThreadId === thread.threadId;
             return (
-              <button
-                key={thread.threadId}
-                type="button"
-                onClick={() => onSelectThread(thread.threadId)}
-                data-active={isActive}
-                className="sidebar-thread-btn w-full border-l-[2.5px] border-l-transparent px-4 py-2.5 text-left"
-              >
-                <p
-                  className="truncate text-[13px] font-semibold leading-snug"
-                  style={{
-                    fontFamily: "var(--font-jakarta)",
-                    color: isActive ? "var(--accent)" : "var(--fg)",
-                  }}
+              <div key={thread.threadId} className="group relative">
+                <button
+                  type="button"
+                  onClick={() => onSelectThread(thread.threadId)}
+                  data-active={isActive}
+                  className="sidebar-thread-btn w-full border-l-[2.5px] border-l-transparent px-4 py-2.5 pr-14 text-left"
+                  disabled={isDeleting}
                 >
-                  {thread.title && thread.title !== "New Thread" ? (
-                    thread.title
-                  ) : (
-                    <span
-                      className="font-normal italic text-fg-faint"
+                  <div className="flex items-start justify-between gap-2">
+                    <p
+                      className="truncate text-[13px] font-semibold leading-snug"
+                      style={{
+                        fontFamily: "var(--font-jakarta)",
+                        color: isActive ? "var(--accent)" : "var(--fg)",
+                      }}
+                    >
+                      {thread.title && thread.title !== "New Thread" ? (
+                        thread.title
+                      ) : (
+                        <span
+                          className="font-normal italic text-fg-faint"
+                          style={{ fontFamily: "var(--font-jakarta)" }}
+                        >
+                          New thread
+                        </span>
+                      )}
+                    </p>
+                    {thread.hasLab ? (
+                      <span
+                        className="sidebar-thread-lab-tag"
+                        data-active-lab={thread.hasActiveLab}
+                      >
+                        Lab
+                      </span>
+                    ) : null}
+                  </div>
+                  {thread.lastMessageAt && (
+                    <p
+                      className="mt-0.5 text-[11px] text-fg-faint"
                       style={{ fontFamily: "var(--font-jakarta)" }}
                     >
-                      New thread
-                    </span>
+                      {new Date(thread.lastMessageAt).toLocaleDateString(
+                        "en-US",
+                        {
+                          month: "short",
+                          day: "numeric",
+                        },
+                      )}
+                    </p>
                   )}
-                </p>
-                {thread.lastMessageAt && (
-                  <p
-                    className="mt-0.5 text-[11px] text-fg-faint"
-                    style={{ fontFamily: "var(--font-jakarta)" }}
-                  >
-                    {new Date(thread.lastMessageAt).toLocaleDateString(
-                      "en-US",
-                      {
-                        month: "short",
-                        day: "numeric",
-                      },
-                    )}
-                  </p>
-                )}
-              </button>
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDeleteThread(thread);
+                  }}
+                  disabled={isDeleting}
+                  className="sidebar-thread-delete-btn"
+                  aria-label={`Delete ${thread.title ?? "thread"}`}
+                  title={
+                    thread.hasLab ? "Delete thread and lab" : "Delete thread"
+                  }
+                >
+                  <IconX className="h-3 w-3" />
+                </button>
+              </div>
             );
           })
         )}

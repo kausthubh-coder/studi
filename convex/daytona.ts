@@ -260,6 +260,7 @@ function formatReadOutput(
   text: string,
   offset: number,
   limit: number,
+  format: "numbered" | "raw",
 ): { output: string; truncated: boolean } {
   const lines = text.split(/\r?\n/);
   const start = Math.max(1, offset);
@@ -269,13 +270,16 @@ function formatReadOutput(
   let bytesUsed = 0;
   const output: string[] = [];
   for (let index = 0; index < selected.length; index += 1) {
-    const lineNumber = start + index;
     const rawLine = selected[index] ?? "";
-    const clippedLine =
-      rawLine.length > READ_MAX_LINE_LENGTH
-        ? `${rawLine.slice(0, READ_MAX_LINE_LENGTH)}...`
+    const lineNumber = start + index;
+    const line =
+      format === "numbered"
+        ? `${lineNumber}: ${
+            rawLine.length > READ_MAX_LINE_LENGTH
+              ? `${rawLine.slice(0, READ_MAX_LINE_LENGTH)}...`
+              : rawLine
+          }`
         : rawLine;
-    const line = `${lineNumber}: ${clippedLine}`;
     const lineBytes = Buffer.byteLength(line, "utf8");
 
     if (bytesUsed + lineBytes > READ_MAX_BYTES) {
@@ -573,6 +577,7 @@ export async function readFile(params: {
   path: string;
   offset?: number;
   limit?: number;
+  format?: "numbered" | "raw";
 }): Promise<{
   path: string;
   content: string;
@@ -594,6 +599,7 @@ export async function readFile(params: {
     buffer.toString("utf8"),
     params.offset ?? 1,
     params.limit ?? READ_MAX_LINES,
+    params.format ?? "numbered",
   );
 
   return {

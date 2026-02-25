@@ -12,8 +12,8 @@ import { getSparkTypeLabel } from "@/lib/sparks/contracts";
 
 function getBadgeClass(kind: string): string {
   if (kind === "spark_scene") return "badge-scene";
-  if (kind === "spark_quiz") return "badge-scene";
-  if (kind === "spark_flash_card") return "badge-scene";
+  if (kind === "spark_quiz") return "badge-quiz";
+  if (kind === "spark_flash_card") return "badge-flash";
   if (kind === "spark_code_playground") return "badge-code";
   if (kind === "spark_desmos_graph") return "badge-desmos";
   return "badge-scene";

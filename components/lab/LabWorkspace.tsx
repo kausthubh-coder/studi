@@ -82,6 +82,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [editorValue, setEditorValue] = useState("");
   const [isBinary, setIsBinary] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isSavingFile, setIsSavingFile] = useState(false);
@@ -92,6 +93,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const [lastExitCode, setLastExitCode] = useState<number | null>(null);
 
   const initialHydratedRef = useRef(false);
+  const initialSelectedFileRef = useRef<string | null>(null);
   const [baselineValue, setBaselineValue] = useState("");
   const isDirty = selectedFilePath !== null && editorValue !== baselineValue;
 
@@ -106,7 +108,10 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     try {
       const parsed = JSON.parse(raw) as PersistedState;
       if (parsed.currentPath) setCurrentPath(parsed.currentPath);
-      if (parsed.selectedFilePath) setSelectedFilePath(parsed.selectedFilePath);
+      if (parsed.selectedFilePath) {
+        setSelectedFilePath(parsed.selectedFilePath);
+        initialSelectedFileRef.current = parsed.selectedFilePath;
+      }
       if (parsed.commandInput) setCommandInput(parsed.commandInput);
     } catch {
       /* ignore */
@@ -120,7 +125,10 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
       selectedFilePath: selectedFilePath ?? undefined,
       commandInput,
     };
-    window.localStorage.setItem(getStorageKey(threadId), JSON.stringify(payload));
+    window.localStorage.setItem(
+      getStorageKey(threadId),
+      JSON.stringify(payload),
+    );
   }, [threadId, currentPath, selectedFilePath, commandInput]);
 
   const refreshEntries = useCallback(
@@ -154,7 +162,12 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
       setIsLoadingFile(true);
       setWorkspaceError(null);
       try {
-        const response = await readFileAction({ threadId, path, offset: 1, limit: 2000 });
+        const response = await readFileAction({
+          threadId,
+          path,
+          offset: 1,
+          limit: 50_000,
+        });
         if (response.status === "failed") {
           setWorkspaceError(response.summary);
           return;
@@ -163,6 +176,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
         setEditorValue(response.content);
         setBaselineValue(response.content);
         setIsBinary(response.isBinary);
+        setIsTruncated(response.truncated);
       } finally {
         setIsLoadingFile(false);
       }
@@ -175,11 +189,11 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   }, [refreshEntries]);
 
   useEffect(() => {
-    if (!selectedFilePath) return;
-    const exists = entries.some((entry) => entry.path === selectedFilePath);
-    if (!exists) return;
-    void openFile(selectedFilePath);
-  }, [entries, openFile, selectedFilePath]);
+    const initialPath = initialSelectedFileRef.current;
+    if (!initialPath) return;
+    initialSelectedFileRef.current = null;
+    void openFile(initialPath);
+  }, [openFile]);
 
   const runCommand = useCallback(async () => {
     const command = commandInput.trim();
@@ -210,7 +224,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   }, [commandInput, currentPath, refreshEntries, runCommandAction, threadId]);
 
   const saveFile = useCallback(async () => {
-    if (!selectedFilePath || isBinary) return;
+    if (!selectedFilePath || isBinary || isTruncated) return;
 
     setIsSavingFile(true);
     setWorkspaceError(null);
@@ -229,7 +243,16 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     } finally {
       setIsSavingFile(false);
     }
-  }, [currentPath, editorValue, isBinary, refreshEntries, selectedFilePath, threadId, writeFileAction]);
+  }, [
+    currentPath,
+    editorValue,
+    isBinary,
+    isTruncated,
+    refreshEntries,
+    selectedFilePath,
+    threadId,
+    writeFileAction,
+  ]);
 
   // Ctrl+S / Cmd+S keyboard shortcut
   useEffect(() => {
@@ -243,18 +266,37 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [saveFile]);
 
+  const discardEditorState = useCallback(() => {
+    setSelectedFilePath(null);
+    setEditorValue("");
+    setBaselineValue("");
+    setIsBinary(false);
+    setIsTruncated(false);
+  }, []);
+
+  const confirmDiscardUnsavedChanges = useCallback(() => {
+    if (!isDirty) return true;
+    return window.confirm("You have unsaved changes. Discard them?");
+  }, [isDirty]);
+
   const handleNavigate = useCallback(
     (path: string) => {
+      if (!confirmDiscardUnsavedChanges()) return;
+      if (isDirty) {
+        discardEditorState();
+      }
       void refreshEntries(path);
     },
-    [refreshEntries],
+    [confirmDiscardUnsavedChanges, discardEditorState, isDirty, refreshEntries],
   );
 
   const handleOpenFile = useCallback(
     (path: string) => {
+      if (path === selectedFilePath) return;
+      if (!confirmDiscardUnsavedChanges()) return;
       void openFile(path);
     },
-    [openFile],
+    [confirmDiscardUnsavedChanges, openFile, selectedFilePath],
   );
 
   const handleRefresh = useCallback(() => {
@@ -292,6 +334,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           isDirty={isDirty}
           isSaving={isSavingFile}
           isBinary={isBinary}
+          isTruncated={isTruncated}
           onSave={handleSave}
         />
 
@@ -313,7 +356,9 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
               height="100%"
               language={editorLanguage}
               value={editorValue}
-              onChange={(value: string | undefined) => setEditorValue(value ?? "")}
+              onChange={(value: string | undefined) =>
+                setEditorValue(value ?? "")
+              }
               theme="vs-dark"
               options={{
                 minimap: { enabled: false },
@@ -322,6 +367,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
                 automaticLayout: true,
                 tabSize: 2,
                 padding: { top: 10 },
+                readOnly: isTruncated,
               }}
             />
           )}
@@ -335,6 +381,13 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           terminalOutput={terminalOutput}
           lastExitCode={lastExitCode}
         />
+
+        {isTruncated && selectedFilePath && !isBinary && (
+          <div className="lab-warning-bar">
+            Large file preview is truncated. Saving is disabled to protect file
+            integrity.
+          </div>
+        )}
 
         {workspaceError && (
           <div className="lab-error-bar">{workspaceError}</div>

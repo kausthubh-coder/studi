@@ -3,8 +3,9 @@
 import { v } from "convex/values";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalAction } from "./_generated/server";
-import { api, internal } from "./_generated/api";
-import { studiAgent, studiLabAgent } from "./agent";
+import { api, components, internal } from "./_generated/api";
+import { codiAgent, studiAgent } from "./agent";
+import { classifyDaytonaError, getSandbox, stopSandbox } from "./daytona";
 
 async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
@@ -93,6 +94,77 @@ export const sendMessage = action({
   },
 });
 
+export const deleteThread: ReturnType<typeof action> = action({
+  args: {
+    threadId: v.string(),
+  },
+  returns: v.object({
+    deleted: v.boolean(),
+    deletedLab: v.boolean(),
+    labCleanupWarning: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+
+    await ctx.runQuery(internal.chat.assertThreadOwner, {
+      userId,
+      threadId: args.threadId,
+    });
+
+    const labSession = await ctx.runQuery(
+      internal.labs.getLabSessionByThreadForUserInternal,
+      {
+        userId,
+        threadId: args.threadId,
+      },
+    );
+
+    let labCleanupWarning: string | undefined;
+
+    if (labSession) {
+      try {
+        const sandbox = await getSandbox(labSession.sandboxId);
+        if (sandbox.state === "started") {
+          await stopSandbox(labSession.sandboxId);
+        }
+      } catch (error) {
+        const detail = classifyDaytonaError(error);
+        if (detail.category !== "not_found") {
+          labCleanupWarning = detail.message;
+        }
+      }
+
+      await ctx.runMutation(internal.labs.deleteLabSessionInternal, {
+        userId,
+        threadId: args.threadId,
+      });
+    }
+
+    const thread = await ctx.runQuery(components.agent.threads.getThread, {
+      threadId: args.threadId,
+    });
+    if (thread) {
+      await ctx.runAction(components.agent.threads.deleteAllForThreadIdSync, {
+        threadId: args.threadId,
+      });
+    }
+
+    const deleted = await ctx.runMutation(
+      internal.chat.deleteThreadRecordInternal,
+      {
+        userId,
+        threadId: args.threadId,
+      },
+    );
+
+    return {
+      deleted,
+      deletedLab: Boolean(labSession),
+      labCleanupWarning,
+    };
+  },
+});
+
 export const generateAssistantReply = internalAction({
   args: {
     threadId: v.string(),
@@ -115,7 +187,7 @@ export const generateAssistantReply = internalAction({
     );
 
     const activeAgent =
-      labSession && !labSession.archivedAt ? studiLabAgent : studiAgent;
+      labSession && !labSession.archivedAt ? codiAgent : studiAgent;
 
     const { thread } = await activeAgent.continueThread(ctx, {
       threadId: args.threadId,

@@ -13,6 +13,8 @@ export type ThreadSummary = {
   threadId: string;
   title?: string;
   lastMessageAt?: number;
+  hasLab: boolean;
+  hasActiveLab: boolean;
 };
 
 export type ExpandedSpark = {

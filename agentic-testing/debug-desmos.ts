@@ -15,6 +15,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { loadPrompt, renderPrompt } from "../lib/prompts";
 
 // ─── inline copies of the types/schemas from contracts + tools ─────────────
 
@@ -253,34 +254,9 @@ function validateDesmosPayload(payload: DesmosGraphPayload): {
   return { ok: errors.length === 0, errors, warnings };
 }
 
-// ─── skill instructions (mirrors lib/sparks/skills/desmosGraph.ts) ─────────
+// ─── skill instructions (from prompts/sparks/skills/desmos-graph.md) ───────
 
-const desmosSkillInstructions = `You are building a Desmos Graph Spark artifact.
-
-Output requirements:
-- Return strict JSON with keys: title, summary, workerSummary, payload.
-- payload must be a JSON object with this shape:
-  {
-    "expressions": [ ... ],
-    "viewport": { "left": number, "right": number, "bottom": number, "top": number } optional,
-    "hint": "short learner instruction" optional
-  }
-- expressions must be valid Desmos expression states usable with calculator.setExpressions([...]).
-- Keep Desmos editable for learners (do not output read-only restrictions).
-- Include meaningful content based on learner context. Use combinations of:
-  - equations (latex)
-  - plotted points
-  - tables (type: "table", with columns)
-
-Math and LaTeX:
-- Use valid Desmos LaTeX for expression strings.
-- For multi-character symbols (sin, pi, theta), use proper escaped backslashes.
-- Keep expressions simple and readable; avoid malformed escaping.
-
-Safety and implementation constraints:
-- Output JSON only. Do not output HTML.
-- Do not include network URLs, scripts, or markup.
-- Do not include popups, navigation, or storage behavior in the payload.`;
+const desmosSkillInstructions = loadPrompt("sparks/skills/desmos-graph.md");
 
 // ─── LLM call ───────────────────────────────────────────────────────────────
 
@@ -300,16 +276,17 @@ const DEFAULT_TIMEOUT_MS = Math.min(
 );
 
 function buildDesmosPrompt(context: string): string {
-  return [
-    "Build a desmos_graph spark for an educational chat.",
-    "Spark id: desmos_graph",
-    "Return strict JSON with keys: title, summary, workerSummary, payload.",
-    "Do not include markdown fences.",
-    `Learning context: ${context}`,
-    "",
-    "Skill instructions:",
-    desmosSkillInstructions,
-  ].join("\n");
+  return renderPrompt("sparks/worker-build.md", {
+    sparkType: "desmos_graph",
+    outputRequirements:
+      "Return strict JSON with keys: title, summary, workerSummary, payload.\nDo not include markdown fences.",
+    context,
+    preferredTitleLine: "",
+    preferredSummaryLine: "",
+    skillInstructions: desmosSkillInstructions,
+    previousOutputBlock: "",
+    previousErrorsBlock: "",
+  });
 }
 
 async function callDesmosWorker(

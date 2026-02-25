@@ -4,6 +4,7 @@ import { createTool } from "@convex-dev/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { renderPrompt } from "../../lib/prompts";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
   getSparkTypeLabel,
@@ -993,31 +994,25 @@ function buildPrompt(params: {
           "Do not include markdown fences.",
         ];
 
-  const lines = [
-    `Build a ${params.sparkType} spark for an educational chat.`,
-    `Spark id: ${params.sparkType}`,
-    ...outputRequirements,
-    `Learning context: ${params.context}`,
-    params.title ? `Preferred title: ${params.title}` : "",
-    params.summary ? `Preferred summary: ${params.summary}` : "",
-    "",
-    "Skill instructions:",
-    params.skillInstructions,
-  ];
-
-  if (params.previousOutput) {
-    lines.push("", "Repair this previous draft:", params.previousOutput);
-  }
-
-  if (params.previousErrors && params.previousErrors.length > 0) {
-    lines.push(
-      "",
-      "Validation errors to fix:",
-      params.previousErrors.map((error) => `- ${error}`).join("\n"),
-    );
-  }
-
-  return lines.filter(Boolean).join("\n");
+  return renderPrompt("sparks/worker-build.md", {
+    sparkType: params.sparkType,
+    outputRequirements: outputRequirements.join("\n"),
+    context: params.context,
+    preferredTitleLine: params.title ? `Preferred title: ${params.title}` : "",
+    preferredSummaryLine: params.summary
+      ? `Preferred summary: ${params.summary}`
+      : "",
+    skillInstructions: params.skillInstructions,
+    previousOutputBlock: params.previousOutput
+      ? `Repair this previous draft:\n${params.previousOutput}`
+      : "",
+    previousErrorsBlock:
+      params.previousErrors && params.previousErrors.length > 0
+        ? `Validation errors to fix:\n${params.previousErrors
+            .map((error) => `- ${error}`)
+            .join("\n")}`
+        : "",
+  });
 }
 
 async function buildSceneSpark(

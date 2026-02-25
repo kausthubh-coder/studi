@@ -177,6 +177,7 @@ export const readLabFile = action({
         path: args.path,
         offset: args.offset,
         limit: args.limit,
+        format: "raw",
       });
 
       return {

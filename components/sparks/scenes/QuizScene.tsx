@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { QuizSparkPayload } from "@/lib/sparks/contracts";
 
 type QuizSceneProps = {
@@ -17,7 +17,21 @@ const fallbackQuizQuestions: QuizSparkPayload["questions"] = [
   },
 ];
 
-export default function QuizScene({ payload }: QuizSceneProps) {
+function getResultEmoji(ratio: number): string {
+  if (ratio >= 1) return "\u{1F31F}";
+  if (ratio >= 0.8) return "\u{1F389}";
+  if (ratio >= 0.5) return "\u{1F4AA}";
+  return "\u{1F4DA}";
+}
+
+function getResultMessage(ratio: number): string {
+  if (ratio >= 1) return "Perfect score!";
+  if (ratio >= 0.8) return "Great work!";
+  if (ratio >= 0.5) return "Good effort!";
+  return "Keep studying!";
+}
+
+const QuizScene = memo(function QuizScene({ payload }: QuizSceneProps) {
   const questions =
     payload.questions.length > 0 ? payload.questions : fallbackQuizQuestions;
 
@@ -31,9 +45,7 @@ export default function QuizScene({ payload }: QuizSceneProps) {
   const score = useMemo(
     () =>
       questions.reduce((total, entry) => {
-        if (!checked[entry.id]) {
-          return total;
-        }
+        if (!checked[entry.id]) return total;
         return answers[entry.id] === entry.correctChoiceId ? total + 1 : total;
       }, 0),
     [answers, checked, questions],
@@ -48,76 +60,85 @@ export default function QuizScene({ payload }: QuizSceneProps) {
   const isChecked = Boolean(checked[question.id]);
   const isCorrect = answers[question.id] === question.correctChoiceId;
   const isLast = currentIndex === questions.length - 1;
+  const allDone = showResults || completedCount === questions.length;
+  const ratio = questions.length > 0 ? score / questions.length : 0;
 
   return (
-    <div className="spark-scene-content grid gap-3 bg-bg-alt p-3">
-      <div className="flex items-center justify-between gap-3">
-        <p
-          className="text-xs text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
+    <div className="quiz-scene spark-scene-content">
+      {/* Header: progress + score */}
+      <div className="quiz-scene-header">
+        <p className="quiz-scene-progress">
           Question {currentIndex + 1}/{questions.length}
         </p>
-        <p
-          className="text-xs text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
-          Score: {score}
+        <p className="quiz-scene-score">
+          Score: {score}/{completedCount > 0 ? completedCount : questions.length}
         </p>
       </div>
 
+      {/* Progress dots */}
+      <div className="quiz-progress-dots">
+        {questions.map((q, i) => {
+          let state: string;
+          if (i === currentIndex) state = "current";
+          else if (checked[q.id] && answers[q.id] === q.correctChoiceId) state = "correct";
+          else if (checked[q.id]) state = "incorrect";
+          else state = "pending";
+          return (
+            <button
+              type="button"
+              key={q.id}
+              className="quiz-progress-dot"
+              data-state={state}
+              onClick={() => setCurrentIndex(i)}
+              aria-label={`Go to question ${i + 1}`}
+            />
+          );
+        })}
+      </div>
+
+      {/* Instructions */}
       {payload.questions.length === 0 ? (
-        <p
-          className="text-sm text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
-          No quiz questions available.
-        </p>
+        <p className="quiz-scene-instructions">No quiz questions available.</p>
       ) : payload.instructions ? (
-        <p
-          className="text-sm text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
-          {payload.instructions}
-        </p>
+        <p className="quiz-scene-instructions">{payload.instructions}</p>
       ) : null}
 
-      {(showResults || completedCount === questions.length) && (
-        <div className="rounded-xl border border-border-warm bg-bg-card px-3 py-2">
-          <p
-            className="text-sm font-semibold text-fg"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            Quiz complete
+      {/* Results banner */}
+      {allDone && (
+        <div className="quiz-results">
+          <p className="quiz-results-emoji">{getResultEmoji(ratio)}</p>
+          <p className="quiz-results-title">{getResultMessage(ratio)}</p>
+          <p className="quiz-results-fraction">
+            {score} out of {questions.length} correct
           </p>
-          <p
-            className="mt-1 text-xs text-fg-muted"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            You scored {score} out of {questions.length}.
-          </p>
+          <div className="quiz-results-bar-track">
+            <div
+              className="quiz-results-bar-fill"
+              style={{ width: `${Math.round(ratio * 100)}%` }}
+            />
+          </div>
         </div>
       )}
 
-      <fieldset
-        className="rounded-xl border border-border-faint bg-bg-card p-3"
-        disabled={isChecked}
-      >
-        <legend
-          className="px-1 text-[15px] text-fg"
-          style={{ fontFamily: "var(--font-dm-serif)" }}
-        >
-          {question.prompt}
-        </legend>
-        <div className="mt-2 grid gap-2">
+      {/* Question card */}
+      <fieldset className="quiz-question" data-checked={isChecked} disabled={isChecked}>
+        <legend className="quiz-question-prompt">{question.prompt}</legend>
+        <div className="quiz-choice-list">
           {question.choices.map((choice) => {
             const id = `${question.id}-${choice.id}`;
             const selected = answers[question.id] === choice.id;
+            const isCorrectChoice = choice.id === question.correctChoiceId;
+            let result: string | undefined;
+            if (isChecked && selected) result = isCorrect ? "correct" : "incorrect";
+            else if (isChecked && isCorrectChoice) result = "correct";
+
             return (
               <label
                 key={choice.id}
-                className="flex items-start gap-2 rounded-lg border border-border-faint px-2 py-2 text-sm text-fg"
-                style={{ fontFamily: "var(--font-jakarta)" }}
+                className="quiz-choice"
+                data-selected={selected || undefined}
+                data-result={result}
+                data-disabled={isChecked || undefined}
                 htmlFor={id}
               >
                 <input
@@ -126,12 +147,8 @@ export default function QuizScene({ payload }: QuizSceneProps) {
                   name={question.id}
                   value={choice.id}
                   checked={selected}
-                  className="mt-0.5 accent-[var(--accent2)]"
                   onChange={() => {
-                    setAnswers((previous) => ({
-                      ...previous,
-                      [question.id]: choice.id,
-                    }));
+                    setAnswers((prev) => ({ ...prev, [question.id]: choice.id }));
                   }}
                 />
                 <span>{choice.text}</span>
@@ -141,44 +158,25 @@ export default function QuizScene({ payload }: QuizSceneProps) {
         </div>
       </fieldset>
 
+      {/* Feedback */}
       {isChecked && (
-        <div
-          className="rounded-xl border px-3 py-2"
-          style={{
-            borderColor: isCorrect
-              ? "color-mix(in srgb, var(--accent2) 30%, var(--border) 70%)"
-              : "color-mix(in srgb, var(--accent) 28%, var(--border) 72%)",
-            background: isCorrect
-              ? "color-mix(in srgb, var(--accent2-dim) 40%, #fff 60%)"
-              : "color-mix(in srgb, var(--accent-dim) 38%, #fff 62%)",
-          }}
-        >
-          <p
-            className="text-sm text-fg"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            {isCorrect ? "Correct." : "Not quite."}
+        <div className="quiz-feedback" data-correct={isCorrect}>
+          <p className="quiz-feedback-label" data-correct={isCorrect}>
+            {isCorrect ? "Correct!" : "Not quite."}
           </p>
-          {question.explanation ? (
-            <p
-              className="mt-1 text-xs text-fg-muted"
-              style={{ fontFamily: "var(--font-jakarta)" }}
-            >
-              {question.explanation}
-            </p>
-          ) : null}
+          {question.explanation && (
+            <p className="quiz-feedback-explanation">{question.explanation}</p>
+          )}
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      {/* Action buttons */}
+      <div className="quiz-actions">
         <button
           type="button"
-          className="inline-flex items-center justify-center rounded-full border border-border bg-bg-card px-3 py-1 text-xs font-semibold text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
+          className="quiz-btn quiz-btn-secondary"
           disabled={currentIndex === 0}
-          onClick={() => {
-            setCurrentIndex((value) => Math.max(0, value - 1));
-          }}
+          onClick={() => setCurrentIndex((v) => Math.max(0, v - 1))}
         >
           Back
         </button>
@@ -186,19 +184,11 @@ export default function QuizScene({ payload }: QuizSceneProps) {
         {!isChecked ? (
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold text-white"
-            style={{
-              fontFamily: "var(--font-jakarta)",
-              background: "var(--accent2)",
-              borderColor:
-                "color-mix(in srgb, var(--accent2) 45%, var(--border) 55%)",
-            }}
+            className="quiz-btn quiz-btn-primary"
             disabled={!isAnswered}
             onClick={() => {
-              setChecked((previous) => ({ ...previous, [question.id]: true }));
-              if (isLast) {
-                setShowResults(true);
-              }
+              setChecked((prev) => ({ ...prev, [question.id]: true }));
+              if (isLast) setShowResults(true);
             }}
           >
             Check answer
@@ -206,21 +196,13 @@ export default function QuizScene({ payload }: QuizSceneProps) {
         ) : (
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold text-white"
-            style={{
-              fontFamily: "var(--font-jakarta)",
-              background: "var(--accent2)",
-              borderColor:
-                "color-mix(in srgb, var(--accent2) 45%, var(--border) 55%)",
-            }}
+            className="quiz-btn quiz-btn-primary"
             onClick={() => {
               if (isLast) {
                 setShowResults(true);
                 return;
               }
-              setCurrentIndex((value) =>
-                Math.min(questions.length - 1, value + 1),
-              );
+              setCurrentIndex((v) => Math.min(questions.length - 1, v + 1));
             }}
           >
             {isLast ? "See results" : "Next"}
@@ -229,8 +211,7 @@ export default function QuizScene({ payload }: QuizSceneProps) {
 
         <button
           type="button"
-          className="inline-flex items-center justify-center rounded-full border border-border bg-bg-card px-3 py-1 text-xs font-semibold text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
+          className="quiz-btn quiz-btn-secondary"
           onClick={() => {
             setCurrentIndex(0);
             setAnswers({});
@@ -243,4 +224,6 @@ export default function QuizScene({ payload }: QuizSceneProps) {
       </div>
     </div>
   );
-}
+});
+
+export default QuizScene;

@@ -2,6 +2,8 @@ import { memo, useMemo } from "react";
 import { ChevronRight, FileX, Folder, RefreshCw } from "lucide-react";
 import { getFileIcon } from "./labFileIcons";
 
+const SKELETON_WIDTHS = [62, 75, 68, 58, 72] as const;
+
 type FileEntry = {
   name: string;
   path: string;
@@ -65,9 +67,16 @@ export const LabSidebar = memo(function LabSidebar({
       {/* Breadcrumbs */}
       <nav className="lab-breadcrumb">
         {segments.map((seg, i) => (
-          <span key={seg.path} style={{ display: "inline-flex", alignItems: "center" }}>
+          <span
+            key={seg.path}
+            style={{ display: "inline-flex", alignItems: "center" }}
+          >
             {i > 0 && (
-              <ChevronRight size={11} className="lab-breadcrumb-sep" strokeWidth={2} />
+              <ChevronRight
+                size={11}
+                className="lab-breadcrumb-sep"
+                strokeWidth={2}
+              />
             )}
             <button
               type="button"
@@ -84,15 +93,21 @@ export const LabSidebar = memo(function LabSidebar({
       </nav>
 
       {/* File list */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0.35rem" }}>
+      <div
+        style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0.35rem" }}
+      >
         {isLoadingFiles ? (
           <div>
             {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className="lab-file-skeleton" style={{ animationDelay: `${i * 60}ms` }}>
+              <div
+                key={i}
+                className="lab-file-skeleton"
+                style={{ animationDelay: `${i * 60}ms` }}
+              >
                 <div className="lab-file-skeleton-icon" />
                 <div
                   className="lab-file-skeleton-text"
-                  style={{ width: `${55 + Math.random() * 35}%` }}
+                  style={{ width: `${SKELETON_WIDTHS[i] ?? 65}%` }}
                 />
               </div>
             ))}

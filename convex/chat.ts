@@ -20,6 +20,8 @@ const threadSummaryValidator = v.object({
   threadId: v.string(),
   title: v.optional(v.string()),
   lastMessageAt: v.optional(v.number()),
+  hasLab: v.boolean(),
+  hasActiveLab: v.boolean(),
 });
 
 const imageAttachmentForModelValidator = v.object({
@@ -60,12 +62,38 @@ export const listThreads = query({
       .order("desc")
       .take(100);
 
+    const labSessions = await ctx.db
+      .query("labSessions")
+      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+      .collect();
+
+    const labStatusByThreadId = new Map<
+      string,
+      {
+        hasLab: boolean;
+        hasActiveLab: boolean;
+      }
+    >();
+
+    for (const session of labSessions) {
+      const existing = labStatusByThreadId.get(session.threadId) ?? {
+        hasLab: false,
+        hasActiveLab: false,
+      };
+      existing.hasLab = true;
+      existing.hasActiveLab = existing.hasActiveLab || !session.archivedAt;
+      labStatusByThreadId.set(session.threadId, existing);
+    }
+
     return threads.map((thread) => ({
       _id: thread._id,
       _creationTime: thread._creationTime,
       threadId: thread.threadId,
       title: thread.title,
       lastMessageAt: thread.lastMessageAt,
+      hasLab: labStatusByThreadId.get(thread.threadId)?.hasLab ?? false,
+      hasActiveLab:
+        labStatusByThreadId.get(thread.threadId)?.hasActiveLab ?? false,
     }));
   },
 });
@@ -389,6 +417,40 @@ export const touchThread = internalMutation({
       lastMessageAt: args.lastMessageAt,
     });
     return null;
+  },
+});
+
+export const deleteThreadRecordInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const thread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+
+    if (!thread) {
+      return false;
+    }
+
+    const sparkInteractions = await ctx.db
+      .query("sparkInteractions")
+      .withIndex("by_userId_and_threadId_and_lastUpdatedAt", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .collect();
+
+    for (const interaction of sparkInteractions) {
+      await ctx.db.delete(interaction._id);
+    }
+
+    await ctx.db.delete(thread._id);
+    return true;
   },
 });
 

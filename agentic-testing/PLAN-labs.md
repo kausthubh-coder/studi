@@ -9,7 +9,7 @@
 
 ## Runtime Checks
 
-1. Playground API exposes both agents: `studi`, `studi-lab`.
+1. Playground API exposes both agents: `studi`, `codi`.
 2. `agentic-testing` can run assertions with:
    - `--expectTools`
    - `--failOnToolError`

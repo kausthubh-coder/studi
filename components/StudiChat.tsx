@@ -56,6 +56,7 @@ export default function StudiChat() {
   );
   const sendMessageMutation = useMutation(api.chat.sendMessage);
   const sendFirstMessageAction = useAction(api.chatActions.sendFirstMessage);
+  const deleteThreadAction = useAction(api.chatActions.deleteThread);
   const backfillThreadActivity = useMutation(
     api.chat.backfillThreadActivityForCurrentUser,
   );
@@ -63,6 +64,9 @@ export default function StudiChat() {
   const saveAttachment = useMutation(api.chat.saveAttachment);
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
+  const [threadPendingDelete, setThreadPendingDelete] =
+    useState<ThreadSummary | null>(null);
   const [expandedSpark, setExpandedSpark] = useState<ExpandedSpark | null>(
     null,
   );
@@ -73,6 +77,7 @@ export default function StudiChat() {
     PendingAttachment[]
   >([]);
   const didBackfillRef = useRef(false);
+  const selectedThreadIdRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -92,6 +97,10 @@ export default function StudiChat() {
   useEffect(() => {
     if (!listRef.current) return;
     listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [selectedThreadId]);
+
+  useEffect(() => {
+    selectedThreadIdRef.current = selectedThreadId;
   }, [selectedThreadId]);
 
   const uiMessages = useUIMessages(
@@ -282,6 +291,81 @@ export default function StudiChat() {
     setExpandedSpark(null);
   }, []);
 
+  const performThreadDelete = useCallback(
+    async (thread: ThreadSummary) => {
+      setDeletingThreadId(thread.threadId);
+      try {
+        const result = await deleteThreadAction({ threadId: thread.threadId });
+        if (result.labCleanupWarning) {
+          console.warn("Lab sandbox cleanup warning", result.labCleanupWarning);
+        }
+
+        window.localStorage.removeItem(
+          `studi.lab.workspace.${thread.threadId}`,
+        );
+
+        if (selectedThreadIdRef.current === thread.threadId) {
+          setSelectedThreadId(null);
+          setInput("");
+          setPendingAttachments((prev) => {
+            releaseAttachmentPreviewUrls(prev);
+            return [];
+          });
+        }
+
+        setExpandedSpark((current) => {
+          if (!current || current.threadId !== thread.threadId) {
+            return current;
+          }
+          return null;
+        });
+      } catch (error) {
+        console.error("Failed to delete thread", error);
+      } finally {
+        setDeletingThreadId(null);
+      }
+    },
+    [deleteThreadAction],
+  );
+
+  const handleDeleteThread = useCallback(
+    (thread: ThreadSummary) => {
+      if (thread.hasLab) {
+        setThreadPendingDelete(thread);
+        return;
+      }
+      void performThreadDelete(thread);
+    },
+    [performThreadDelete],
+  );
+
+  const handleConfirmThreadDelete = useCallback(() => {
+    if (!threadPendingDelete) {
+      return;
+    }
+
+    void performThreadDelete(threadPendingDelete).finally(() => {
+      setThreadPendingDelete(null);
+    });
+  }, [performThreadDelete, threadPendingDelete]);
+
+  useEffect(() => {
+    if (!threadPendingDelete) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !deletingThreadId) {
+        setThreadPendingDelete(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [deletingThreadId, threadPendingDelete]);
+
   const handleExpandSpark = useCallback(
     (
       artifact: SparkArtifact,
@@ -306,6 +390,8 @@ export default function StudiChat() {
         selectedThreadId={selectedThreadId}
         onSelectThread={handleSelectThread}
         onCreateThread={handleNewThread}
+        onDeleteThread={handleDeleteThread}
+        deletingThreadId={deletingThreadId}
       />
 
       <main className="relative flex min-w-0 flex-1 overflow-hidden">
@@ -376,6 +462,54 @@ export default function StudiChat() {
           </div>
         )}
       </main>
+      {threadPendingDelete ? (
+        <div
+          className="thread-delete-modal-overlay"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !deletingThreadId) {
+              setThreadPendingDelete(null);
+            }
+          }}
+        >
+          <div
+            className="thread-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="thread-delete-title"
+            aria-describedby="thread-delete-description"
+          >
+            <h2 id="thread-delete-title" className="thread-delete-modal-title">
+              Delete thread and lab?
+            </h2>
+            <p
+              id="thread-delete-description"
+              className="thread-delete-modal-description"
+            >
+              This thread has a lab workspace. Deleting it also permanently
+              removes the lab session and files.
+            </p>
+            <div className="thread-delete-modal-actions">
+              <button
+                type="button"
+                className="thread-delete-modal-cancel"
+                onClick={() => setThreadPendingDelete(null)}
+                disabled={Boolean(deletingThreadId)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="thread-delete-modal-danger"
+                onClick={handleConfirmThreadDelete}
+                disabled={Boolean(deletingThreadId)}
+              >
+                {deletingThreadId ? "Deleting..." : "Delete thread"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

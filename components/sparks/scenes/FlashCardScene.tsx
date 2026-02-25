@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { FlashCardSparkPayload } from "@/lib/sparks/contracts";
 
 type FlashCardSceneProps = {
@@ -17,134 +17,133 @@ function shuffle(values: number[]): number[] {
   return next;
 }
 
-export default function FlashCardScene({ payload }: FlashCardSceneProps) {
+const FlashCardScene = memo(function FlashCardScene({
+  payload,
+}: FlashCardSceneProps) {
   const cards =
     payload.cards.length > 0
       ? payload.cards
       : [{ id: "fallback_card", front: "No cards", back: "No cards" }];
 
-  const [order, setOrder] = useState<number[]>(cards.map((_, index) => index));
+  const [order, setOrder] = useState<number[]>(cards.map((_, i) => i));
   const [current, setCurrent] = useState(0);
-  const [revealed, setRevealed] = useState(false);
+  const [flipped, setFlipped] = useState(false);
+  /* Track whether user has ever flipped — hides the tap hint after first flip */
+  const hasFlippedOnce = useRef(false);
+  const [showHint, setShowHint] = useState(true);
 
   const card = cards[order[current]];
   const progressLabel = useMemo(
-    () => `${current + 1}/${cards.length}`,
+    () => `${current + 1} / ${cards.length}`,
     [cards.length, current],
   );
 
+  function goTo(index: number) {
+    setCurrent(index);
+    setFlipped(false);
+  }
+
+  function handleFlip() {
+    setFlipped((v) => !v);
+    if (!hasFlippedOnce.current) {
+      hasFlippedOnce.current = true;
+      setShowHint(false);
+    }
+  }
+
   return (
-    <div className="spark-scene-content grid gap-3 bg-bg-alt p-3">
-      <div className="flex items-center justify-between gap-3">
-        <p
-          className="text-xs text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
-          Card {progressLabel}
-        </p>
+    <div className="flash-card-scene spark-scene-content">
+      {/* Header */}
+      <div className="flash-card-head">
+        <p className="flash-card-progress">Card {progressLabel}</p>
         <button
           type="button"
-          className="inline-flex items-center justify-center rounded-full border border-border bg-bg-card px-3 py-1 text-xs font-semibold text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
+          className="flash-btn flash-btn-secondary"
           onClick={() => {
-            setOrder(shuffle(cards.map((_, index) => index)));
+            setOrder(shuffle(cards.map((_, i) => i)));
             setCurrent(0);
-            setRevealed(false);
+            setFlipped(false);
           }}
         >
           Shuffle
         </button>
       </div>
 
+      {/* Dot navigation */}
+      {cards.length > 1 && (
+        <div className="flash-card-dots">
+          {cards.map((_, i) => (
+            <button
+              type="button"
+              key={order[i]}
+              className="flash-card-dot"
+              data-active={i === current || undefined}
+              onClick={() => goTo(i)}
+              aria-label={`Go to card ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Instructions */}
       {payload.cards.length === 0 ? (
-        <p
-          className="text-sm text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
-          No flash cards available.
-        </p>
+        <p className="flash-card-instructions">No flash cards available.</p>
       ) : payload.instructions ? (
-        <p
-          className="text-sm text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
-          {payload.instructions}
-        </p>
+        <p className="flash-card-instructions">{payload.instructions}</p>
       ) : null}
 
-      <button
-        type="button"
-        className="min-h-44 rounded-xl border bg-bg-card px-4 py-3 text-left shadow-sm"
-        style={{
-          borderColor:
-            "color-mix(in srgb, var(--accent5) 20%, var(--border) 80%)",
-          background: revealed
-            ? "color-mix(in srgb, var(--accent5-dim) 22%, #fff 78%)"
-            : "var(--bg-card)",
-        }}
-        onClick={() => {
-          setRevealed((value) => !value);
-        }}
-      >
-        <span
-          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-          style={{
-            fontFamily: "var(--font-jakarta)",
-            background: "var(--accent5-dim)",
-            color: "color-mix(in srgb, var(--accent5) 74%, #3d1a2b 26%)",
-          }}
+      {/* 3D Flip Card */}
+      <div className="flash-card-flip-container">
+        <div
+          className="flash-card-flip-inner"
+          data-flipped={flipped || undefined}
+          onClick={handleFlip}
         >
-          {revealed ? "Back" : "Front"}
-        </span>
-        <p
-          className="mt-3 text-base text-fg"
-          style={{ fontFamily: "var(--font-dm-serif)", lineHeight: 1.45 }}
-        >
-          {revealed ? card.back : card.front}
-        </p>
-      </button>
+          {/* Front face */}
+          <div className="flash-card-face">
+            <span className="flash-card-face-label">Front</span>
+            <p>{card.front}</p>
+            {showHint && (
+              <span className="flash-card-tap-hint">tap to flip</span>
+            )}
+          </div>
 
-      <div className="flex flex-wrap gap-2">
+          {/* Back face */}
+          <div className="flash-card-face flash-card-face-back">
+            <span className="flash-card-face-label">Back</span>
+            <p>{card.back}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flash-card-actions">
         <button
           type="button"
-          className="inline-flex items-center justify-center rounded-full border border-border bg-bg-card px-3 py-1 text-xs font-semibold text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
+          className="flash-btn flash-btn-secondary"
           disabled={current === 0}
-          onClick={() => {
-            setCurrent((value) => Math.max(0, value - 1));
-            setRevealed(false);
-          }}
+          onClick={() => goTo(Math.max(0, current - 1))}
         >
           Previous
         </button>
         <button
           type="button"
-          className="inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold text-white"
-          style={{
-            fontFamily: "var(--font-jakarta)",
-            background: "var(--accent5)",
-            borderColor:
-              "color-mix(in srgb, var(--accent5) 48%, var(--border) 52%)",
-          }}
-          onClick={() => {
-            setRevealed((value) => !value);
-          }}
+          className="flash-btn flash-btn-primary"
+          onClick={handleFlip}
         >
-          {revealed ? "Show front" : "Flip"}
+          {flipped ? "Show front" : "Flip"}
         </button>
         <button
           type="button"
-          className="inline-flex items-center justify-center rounded-full border border-border bg-bg-card px-3 py-1 text-xs font-semibold text-fg-muted"
-          style={{ fontFamily: "var(--font-jakarta)" }}
+          className="flash-btn flash-btn-secondary"
           disabled={current >= cards.length - 1}
-          onClick={() => {
-            setCurrent((value) => Math.min(cards.length - 1, value + 1));
-            setRevealed(false);
-          }}
+          onClick={() => goTo(Math.min(cards.length - 1, current + 1))}
         >
           Next
         </button>
       </div>
     </div>
   );
-}
+});
+
+export default FlashCardScene;

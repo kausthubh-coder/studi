@@ -1,11 +1,4 @@
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Play, Terminal } from "lucide-react";
 
 type LabTerminalProps = {
@@ -31,7 +24,8 @@ const BUILTIN_SUGGESTIONS = [
   "bun run",
   "bun install",
   "bun test",
-  "npm run",
+  "bun run lint",
+  "bun run build",
   "git status",
   "git diff",
   "git log --oneline",
@@ -40,6 +34,24 @@ const BUILTIN_SUGGESTIONS = [
 ];
 
 const HISTORY_KEY = "studi.lab.terminal.history";
+
+function loadCommandHistory(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((value): value is string => typeof value === "string")
+      .slice(-50);
+  } catch {
+    return [];
+  }
+}
 
 export const LabTerminal = memo(function LabTerminal({
   commandInput,
@@ -53,21 +65,11 @@ export const LabTerminal = memo(function LabTerminal({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [historyIdx, setHistoryIdx] = useState(-1);
-  const historyRef = useRef<string[]>([]);
+  const [history, setHistory] = useState<string[]>(loadCommandHistory);
   const outputRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef(false);
   const startYRef = useRef(0);
   const startHeightRef = useRef(0);
-
-  // Load history from localStorage
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(HISTORY_KEY);
-      if (raw) historyRef.current = JSON.parse(raw);
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   // Auto-scroll output
   useEffect(() => {
@@ -80,17 +82,19 @@ export const LabTerminal = memo(function LabTerminal({
   const handleRun = useCallback(() => {
     const trimmed = commandInput.trim();
     if (trimmed) {
-      const hist = historyRef.current;
-      // Avoid duplicates at the end
-      if (hist[hist.length - 1] !== trimmed) {
-        hist.push(trimmed);
-        if (hist.length > 50) hist.shift();
-        try {
-          window.localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
-        } catch {
-          /* ignore */
+      setHistory((previous) => {
+        const next = [...previous];
+        if (next[next.length - 1] !== trimmed) {
+          next.push(trimmed);
+          if (next.length > 50) next.shift();
+          try {
+            window.localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+          } catch {
+            /* ignore */
+          }
         }
-      }
+        return next;
+      });
       setHistoryIdx(-1);
     }
     setShowSuggestions(false);
@@ -102,10 +106,10 @@ export const LabTerminal = memo(function LabTerminal({
     const input = commandInput.trim().toLowerCase();
     if (!input) return [];
     const all = [
-      ...new Set([...historyRef.current.slice().reverse(), ...BUILTIN_SUGGESTIONS]),
+      ...new Set([...history.slice().reverse(), ...BUILTIN_SUGGESTIONS]),
     ];
     return all.filter((s) => s.toLowerCase().includes(input)).slice(0, 8);
-  }, [commandInput]);
+  }, [commandInput, history]);
 
   // Keyboard handler
   const handleKeyDown = useCallback(
@@ -130,15 +134,18 @@ export const LabTerminal = memo(function LabTerminal({
       if (e.key === "ArrowUp") {
         e.preventDefault();
         if (showSuggestions && suggestions.length > 0) {
-          setActiveIdx((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+          setActiveIdx((prev) =>
+            prev > 0 ? prev - 1 : suggestions.length - 1,
+          );
         } else {
           // Navigate history
-          const hist = historyRef.current;
-          if (hist.length === 0) return;
+          if (history.length === 0) return;
           const next =
-            historyIdx === -1 ? hist.length - 1 : Math.max(0, historyIdx - 1);
+            historyIdx === -1
+              ? history.length - 1
+              : Math.max(0, historyIdx - 1);
           setHistoryIdx(next);
-          onCommandInputChange(hist[next]!);
+          onCommandInputChange(history[next]!);
         }
         return;
       }
@@ -146,17 +153,18 @@ export const LabTerminal = memo(function LabTerminal({
       if (e.key === "ArrowDown") {
         e.preventDefault();
         if (showSuggestions && suggestions.length > 0) {
-          setActiveIdx((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+          setActiveIdx((prev) =>
+            prev < suggestions.length - 1 ? prev + 1 : 0,
+          );
         } else {
-          const hist = historyRef.current;
           if (historyIdx === -1) return;
           const next = historyIdx + 1;
-          if (next >= hist.length) {
+          if (next >= history.length) {
             setHistoryIdx(-1);
             onCommandInputChange("");
           } else {
             setHistoryIdx(next);
-            onCommandInputChange(hist[next]!);
+            onCommandInputChange(history[next]!);
           }
         }
         return;
@@ -177,6 +185,7 @@ export const LabTerminal = memo(function LabTerminal({
     [
       activeIdx,
       handleRun,
+      history,
       historyIdx,
       onCommandInputChange,
       showSuggestions,
@@ -209,7 +218,9 @@ export const LabTerminal = memo(function LabTerminal({
       const onMove = (ev: MouseEvent) => {
         if (!resizingRef.current) return;
         const delta = startYRef.current - ev.clientY;
-        setTerminalHeight(Math.min(400, Math.max(100, startHeightRef.current + delta)));
+        setTerminalHeight(
+          Math.min(400, Math.max(100, startHeightRef.current + delta)),
+        );
       };
       const onUp = () => {
         resizingRef.current = false;
@@ -228,7 +239,10 @@ export const LabTerminal = memo(function LabTerminal({
   return (
     <div className="lab-terminal">
       {/* Resize handle */}
-      <div className="lab-terminal-resize-handle" onMouseDown={handleResizeDown} />
+      <div
+        className="lab-terminal-resize-handle"
+        onMouseDown={handleResizeDown}
+      />
 
       {/* Input row */}
       <div className="lab-terminal-input-row">
@@ -294,10 +308,7 @@ export const LabTerminal = memo(function LabTerminal({
         style={{ height: terminalHeight }}
       >
         {exitBadgeCode !== null && (
-          <div
-            className="lab-terminal-exit-badge"
-            data-code={exitBadgeCode}
-          >
+          <div className="lab-terminal-exit-badge" data-code={exitBadgeCode}>
             exit {lastExitCode}
           </div>
         )}

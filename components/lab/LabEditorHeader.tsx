@@ -7,6 +7,7 @@ type LabEditorHeaderProps = {
   isDirty: boolean;
   isSaving: boolean;
   isBinary: boolean;
+  isTruncated: boolean;
   onSave: () => void;
 };
 
@@ -15,10 +16,11 @@ export const LabEditorHeader = memo(function LabEditorHeader({
   isDirty,
   isSaving,
   isBinary,
+  isTruncated,
   onSave,
 }: LabEditorHeaderProps) {
   const basename = selectedFilePath
-    ? selectedFilePath.split("/").pop() ?? selectedFilePath
+    ? (selectedFilePath.split("/").pop() ?? selectedFilePath)
     : null;
 
   return (
@@ -32,7 +34,10 @@ export const LabEditorHeader = memo(function LabEditorHeader({
               {isDirty && <span className="lab-editor-dirty-dot" />}
             </>
           ) : (
-            <p className="lab-editor-file-name" style={{ color: "var(--fg-faint)" }}>
+            <p
+              className="lab-editor-file-name"
+              style={{ color: "var(--fg-faint)" }}
+            >
               Select a file
             </p>
           )}
@@ -46,13 +51,17 @@ export const LabEditorHeader = memo(function LabEditorHeader({
         <button
           type="button"
           className="lab-editor-save-btn"
-          disabled={!isDirty || isSaving || isBinary || !selectedFilePath}
+          disabled={
+            !isDirty || isSaving || isBinary || isTruncated || !selectedFilePath
+          }
           onClick={onSave}
         >
           <Save size={12} strokeWidth={2} />
           {isSaving ? "Saving..." : "Save"}
         </button>
-        <span className="lab-editor-save-hint">Ctrl+S</span>
+        <span className="lab-editor-save-hint">
+          {isTruncated ? "Read-only (truncated)" : "Ctrl+S"}
+        </span>
       </div>
     </div>
   );
