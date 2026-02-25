@@ -1,19 +1,23 @@
 "use node";
 
 import { Agent } from "@convex-dev/agent";
+import type { UsageHandler } from "@convex-dev/agent";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { stepCountIs } from "ai";
+import type { FunctionReference } from "convex/server";
 import {
   activeModelProfile,
   getCodiAgentName,
   getModelConfig,
+  getShruAgentName,
   getStudiAgentName,
   type ModelProfile,
 } from "../lib/model-config";
 import { getCodeSparkContextTool } from "../lib/agent-tools/getCodeSparkContextTool";
 import { loadPrompt, renderPrompt } from "../lib/prompts";
 import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
-import { components } from "./_generated/api";
+import { capturePosthogEvent } from "./posthog";
+import { components, internal } from "./_generated/api";
 import {
   archiveLabTool,
   createLabTool,
@@ -27,6 +31,119 @@ import {
 } from "./labTools";
 import { planToolsAlways, planToolsWhenPresent } from "./planTools";
 import { createSparkToolForProfile } from "./sparks/tools";
+import { createWarningTool } from "./voiceTools";
+
+const internalApi = internal as unknown as {
+  telemetry: {
+    insertRawUsageInternal: FunctionReference<"mutation", "internal">;
+    insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
+  };
+};
+
+function readNumericCandidate(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function extractEstimatedCostUsd(
+  providerMetadata: unknown,
+): number | undefined {
+  if (!providerMetadata || typeof providerMetadata !== "object") {
+    return undefined;
+  }
+
+  const stack: Record<string, unknown>[] = [
+    providerMetadata as Record<string, unknown>,
+  ];
+  const seen = new Set<Record<string, unknown>>();
+  const keys = [
+    "totalCostUsd",
+    "total_cost_usd",
+    "totalCost",
+    "total_cost",
+    "costUsd",
+    "cost_usd",
+    "cost",
+  ];
+
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || seen.has(node)) {
+      continue;
+    }
+    seen.add(node);
+
+    for (const key of keys) {
+      const found = readNumericCandidate(node, key);
+      if (found !== undefined) {
+        return found;
+      }
+    }
+
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        stack.push(value as Record<string, unknown>);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+const usageHandler: UsageHandler = async (ctx, args) => {
+  if (!args.userId) {
+    return;
+  }
+
+  const estimatedCostUsd = extractEstimatedCostUsd(args.providerMetadata);
+
+  try {
+    await ctx.runMutation(internalApi.telemetry.insertRawUsageInternal, {
+      userId: args.userId,
+      threadId: args.threadId,
+      agentName: args.agentName,
+      model: args.model,
+      provider: args.provider,
+      usage: args.usage,
+      providerMetadata: args.providerMetadata,
+    });
+
+    await ctx.runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
+      userId: args.userId,
+      threadId: args.threadId,
+      source: "agent_usage",
+      name: args.agentName ?? "agent_usage",
+      status: "success",
+      model: args.model,
+      metadata: {
+        provider: args.provider,
+        totalTokens: args.usage.totalTokens,
+        inputTokens: args.usage.inputTokens,
+        outputTokens: args.usage.outputTokens,
+        estimatedCostUsd,
+      },
+    });
+
+    await capturePosthogEvent({
+      event: "agent_usage_recorded",
+      distinctId: args.userId,
+      properties: {
+        thread_id: args.threadId,
+        agent_name: args.agentName,
+        model: args.model,
+        provider: args.provider,
+        total_tokens: args.usage.totalTokens,
+        input_tokens: args.usage.inputTokens,
+        output_tokens: args.usage.outputTokens,
+        estimated_cost_usd: estimatedCostUsd,
+      },
+    });
+  } catch (error) {
+    console.error("usageHandler failed", error);
+  }
+};
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
@@ -45,6 +162,10 @@ const studiAgentInstructions = renderPrompt("agents/studi.md", {
 });
 
 const codiAgentInstructions = loadPrompt("agents/codi.md");
+
+const shruAgentInstructions = renderPrompt("agents/shru.md", {
+  sparkCatalogPromptBlock: sparkCatalogPromptBlock(),
+});
 
 export function buildStudiToolset(
   profile: ModelProfile,
@@ -77,6 +198,13 @@ export function buildCodiToolset(includePlanTools: boolean) {
   };
 }
 
+export function buildShruToolset(profile: ModelProfile) {
+  return {
+    create_spark: createSparkToolForProfile(profile),
+    create_warning: createWarningTool,
+  };
+}
+
 function createStudiAgent(profile: ModelProfile): Agent {
   const modelConfig = getModelConfig(profile);
   return new Agent(components.agent, {
@@ -85,6 +213,7 @@ function createStudiAgent(profile: ModelProfile): Agent {
     stopWhen: stepCountIs(6),
     tools: buildStudiToolset(profile, true),
     instructions: studiAgentInstructions,
+    usageHandler,
   });
 }
 
@@ -96,6 +225,19 @@ function createCodiAgent(profile: ModelProfile): Agent {
     stopWhen: stepCountIs(10),
     tools: buildCodiToolset(true),
     instructions: codiAgentInstructions,
+    usageHandler,
+  });
+}
+
+function createShruAgent(profile: ModelProfile): Agent {
+  const modelConfig = getModelConfig(profile);
+  return new Agent(components.agent, {
+    name: getShruAgentName(profile),
+    languageModel: openrouter.chat(modelConfig.shruAgent),
+    stopWhen: stepCountIs(6),
+    tools: buildShruToolset(profile),
+    instructions: shruAgentInstructions,
+    usageHandler,
   });
 }
 
@@ -111,15 +253,26 @@ export const codiAgentsByProfile: Record<ModelProfile, Agent> = {
   quality: createCodiAgent("quality"),
 };
 
+export const shruAgentsByProfile: Record<ModelProfile, Agent> = {
+  balanced: createShruAgent("balanced"),
+  fast: createShruAgent("fast"),
+  quality: createShruAgent("quality"),
+};
+
 export const studiAgent: Agent = studiAgentsByProfile[activeModelProfile];
 
 export const codiAgent: Agent = codiAgentsByProfile[activeModelProfile];
 
+export const shruAgent: Agent = shruAgentsByProfile[activeModelProfile];
+
 export const playgroundAgents: Agent[] = [
   studiAgentsByProfile.balanced,
   codiAgentsByProfile.balanced,
+  shruAgentsByProfile.balanced,
   studiAgentsByProfile.fast,
   codiAgentsByProfile.fast,
+  shruAgentsByProfile.fast,
   studiAgentsByProfile.quality,
   codiAgentsByProfile.quality,
+  shruAgentsByProfile.quality,
 ];

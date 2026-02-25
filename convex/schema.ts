@@ -12,6 +12,7 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_userId_and_lastMessageAt", ["userId", "lastMessageAt"])
+    .index("by_threadId", ["threadId"])
     .index("by_userId_and_threadId", ["userId", "threadId"]),
 
   attachments: defineTable({
@@ -93,4 +94,63 @@ export default defineSchema({
   })
     .index("by_userId_and_threadId", ["userId", "threadId"])
     .index("by_userId_and_updatedAt", ["userId", "updatedAt"]),
+
+  rawUsage: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    agentName: v.optional(v.string()),
+    model: v.string(),
+    provider: v.string(),
+    usage: v.object({
+      totalTokens: v.optional(v.number()),
+      inputTokens: v.optional(v.number()),
+      outputTokens: v.optional(v.number()),
+      reasoningTokens: v.optional(v.number()),
+      cachedInputTokens: v.optional(v.number()),
+      inputTokenDetails: v.optional(v.any()),
+      outputTokenDetails: v.optional(v.any()),
+      raw: v.optional(v.any()),
+    }),
+    providerMetadata: v.optional(v.any()),
+    billingPeriod: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_userId_and_threadId_and_createdAt", [
+      "userId",
+      "threadId",
+      "createdAt",
+    ])
+    .index("by_billingPeriod_and_userId", ["billingPeriod", "userId"]),
+
+  telemetryEvents: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    source: v.union(
+      v.literal("agent_usage"),
+      v.literal("agent_runtime"),
+      v.literal("spark"),
+      v.literal("lab_tool"),
+      v.literal("plan_tool"),
+      v.literal("voice"),
+    ),
+    name: v.string(),
+    status: v.union(v.literal("success"), v.literal("failed")),
+    durationMs: v.optional(v.number()),
+    errorCategory: v.optional(v.string()),
+    retriable: v.optional(v.boolean()),
+    model: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_userId_and_createdAt", ["userId", "createdAt"])
+    .index("by_userId_and_threadId_and_createdAt", [
+      "userId",
+      "threadId",
+      "createdAt",
+    ])
+    .index("by_userId_and_source_and_createdAt", [
+      "userId",
+      "source",
+      "createdAt",
+    ]),
 });

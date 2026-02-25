@@ -19,8 +19,12 @@ import type * as planActions from "../planActions.js";
 import type * as planTools from "../planTools.js";
 import type * as plans from "../plans.js";
 import type * as playground from "../playground.js";
+import type * as posthog from "../posthog.js";
 import type * as sparkFeedback from "../sparkFeedback.js";
 import type * as sparks_tools from "../sparks/tools.js";
+import type * as telemetry from "../telemetry.js";
+import type * as voiceActions from "../voiceActions.js";
+import type * as voiceTools from "../voiceTools.js";
 
 import type {
   ApiFromModules,
@@ -40,8 +44,12 @@ declare const fullApi: ApiFromModules<{
   planTools: typeof planTools;
   plans: typeof plans;
   playground: typeof playground;
+  posthog: typeof posthog;
   sparkFeedback: typeof sparkFeedback;
   "sparks/tools": typeof sparks_tools;
+  telemetry: typeof telemetry;
+  voiceActions: typeof voiceActions;
+  voiceTools: typeof voiceTools;
 }>;
 
 /**

@@ -6,10 +6,13 @@ import { activeModelProfile } from "../lib/model-config";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalAction } from "./_generated/server";
 import { api, components, internal } from "./_generated/api";
+import { capturePosthogEvent } from "./posthog";
 import {
   buildCodiToolset,
+  buildShruToolset,
   buildStudiToolset,
   codiAgent,
+  shruAgent,
   studiAgent,
 } from "./agent";
 import { classifyDaytonaError, getSandbox, stopSandbox } from "./daytona";
@@ -17,6 +20,9 @@ import { classifyDaytonaError, getSandbox, stopSandbox } from "./daytona";
 const internalApi = internal as unknown as {
   plans: {
     getPlanSummaryForThreadInternal: FunctionReference<"query", "internal">;
+  };
+  telemetry: {
+    insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
   };
 };
 
@@ -91,6 +97,7 @@ export const sendMessage = action({
     prompt: v.optional(v.string()),
     attachmentIds: v.optional(v.array(v.id("attachments"))),
     requestId: v.optional(v.string()),
+    source: v.optional(v.union(v.literal("text"), v.literal("voice"))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -101,6 +108,7 @@ export const sendMessage = action({
       prompt: args.prompt,
       attachmentIds: args.attachmentIds,
       requestId,
+      source: args.source,
     });
 
     return null;
@@ -183,9 +191,12 @@ export const generateAssistantReply = internalAction({
     threadId: v.string(),
     userId: v.string(),
     promptMessageId: v.string(),
+    source: v.optional(v.union(v.literal("text"), v.literal("voice"))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const startedAt = Date.now();
+
     await ctx.runQuery(internal.chat.assertThreadOwner, {
       userId: args.userId,
       threadId: args.threadId,
@@ -199,8 +210,12 @@ export const generateAssistantReply = internalAction({
       },
     );
 
-    const activeAgent =
-      labSession && !labSession.archivedAt ? codiAgent : studiAgent;
+    const isVoiceTurn = args.source === "voice";
+    const activeAgent = isVoiceTurn
+      ? shruAgent
+      : labSession && !labSession.archivedAt
+        ? codiAgent
+        : studiAgent;
 
     const planSummary = await ctx.runQuery(
       internalApi.plans.getPlanSummaryForThreadInternal,
@@ -209,37 +224,114 @@ export const generateAssistantReply = internalAction({
         threadId: args.threadId,
       },
     );
-    const includePlanTools = Boolean(planSummary);
+    const includePlanTools = isVoiceTurn ? false : Boolean(planSummary);
 
-    const tools =
-      labSession && !labSession.archivedAt
+    const tools = isVoiceTurn
+      ? buildShruToolset(activeModelProfile)
+      : labSession && !labSession.archivedAt
         ? buildCodiToolset(includePlanTools)
         : buildStudiToolset(activeModelProfile, includePlanTools);
 
-    const { thread } = await activeAgent.continueThread(ctx, {
-      threadId: args.threadId,
-      userId: args.userId,
-    });
+    try {
+      const { thread } = await activeAgent.continueThread(ctx, {
+        threadId: args.threadId,
+        userId: args.userId,
+      });
 
-    await thread.streamText(
-      {
-        promptMessageId: args.promptMessageId,
-        tools,
-        maxOutputTokens: 4000,
-      },
-      {
-        saveStreamDeltas: {
-          chunking: "line",
-          throttleMs: 120,
+      await thread.streamText(
+        {
+          promptMessageId: args.promptMessageId,
+          tools,
+          maxOutputTokens: 4000,
         },
-      },
-    );
+        {
+          saveStreamDeltas: {
+            chunking: "line",
+            throttleMs: 120,
+          },
+        },
+      );
 
-    await ctx.runMutation(internal.chat.touchThread, {
-      userId: args.userId,
-      threadId: args.threadId,
-      lastMessageAt: Date.now(),
-    });
+      await ctx.runMutation(internal.chat.touchThread, {
+        userId: args.userId,
+        threadId: args.threadId,
+        lastMessageAt: Date.now(),
+      });
+
+      const durationMs = Date.now() - startedAt;
+      await ctx.runMutation(
+        internalApi.telemetry.insertTelemetryEventInternal,
+        {
+          userId: args.userId,
+          threadId: args.threadId,
+          source: "agent_runtime",
+          name: "generate_assistant_reply",
+          status: "success",
+          durationMs,
+          metadata: {
+            usedLabAgent: Boolean(labSession && !labSession.archivedAt),
+            usedVoiceAgent: isVoiceTurn,
+            includePlanTools,
+            modelProfile: activeModelProfile,
+            source: args.source ?? "text",
+          },
+        },
+      );
+
+      await capturePosthogEvent({
+        event: "agent_reply_completed",
+        distinctId: args.userId,
+        properties: {
+          thread_id: args.threadId,
+          duration_ms: durationMs,
+          used_lab_agent: Boolean(labSession && !labSession.archivedAt),
+          used_voice_agent: isVoiceTurn,
+          include_plan_tools: includePlanTools,
+          model_profile: activeModelProfile,
+          source: args.source ?? "text",
+        },
+      });
+    } catch (error) {
+      const durationMs = Date.now() - startedAt;
+      await ctx.runMutation(
+        internalApi.telemetry.insertTelemetryEventInternal,
+        {
+          userId: args.userId,
+          threadId: args.threadId,
+          source: "agent_runtime",
+          name: "generate_assistant_reply",
+          status: "failed",
+          durationMs,
+          errorCategory: "runtime_error",
+          retriable: true,
+          metadata: {
+            error: error instanceof Error ? error.message : String(error),
+            usedLabAgent: Boolean(labSession && !labSession.archivedAt),
+            usedVoiceAgent: isVoiceTurn,
+            includePlanTools,
+            modelProfile: activeModelProfile,
+            source: args.source ?? "text",
+          },
+        },
+      );
+
+      await capturePosthogEvent({
+        event: "agent_reply_failed",
+        distinctId: args.userId,
+        properties: {
+          thread_id: args.threadId,
+          duration_ms: durationMs,
+          used_lab_agent: Boolean(labSession && !labSession.archivedAt),
+          used_voice_agent: isVoiceTurn,
+          include_plan_tools: includePlanTools,
+          model_profile: activeModelProfile,
+          source: args.source ?? "text",
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+
+      throw error;
+    }
 
     return null;
   },

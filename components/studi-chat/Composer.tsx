@@ -1,7 +1,19 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClipboardEvent, FormEvent, RefObject } from "react";
 import type { Id } from "@/convex/_generated/dataModel";
-import { IconArrow, IconPaperclip, IconX } from "@/components/studi-chat/icons";
-import type { PendingAttachment } from "@/components/studi-chat/types";
+import {
+  IconArrow,
+  IconBook,
+  IconMic,
+  IconPaperclip,
+  IconPlus,
+  IconX,
+} from "@/components/studi-chat/icons";
+import { PlanProgressBar } from "@/components/studi-chat/PlanProgressBar";
+import type {
+  PendingAttachment,
+  ThreadPlan,
+} from "@/components/studi-chat/types";
 
 export function Composer({
   pendingAttachments,
@@ -15,6 +27,16 @@ export function Composer({
   onUpload,
   onRemoveAttachment,
   variant = "chat",
+  showTrackOption,
+  onStartTrack,
+  threadId,
+  threadPlan,
+  isPlanExpanded,
+  onTogglePlanExpanded,
+  onPrefillPlanInput,
+  showVoiceButton,
+  onOpenVoiceMode,
+  voiceDisabledReason,
 }: {
   pendingAttachments: PendingAttachment[];
   input: string;
@@ -27,11 +49,76 @@ export function Composer({
   onUpload: (files: FileList) => Promise<void>;
   onRemoveAttachment: (attachmentId: Id<"attachments">) => void;
   variant?: "chat" | "welcome";
+  showTrackOption?: boolean;
+  onStartTrack?: () => void;
+  threadId?: string | null;
+  threadPlan?: ThreadPlan | null | undefined;
+  isPlanExpanded?: boolean;
+  onTogglePlanExpanded?: () => void;
+  onPrefillPlanInput?: (value: string) => void;
+  showVoiceButton?: boolean;
+  onOpenVoiceMode?: () => void;
+  voiceDisabledReason?: string | null;
 }) {
   const isWelcome = variant === "welcome";
 
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const plusBtnRef = useRef<HTMLButtonElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const closePlusMenu = useCallback(() => setPlusMenuOpen(false), []);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!plusMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        plusMenuRef.current &&
+        !plusMenuRef.current.contains(e.target as Node) &&
+        plusBtnRef.current &&
+        !plusBtnRef.current.contains(e.target as Node)
+      ) {
+        closePlusMenu();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [plusMenuOpen, closePlusMenu]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!plusMenuOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closePlusMenu();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [plusMenuOpen, closePlusMenu]);
+
+  const hasPlanBar = !isWelcome && !!threadId && !!threadPlan;
+
   const composerCard = (
-    <form onSubmit={onSubmit} className={isWelcome ? "composer-card is-welcome" : "composer-card"}>
+    <form
+      onSubmit={onSubmit}
+      className={isWelcome ? "composer-card is-welcome" : "composer-card"}
+      data-has-plan={hasPlanBar ? "true" : undefined}
+    >
+      {/* Plan progress bar — attached to top of composer */}
+      {threadId &&
+        threadPlan &&
+        onTogglePlanExpanded &&
+        onPrefillPlanInput &&
+        !isWelcome && (
+          <PlanProgressBar
+            threadId={threadId}
+            threadPlan={threadPlan}
+            onPrefillInput={onPrefillPlanInput}
+            isExpanded={isPlanExpanded ?? false}
+            onToggleExpand={onTogglePlanExpanded}
+          />
+        )}
+
       {/* Attachment preview row */}
       {pendingAttachments.length > 0 && (
         <div className="flex flex-wrap gap-2 px-4 pt-3">
@@ -81,30 +168,93 @@ export function Composer({
           }
         }}
         placeholder={
-          isWelcome
-            ? "What would you like to learn?"
-            : "Ask a follow-up..."
+          isWelcome ? "What would you like to learn?" : "Ask a follow-up..."
         }
         rows={isWelcome ? 3 : 1}
         className={isWelcome ? "min-h-[80px]" : "min-h-[42px] max-h-40"}
       />
 
-      {/* Bottom row: file upload left, send button right */}
+      {/* Bottom row: plus menu left, send button right */}
       <div className="composer-bottom-row">
-        <label className="composer-icon-btn" aria-label="Attach file">
-          <IconPaperclip />
-          <input
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files?.length) {
-                void onUpload(e.target.files);
-                e.currentTarget.value = "";
-              }
-            }}
-          />
-        </label>
+        <div style={{ position: "relative" }}>
+          <button
+            ref={plusBtnRef}
+            type="button"
+            className={`composer-plus-btn${plusMenuOpen ? " is-open" : ""}`}
+            aria-label="More options"
+            onClick={() => setPlusMenuOpen((v) => !v)}
+          >
+            <IconPlus />
+          </button>
+
+          {plusMenuOpen && (
+            <div ref={plusMenuRef} className="composer-plus-menu">
+              <button
+                type="button"
+                className="composer-plus-menu-item"
+                onClick={() => {
+                  closePlusMenu();
+                  fileInputRef.current?.click();
+                }}
+              >
+                <IconPaperclip />
+                <span>Upload file</span>
+              </button>
+              {showTrackOption && onStartTrack ? (
+                <button
+                  type="button"
+                  className="composer-plus-menu-item"
+                  onClick={() => {
+                    closePlusMenu();
+                    onStartTrack();
+                  }}
+                >
+                  <IconBook />
+                  <span>Start track</span>
+                </button>
+              ) : hasPlanBar && onTogglePlanExpanded ? (
+                <button
+                  type="button"
+                  className="composer-plus-menu-item"
+                  onClick={() => {
+                    closePlusMenu();
+                    onTogglePlanExpanded();
+                  }}
+                >
+                  <IconBook />
+                  <span>{isPlanExpanded ? "Hide track" : "View track"}</span>
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) {
+              void onUpload(e.target.files);
+              e.currentTarget.value = "";
+            }
+          }}
+        />
+
+        {showVoiceButton ? (
+          <button
+            type="button"
+            className="composer-icon-btn disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Open voice mode"
+            onClick={() => onOpenVoiceMode?.()}
+            disabled={Boolean(voiceDisabledReason)}
+            title={voiceDisabledReason ?? "Open voice mode"}
+          >
+            <IconMic />
+          </button>
+        ) : null}
 
         <button
           type="submit"
