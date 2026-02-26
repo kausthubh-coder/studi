@@ -1,14 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { UIMessage } from "@convex-dev/agent/react";
+import { useState } from "react";
 import SparkSceneRenderer from "@/components/sparks/SparkSceneRenderer";
-import type { AgentUiState } from "@/components/studi-chat/MessageRenderer";
-import {
-  extractLatestAssistantTranscript,
-  extractLatestVoiceSpark,
-  extractLatestVoiceWarning,
-} from "@/components/voice/message-utils";
 import { useVoiceSession } from "@/components/voice/useVoiceSession";
 import type { CreateWarningToolResult } from "@/lib/voice/contracts";
 
@@ -27,22 +20,46 @@ function formatStateLabel(
   return "Idle";
 }
 
+function renderHighlightedAssistantText(text: string, currentWord: string) {
+  if (!currentWord) {
+    return text;
+  }
+
+  const escapedWord = currentWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(${escapedWord})(?!.*${escapedWord})`, "i");
+  const match = text.match(pattern);
+  if (!match || typeof match.index !== "number") {
+    return text;
+  }
+
+  const start = match.index;
+  const end = start + match[0].length;
+
+  return (
+    <>
+      {text.slice(0, start)}
+      <span className="voice-transcript-word-active">
+        {text.slice(start, end)}
+      </span>
+      {text.slice(end)}
+    </>
+  );
+}
+
 export function VoiceModeOverlay({
   isOpen,
   threadId,
-  messages,
-  agentState,
   onClose,
   onSwitchToText,
   createClientSecret,
   onFinalTranscript,
+  onAssistantFinalTranscript,
+  onToolCall,
   onUsage,
   onEvent,
 }: {
   isOpen: boolean;
   threadId: string;
-  messages: UIMessage[];
-  agentState: AgentUiState;
   onClose: () => void;
   onSwitchToText: (warning?: CreateWarningToolResult) => void;
   createClientSecret: (args: { threadId: string }) => Promise<{
@@ -51,6 +68,18 @@ export function VoiceModeOverlay({
     transcriptionModel: string;
   }>;
   onFinalTranscript: (text: string) => Promise<void>;
+  onAssistantFinalTranscript: (text: string) => Promise<void>;
+  onToolCall: (args: {
+    threadId: string;
+    callId: string;
+    toolName: "create_spark" | "create_warning";
+    argumentsJson: string;
+  }) => Promise<{
+    callId: string;
+    toolName: "create_spark" | "create_warning";
+    success: boolean;
+    output: unknown;
+  }>;
   onUsage: (args: {
     usageType: "input_transcription" | "realtime_response";
     model: string;
@@ -73,28 +102,26 @@ export function VoiceModeOverlay({
     metadata?: unknown;
   }) => Promise<unknown>;
 }) {
-  const latestSpark = useMemo(
-    () => extractLatestVoiceSpark(messages),
-    [messages],
-  );
-  const latestWarning = useMemo(
-    () => extractLatestVoiceWarning(messages),
-    [messages],
-  );
-  const latestAssistantTranscript = useMemo(
-    () => extractLatestAssistantTranscript(messages),
-    [messages],
-  );
-
-  const [dismissedWarningKeys, setDismissedWarningKeys] = useState<Set<string>>(
-    new Set(),
+  const [dismissedWarningKey, setDismissedWarningKey] = useState<string | null>(
+    null,
   );
 
   const {
     connectionState,
-    liveTranscript,
+    liveAssistantTranscript,
+    assistantCurrentWord,
+    assistantTranscriptHistory,
+    activeSpark,
+    activeWarning,
+    isSparkCreating,
     isSpeechActive,
     errorMessage,
+    isMuted,
+    inputDevices,
+    selectedInputDeviceId,
+    toggleMute,
+    selectInputDevice,
+    clearWarning,
     stop,
     retry,
   } = useVoiceSession({
@@ -102,6 +129,8 @@ export function VoiceModeOverlay({
     isActive: isOpen,
     createClientSecret,
     onFinalTranscript,
+    onAssistantFinalTranscript,
+    onToolCall,
     onUsage,
     onEvent,
   });
@@ -110,13 +139,12 @@ export function VoiceModeOverlay({
     return null;
   }
 
-  const activeWarning =
-    latestWarning && !dismissedWarningKeys.has(latestWarning.messageKey)
-      ? latestWarning
-      : null;
-
-  const showCreatingSpark = agentState.phase === "spark";
-  const shouldShowSpark = !showCreatingSpark && Boolean(latestSpark?.artifact);
+  const warningKey = activeWarning
+    ? `${activeWarning.reason}:${activeWarning.title}:${activeWarning.message}`
+    : null;
+  const showWarning =
+    Boolean(activeWarning) && dismissedWarningKey !== warningKey;
+  const shouldShowSpark = !isSparkCreating && Boolean(activeSpark?.artifact);
 
   return (
     <div className="voice-shell" role="dialog" aria-modal="true">
@@ -139,19 +167,19 @@ export function VoiceModeOverlay({
       </header>
 
       <section className="voice-stage" aria-live="polite">
-        {showCreatingSpark ? (
+        {isSparkCreating ? (
           <div className="voice-spark-building">
             <p className="voice-spark-building-title">Creating spark...</p>
             <p className="voice-spark-building-sub">
               Rendering an interactive scene for this answer.
             </p>
           </div>
-        ) : shouldShowSpark && latestSpark ? (
+        ) : shouldShowSpark && activeSpark ? (
           <div className="voice-spark-preview">
             <SparkSceneRenderer
-              artifact={latestSpark.artifact}
+              artifact={activeSpark.artifact}
               threadId={threadId}
-              sparkInstanceId={latestSpark.sparkInstanceId}
+              sparkInstanceId={activeSpark.sparkInstanceId}
               onExpandSpark={() => {
                 return;
               }}
@@ -161,12 +189,23 @@ export function VoiceModeOverlay({
         ) : (
           <div className="voice-transcript-viewer">
             <p className="voice-transcript-title">Transcript</p>
-            <p className="voice-transcript-line" data-role="user">
-              {liveTranscript || "Say something when the mic is active..."}
-            </p>
-            {latestAssistantTranscript ? (
-              <p className="voice-transcript-line" data-role="assistant">
-                {latestAssistantTranscript}
+
+            {assistantTranscriptHistory.length > 0 ? (
+              assistantTranscriptHistory.map((line, index) => (
+                <p key={`${index}-${line}`} className="voice-transcript-line">
+                  {line}
+                </p>
+              ))
+            ) : (
+              <p className="voice-transcript-empty">Shru is listening...</p>
+            )}
+
+            {liveAssistantTranscript ? (
+              <p className="voice-transcript-line voice-transcript-live">
+                {renderHighlightedAssistantText(
+                  liveAssistantTranscript,
+                  assistantCurrentWord,
+                )}
               </p>
             ) : null}
           </div>
@@ -186,10 +225,52 @@ export function VoiceModeOverlay({
       </section>
 
       <footer className="voice-controls">
-        <p className="voice-status-pill" data-state={connectionState}>
-          {formatStateLabel(connectionState)}
-          {isSpeechActive ? " - listening" : ""}
-        </p>
+        <div className="voice-controls-left">
+          <p className="voice-status-pill" data-state={connectionState}>
+            {formatStateLabel(connectionState)}
+            {isSpeechActive ? " - listening" : ""}
+          </p>
+
+          <div className="voice-mic-controls">
+            <button
+              type="button"
+              className="voice-secondary-btn"
+              onClick={() => {
+                toggleMute();
+              }}
+              disabled={
+                connectionState !== "connected" &&
+                connectionState !== "connecting"
+              }
+            >
+              {isMuted ? "Unmute" : "Mute"}
+            </button>
+
+            <label className="voice-input-label">
+              <span>Input</span>
+              <select
+                className="voice-input-select"
+                value={selectedInputDeviceId ?? ""}
+                onChange={(event) => {
+                  void selectInputDevice(event.target.value);
+                }}
+                disabled={
+                  inputDevices.length === 0 || connectionState === "connecting"
+                }
+              >
+                {inputDevices.length === 0 ? (
+                  <option value="">No microphone found</option>
+                ) : (
+                  inputDevices.map((device) => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+          </div>
+        </div>
 
         {connectionState === "connected" ? (
           <button
@@ -216,24 +297,20 @@ export function VoiceModeOverlay({
 
       {errorMessage ? <p className="voice-error-msg">{errorMessage}</p> : null}
 
-      {activeWarning ? (
+      {showWarning && activeWarning ? (
         <div className="voice-warning-backdrop" role="presentation">
           <div className="voice-warning-modal" role="dialog" aria-modal="true">
-            <p className="voice-warning-title">{activeWarning.warning.title}</p>
-            <p className="voice-warning-message">
-              {activeWarning.warning.message}
-            </p>
+            <p className="voice-warning-title">{activeWarning.title}</p>
+            <p className="voice-warning-message">{activeWarning.message}</p>
             <div className="voice-warning-actions">
               <button
                 type="button"
                 className="voice-warning-cancel"
                 onClick={() => {
-                  const messageKey = activeWarning.messageKey;
-                  setDismissedWarningKeys((previous) => {
-                    const next = new Set(previous);
-                    next.add(messageKey);
-                    return next;
-                  });
+                  if (warningKey) {
+                    setDismissedWarningKey(warningKey);
+                  }
+                  clearWarning();
                 }}
               >
                 Stay in voice
@@ -242,18 +319,15 @@ export function VoiceModeOverlay({
                 type="button"
                 className="voice-warning-switch"
                 onClick={() => {
-                  const warning = activeWarning.warning;
-                  const messageKey = activeWarning.messageKey;
-                  setDismissedWarningKeys((previous) => {
-                    const next = new Set(previous);
-                    next.add(messageKey);
-                    return next;
-                  });
+                  if (warningKey) {
+                    setDismissedWarningKey(warningKey);
+                  }
+                  clearWarning();
                   void stop("switch_to_text_warning");
-                  onSwitchToText(warning);
+                  onSwitchToText(activeWarning);
                 }}
               >
-                {activeWarning.warning.ctaLabel}
+                {activeWarning.ctaLabel}
               </button>
             </div>
           </div>
@@ -327,6 +401,7 @@ export function VoiceModeOverlay({
 
         .voice-close-btn,
         .voice-primary-btn,
+        .voice-secondary-btn,
         .voice-warning-cancel,
         .voice-warning-switch {
           border-radius: 999px;
@@ -389,7 +464,7 @@ export function VoiceModeOverlay({
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          color: rgba(244, 244, 245, 0.78);
+          color: #09090b;
         }
 
         .voice-spark-building-sub {
@@ -417,25 +492,37 @@ export function VoiceModeOverlay({
           flex-direction: column;
           gap: 0.7rem;
           overflow: auto;
+          background: #ffffff;
         }
 
         .voice-transcript-line {
           margin: 0;
-          border-radius: 0.85rem;
-          padding: 0.6rem 0.7rem;
+          padding: 0;
+          font-family: var(--font-jakarta), system-ui, sans-serif;
+          font-size: 1rem;
+          line-height: 1.6;
+          color: #09090b;
+          border: none;
+          background: transparent;
+        }
+
+        .voice-transcript-live {
+          font-weight: 600;
+        }
+
+        .voice-transcript-word-active {
+          background: #09090b;
+          color: #ffffff;
+          border-radius: 0.35rem;
+          padding: 0.03rem 0.28rem;
+          margin: 0 0.06rem;
+        }
+
+        .voice-transcript-empty {
+          margin: 0;
           font-family: var(--font-jakarta), system-ui, sans-serif;
           font-size: 0.95rem;
-          line-height: 1.5;
-        }
-
-        .voice-transcript-line[data-role="user"] {
-          background: rgba(16, 185, 129, 0.18);
-          border: 1px solid rgba(16, 185, 129, 0.28);
-        }
-
-        .voice-transcript-line[data-role="assistant"] {
-          background: rgba(56, 189, 248, 0.14);
-          border: 1px solid rgba(56, 189, 248, 0.24);
+          color: rgba(9, 9, 11, 0.58);
         }
 
         .voice-orb-zone {
@@ -500,6 +587,55 @@ export function VoiceModeOverlay({
           align-items: center;
           justify-content: space-between;
           gap: 0.8rem;
+        }
+
+        .voice-controls-left {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.55rem;
+        }
+
+        .voice-mic-controls {
+          display: flex;
+          align-items: center;
+          gap: 0.55rem;
+        }
+
+        .voice-secondary-btn {
+          border-color: rgba(244, 244, 245, 0.24);
+          background: rgba(24, 24, 27, 0.72);
+          color: rgba(244, 244, 245, 0.88);
+        }
+
+        .voice-secondary-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.45;
+        }
+
+        .voice-input-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+          font-family: var(--font-jakarta), system-ui, sans-serif;
+          font-size: 0.72rem;
+          color: rgba(244, 244, 245, 0.86);
+        }
+
+        .voice-input-select {
+          max-width: min(46vw, 270px);
+          border-radius: 999px;
+          border: 1px solid rgba(244, 244, 245, 0.24);
+          background: rgba(24, 24, 27, 0.76);
+          color: rgba(244, 244, 245, 0.95);
+          padding: 0.42rem 0.72rem;
+          font-family: var(--font-jakarta), system-ui, sans-serif;
+          font-size: 0.73rem;
+        }
+
+        .voice-input-select:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
 
         .voice-status-pill {
@@ -603,7 +739,27 @@ export function VoiceModeOverlay({
             align-items: stretch;
           }
 
+          .voice-controls-left {
+            width: 100%;
+          }
+
+          .voice-mic-controls {
+            width: 100%;
+            flex-wrap: wrap;
+          }
+
+          .voice-input-label {
+            flex: 1;
+            min-width: 0;
+          }
+
+          .voice-input-select {
+            width: 100%;
+            max-width: none;
+          }
+
           .voice-primary-btn,
+          .voice-secondary-btn,
           .voice-status-pill {
             width: 100%;
             text-align: center;

@@ -59,6 +59,15 @@ const queuedSendResultValidator = v.object({
   deduped: v.boolean(),
 });
 
+const savedVoiceTurnResultValidator = v.object({
+  messageId: v.string(),
+});
+
+const voiceToolNameValidator = v.union(
+  v.literal("create_spark"),
+  v.literal("create_warning"),
+);
+
 function truncateTitle(value: string): string {
   return value.length > 60 ? `${value.slice(0, 60)}...` : value;
 }
@@ -378,6 +387,124 @@ export const sendMessage = mutation({
       promptMessageId: messageId,
       deduped: false,
     };
+  },
+});
+
+export const saveVoiceTranscriptTurn = mutation({
+  args: {
+    threadId: v.string(),
+    text: v.string(),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+  },
+  returns: savedVoiceTurnResultValidator,
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const text = args.text.trim();
+    if (!text) {
+      throw new Error("Voice transcript cannot be empty");
+    }
+
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", identity.subject).eq("threadId", args.threadId),
+      )
+      .unique();
+
+    if (!ownedThread) {
+      throw new Error("Thread not found");
+    }
+
+    const { messageId } = await saveMessage(ctx, components.agent, {
+      threadId: args.threadId,
+      userId: identity.subject,
+      message: {
+        role: args.role,
+        content: [{ type: "text", text }],
+      },
+    });
+
+    const now = Date.now();
+    await ctx.db.patch(ownedThread._id, {
+      lastMessageAt: now,
+      title:
+        args.role === "user" &&
+        text &&
+        (!ownedThread.title || ownedThread.title === "New Thread")
+          ? truncateTitle(text)
+          : ownedThread.title,
+    });
+
+    return { messageId };
+  },
+});
+
+function toToolResultOutput(
+  value: unknown,
+): { type: "text"; value: string } | { type: "json"; value: unknown } {
+  if (typeof value === "string") {
+    return {
+      type: "text",
+      value,
+    };
+  }
+
+  return {
+    type: "json",
+    value,
+  };
+}
+
+export const saveVoiceToolResultTurn = mutation({
+  args: {
+    threadId: v.string(),
+    callId: v.string(),
+    toolName: voiceToolNameValidator,
+    output: v.any(),
+  },
+  returns: savedVoiceTurnResultValidator,
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", identity.subject).eq("threadId", args.threadId),
+      )
+      .unique();
+
+    if (!ownedThread) {
+      throw new Error("Thread not found");
+    }
+
+    const { messageId } = await saveMessage(ctx, components.agent, {
+      threadId: args.threadId,
+      userId: identity.subject,
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: args.callId,
+            toolName: args.toolName,
+            output: toToolResultOutput(args.output),
+          },
+        ],
+      },
+    });
+
+    await ctx.db.patch(ownedThread._id, {
+      lastMessageAt: Date.now(),
+    });
+
+    return { messageId };
   },
 });
 

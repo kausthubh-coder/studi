@@ -2,12 +2,28 @@
 
 import type { FunctionReference } from "convex/server";
 import { v } from "convex/values";
+import { activeModelProfile } from "../lib/model-config";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { capturePosthogEvent } from "./posthog";
+import { createSparkToolForProfile } from "./sparks/tools";
+import { createWarningTool } from "./voiceTools";
 
 const OPENAI_REALTIME_MODEL = "gpt-realtime-mini";
 const OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+
+const realtimeToolNameValidator = v.union(
+  v.literal("create_spark"),
+  v.literal("create_warning"),
+);
+
+const SHRU_REALTIME_INSTRUCTIONS = [
+  "You are Shru, Studi's voice tutor.",
+  "Keep responses concise and conversational for spoken audio.",
+  "Use create_spark when an interactive artifact would help learning.",
+  "Use create_warning for labs, planning flows, long-term tracks, or long lesson design.",
+  "After create_warning, briefly ask the user to switch to text chat.",
+].join(" ");
 
 const usageValidator = v.object({
   totalTokens: v.optional(v.number()),
@@ -259,6 +275,65 @@ async function requireAuthenticatedUserId(ctx: {
   return identity.subject;
 }
 
+function parseRealtimeToolArguments(json: string): unknown {
+  const value = json.trim();
+  if (!value) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new Error("Invalid realtime tool arguments JSON.");
+  }
+}
+
+function createToolExecutionCtx(
+  ctx: Parameters<typeof requireAuthenticatedUserId>[0] & {
+    runMutation: unknown;
+    runQuery: unknown;
+    runAction?: unknown;
+    scheduler?: unknown;
+    storage?: unknown;
+  },
+  userId: string,
+  threadId: string,
+): Record<string, unknown> {
+  return {
+    runMutation: ctx.runMutation,
+    runQuery: ctx.runQuery,
+    runAction: ctx.runAction,
+    scheduler: ctx.scheduler,
+    storage: ctx.storage,
+    userId,
+    threadId,
+  };
+}
+
+async function executeRealtimeToolWithCtx(args: {
+  tool: unknown;
+  ctx: Record<string, unknown>;
+  callId: string;
+  input: unknown;
+}): Promise<unknown> {
+  const tool = args.tool as {
+    execute?: (input: unknown, options: unknown) => Promise<unknown>;
+    ctx?: unknown;
+  };
+
+  if (typeof tool.execute !== "function") {
+    throw new Error("Realtime tool execute handler is unavailable.");
+  }
+
+  tool.ctx = args.ctx;
+
+  return await tool.execute(args.input, {
+    toolCallId: args.callId,
+    messages: [],
+    abortSignal: new AbortController().signal,
+  });
+}
+
 export const createRealtimeClientSecret = action({
   args: {
     threadId: v.string(),
@@ -296,15 +371,78 @@ export const createRealtimeClientSecret = action({
           session: {
             type: "realtime",
             model: OPENAI_REALTIME_MODEL,
-            instructions:
-              "You are a transcription transport session for Studi voice mode. Do not generate assistant responses.",
-            turn_detection: {
-              type: "server_vad",
-              create_response: false,
+            instructions: SHRU_REALTIME_INSTRUCTIONS,
+            output_modalities: ["audio"],
+            audio: {
+              input: {
+                turn_detection: {
+                  type: "server_vad",
+                  create_response: true,
+                },
+                transcription: {
+                  model: OPENAI_TRANSCRIPTION_MODEL,
+                },
+              },
+              output: {
+                voice: "alloy",
+              },
             },
-            input_audio_transcription: {
-              model: OPENAI_TRANSCRIPTION_MODEL,
-            },
+            tools: [
+              {
+                type: "function",
+                name: "create_spark",
+                description:
+                  "Create an interactive spark artifact for the learner.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    sparkId: {
+                      type: "string",
+                      enum: [
+                        "scene",
+                        "quiz",
+                        "flash_card",
+                        "desmos_graph",
+                        "code_playground",
+                        "web_playground",
+                      ],
+                    },
+                    context: { type: "string" },
+                    title: { type: "string" },
+                    summary: { type: "string" },
+                  },
+                  required: ["sparkId", "context"],
+                  additionalProperties: false,
+                },
+              },
+              {
+                type: "function",
+                name: "create_warning",
+                description:
+                  "Show a warning asking the learner to switch to text mode.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    reason: {
+                      type: "string",
+                      enum: [
+                        "lab_required",
+                        "plan_required",
+                        "long_term",
+                        "long_lesson",
+                      ],
+                    },
+                    title: { type: "string" },
+                    message: { type: "string" },
+                    ctaLabel: { type: "string" },
+                    suggestedPrompt: { type: "string" },
+                  },
+                  required: ["reason"],
+                  additionalProperties: false,
+                },
+              },
+            ],
+            tool_choice: "auto",
           },
         }),
       },
@@ -341,8 +479,9 @@ export const createRealtimeClientSecret = action({
         },
       });
 
+      const providerMessage = detail.slice(0, 200).replace(/\s+/g, " ").trim();
       throw new Error(
-        `Failed to create realtime client secret (${response.status}).`,
+        `Failed to create realtime client secret (${response.status}): ${providerMessage}`,
       );
     }
 
@@ -388,6 +527,103 @@ export const createRealtimeClientSecret = action({
       model: OPENAI_REALTIME_MODEL,
       transcriptionModel: OPENAI_TRANSCRIPTION_MODEL,
     };
+  },
+});
+
+export const executeRealtimeToolCall = action({
+  args: {
+    threadId: v.string(),
+    callId: v.string(),
+    toolName: realtimeToolNameValidator,
+    argumentsJson: v.string(),
+  },
+  returns: v.object({
+    callId: v.string(),
+    toolName: realtimeToolNameValidator,
+    success: v.boolean(),
+    output: v.any(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    await ctx.runQuery(internalApi.chat.assertThreadOwner, {
+      userId,
+      threadId: args.threadId,
+    });
+
+    const startedAt = Date.now();
+    const input = parseRealtimeToolArguments(args.argumentsJson);
+    const toolCtx = createToolExecutionCtx(ctx, userId, args.threadId);
+
+    try {
+      const output =
+        args.toolName === "create_spark"
+          ? await executeRealtimeToolWithCtx({
+              tool: createSparkToolForProfile(activeModelProfile),
+              ctx: toolCtx,
+              callId: args.callId,
+              input,
+            })
+          : await executeRealtimeToolWithCtx({
+              tool: createWarningTool,
+              ctx: toolCtx,
+              callId: args.callId,
+              input,
+            });
+
+      await ctx.runMutation(
+        internalApi.telemetry.insertTelemetryEventInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          source: "voice",
+          name: `voice_tool_${args.toolName}`,
+          status: "success",
+          durationMs: Date.now() - startedAt,
+          metadata: {
+            callId: args.callId,
+            toolName: args.toolName,
+          },
+        },
+      );
+
+      return {
+        callId: args.callId,
+        toolName: args.toolName,
+        success: true,
+        output,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      await ctx.runMutation(
+        internalApi.telemetry.insertTelemetryEventInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          source: "voice",
+          name: `voice_tool_${args.toolName}`,
+          status: "failed",
+          durationMs: Date.now() - startedAt,
+          errorCategory: "runtime_error",
+          retriable: true,
+          metadata: {
+            callId: args.callId,
+            toolName: args.toolName,
+            error: message,
+          },
+        },
+      );
+
+      return {
+        callId: args.callId,
+        toolName: args.toolName,
+        success: false,
+        output: {
+          status: "failed",
+          error: message,
+        },
+      };
+    }
   },
 });
 

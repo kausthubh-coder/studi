@@ -77,8 +77,13 @@ export default function StudiChat() {
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
   const saveAttachment = useMutation(api.chat.saveAttachment);
   const startPlanMode = useMutation(planMutations.startPlanMode);
+  const saveVoiceTranscriptTurn = useMutation(api.chat.saveVoiceTranscriptTurn);
+  const saveVoiceToolResultTurn = useMutation(api.chat.saveVoiceToolResultTurn);
   const createRealtimeClientSecret = useAction(
     api.voiceActions.createRealtimeClientSecret,
+  );
+  const executeRealtimeToolCall = useAction(
+    api.voiceActions.executeRealtimeToolCall,
   );
   const recordVoiceUsage = useAction(api.voiceActions.recordVoiceUsage);
   const recordVoiceEvent = useAction(api.voiceActions.recordVoiceEvent);
@@ -92,7 +97,6 @@ export default function StudiChat() {
   );
   const [isPlanExpanded, setIsPlanExpanded] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [isVoiceTurnSending, setIsVoiceTurnSending] = useState(false);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -101,7 +105,7 @@ export default function StudiChat() {
   >([]);
   const didBackfillRef = useRef(false);
   const selectedThreadIdRef = useRef<string | null>(null);
-  const voiceTranscriptQueueRef = useRef<string[]>([]);
+  const voicePersistChainRef = useRef<Promise<void>>(Promise.resolve());
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -298,53 +302,47 @@ export default function StudiChat() {
     ],
   );
 
-  const flushVoiceTranscriptQueue = useCallback(async () => {
-    if (hasActiveAgentWork || isVoiceTurnSending) {
-      return;
-    }
-
-    const nextTranscript = voiceTranscriptQueueRef.current.shift();
-    if (!nextTranscript) {
-      return;
-    }
-
-    const targetThreadId = selectedThreadIdRef.current;
-    if (!targetThreadId) {
-      voiceTranscriptQueueRef.current = [];
-      return;
-    }
-
-    setIsVoiceTurnSending(true);
-    try {
-      await sendMessageMutation({
-        threadId: targetThreadId,
-        prompt: nextTranscript,
-        requestId: makeRequestId(),
-        source: "voice",
-      });
-    } catch (error) {
-      voiceTranscriptQueueRef.current.unshift(nextTranscript);
-      console.error("Failed to send voice transcript", error);
-    } finally {
-      setIsVoiceTurnSending(false);
-    }
-  }, [hasActiveAgentWork, isVoiceTurnSending, sendMessageMutation]);
-
-  useEffect(() => {
-    void flushVoiceTranscriptQueue();
-  }, [flushVoiceTranscriptQueue, hasActiveAgentWork, isVoiceTurnSending]);
-
-  const handleVoiceFinalTranscript = useCallback(
-    async (text: string) => {
+  const persistVoiceTurn = useCallback(
+    async (role: "user" | "assistant", text: string) => {
       const normalized = text.trim();
       if (!normalized) {
         return;
       }
 
-      voiceTranscriptQueueRef.current.push(normalized);
-      await flushVoiceTranscriptQueue();
+      const targetThreadId = selectedThreadIdRef.current;
+      if (!targetThreadId) {
+        return;
+      }
+
+      voicePersistChainRef.current = voicePersistChainRef.current
+        .then(async () => {
+          await saveVoiceTranscriptTurn({
+            threadId: targetThreadId,
+            role,
+            text: normalized,
+          });
+        })
+        .catch((error) => {
+          console.error("Failed to persist voice transcript", error);
+        });
+
+      await voicePersistChainRef.current;
     },
-    [flushVoiceTranscriptQueue],
+    [saveVoiceTranscriptTurn],
+  );
+
+  const handleVoiceFinalTranscript = useCallback(
+    async (text: string) => {
+      await persistVoiceTurn("user", text);
+    },
+    [persistVoiceTurn],
+  );
+
+  const handleVoiceAssistantFinalTranscript = useCallback(
+    async (text: string) => {
+      await persistVoiceTurn("assistant", text);
+    },
+    [persistVoiceTurn],
   );
 
   const handleOpenVoiceMode = useCallback(async () => {
@@ -426,7 +424,6 @@ export default function StudiChat() {
     setExpandedSpark(null);
     setIsPlanExpanded(false);
     setIsVoiceMode(false);
-    voiceTranscriptQueueRef.current = [];
     setInput("");
     setPendingAttachments((prev) => {
       releaseAttachmentPreviewUrls(prev);
@@ -440,7 +437,6 @@ export default function StudiChat() {
     setExpandedSpark(null);
     setIsPlanExpanded(false);
     setIsVoiceMode(false);
-    voiceTranscriptQueueRef.current = [];
   }, []);
 
   const performThreadDelete = useCallback(
@@ -642,8 +638,6 @@ export default function StudiChat() {
         <VoiceModeOverlay
           isOpen={isVoiceMode}
           threadId={selectedThreadId}
-          messages={uiMessages.results}
-          agentState={currentAgentState}
           onClose={handleCloseVoiceMode}
           onSwitchToText={(warning) => {
             void recordVoiceEvent({
@@ -660,6 +654,28 @@ export default function StudiChat() {
             createRealtimeClientSecret({ threadId })
           }
           onFinalTranscript={handleVoiceFinalTranscript}
+          onAssistantFinalTranscript={handleVoiceAssistantFinalTranscript}
+          onToolCall={(args) =>
+            executeRealtimeToolCall({
+              threadId: selectedThreadId,
+              callId: args.callId,
+              toolName: args.toolName,
+              argumentsJson: args.argumentsJson,
+            }).then(async (result) => {
+              try {
+                await saveVoiceToolResultTurn({
+                  threadId: selectedThreadId,
+                  callId: result.callId,
+                  toolName: result.toolName,
+                  output: result.output,
+                });
+              } catch (error) {
+                console.error("Failed to persist voice tool result", error);
+              }
+
+              return result;
+            })
+          }
           onUsage={(args) =>
             recordVoiceUsage({
               threadId: selectedThreadId,
