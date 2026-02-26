@@ -166,6 +166,14 @@ export function UsagePanel() {
                 label="Estimated cost"
                 value={formatCurrency(usage.totals.estimatedCostUsd)}
               />
+              <StatCard
+                label="Voice calls"
+                value={formatInteger(usage.voice.calls)}
+              />
+              <StatCard
+                label="Voice est. cost"
+                value={formatCurrency(usage.voice.estimatedCostUsd)}
+              />
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -180,6 +188,18 @@ export function UsagePanel() {
                 style={{ fontFamily: "var(--font-jakarta)" }}
               >
                 Last call: {formatLastSeen(usage.lastCallAt)}
+              </p>
+              <p
+                className="rounded-full border border-border-faint bg-bg-alt px-2.5 py-1 text-[11px] text-fg-muted"
+                style={{ fontFamily: "var(--font-jakarta)" }}
+              >
+                Voice input tokens: {formatInteger(usage.voice.inputTokens)}
+              </p>
+              <p
+                className="rounded-full border border-border-faint bg-bg-alt px-2.5 py-1 text-[11px] text-fg-muted"
+                style={{ fontFamily: "var(--font-jakarta)" }}
+              >
+                Last voice call: {formatLastSeen(usage.voice.lastCallAt)}
               </p>
             </div>
 

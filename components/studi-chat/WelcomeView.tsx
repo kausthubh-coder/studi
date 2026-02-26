@@ -49,6 +49,8 @@ export function WelcomeView({
   onUpload,
   onRemoveAttachment,
   onSuggestionClick,
+  onOpenVoiceMode,
+  voiceDisabledReason,
 }: {
   pendingAttachments: PendingAttachment[];
   input: string;
@@ -61,6 +63,8 @@ export function WelcomeView({
   onUpload: (files: FileList) => Promise<void>;
   onRemoveAttachment: (attachmentId: Id<"attachments">) => void;
   onSuggestionClick: (prompt: string) => void;
+  onOpenVoiceMode?: () => void;
+  voiceDisabledReason?: string | null;
 }) {
   const { user } = useUser();
   const firstName = user?.firstName ?? "there";
@@ -96,6 +100,9 @@ export function WelcomeView({
             onUpload={onUpload}
             onRemoveAttachment={onRemoveAttachment}
             variant="welcome"
+            showVoiceButton
+            onOpenVoiceMode={onOpenVoiceMode}
+            voiceDisabledReason={voiceDisabledReason}
           />
         </div>
 

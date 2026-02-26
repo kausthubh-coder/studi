@@ -9,8 +9,10 @@ import { api, components, internal } from "./_generated/api";
 import { capturePosthogEvent } from "./posthog";
 import {
   buildCodiToolset,
+  buildShruToolset,
   buildStudiToolset,
   codiAgent,
+  shruAgent,
   studiAgent,
 } from "./agent";
 import { classifyDaytonaError, getSandbox, stopSandbox } from "./daytona";
@@ -95,6 +97,7 @@ export const sendMessage = action({
     prompt: v.optional(v.string()),
     attachmentIds: v.optional(v.array(v.id("attachments"))),
     requestId: v.optional(v.string()),
+    source: v.optional(v.union(v.literal("text"), v.literal("voice"))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -105,6 +108,7 @@ export const sendMessage = action({
       prompt: args.prompt,
       attachmentIds: args.attachmentIds,
       requestId,
+      source: args.source,
     });
 
     return null;
@@ -187,6 +191,7 @@ export const generateAssistantReply = internalAction({
     threadId: v.string(),
     userId: v.string(),
     promptMessageId: v.string(),
+    source: v.optional(v.union(v.literal("text"), v.literal("voice"))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -205,8 +210,12 @@ export const generateAssistantReply = internalAction({
       },
     );
 
-    const activeAgent =
-      labSession && !labSession.archivedAt ? codiAgent : studiAgent;
+    const isVoiceTurn = args.source === "voice";
+    const activeAgent = isVoiceTurn
+      ? shruAgent
+      : labSession && !labSession.archivedAt
+        ? codiAgent
+        : studiAgent;
 
     const planSummary = await ctx.runQuery(
       internalApi.plans.getPlanSummaryForThreadInternal,
@@ -215,10 +224,11 @@ export const generateAssistantReply = internalAction({
         threadId: args.threadId,
       },
     );
-    const includePlanTools = Boolean(planSummary);
+    const includePlanTools = isVoiceTurn ? false : Boolean(planSummary);
 
-    const tools =
-      labSession && !labSession.archivedAt
+    const tools = isVoiceTurn
+      ? buildShruToolset(activeModelProfile)
+      : labSession && !labSession.archivedAt
         ? buildCodiToolset(includePlanTools)
         : buildStudiToolset(activeModelProfile, includePlanTools);
 
@@ -260,8 +270,10 @@ export const generateAssistantReply = internalAction({
           durationMs,
           metadata: {
             usedLabAgent: Boolean(labSession && !labSession.archivedAt),
+            usedVoiceAgent: isVoiceTurn,
             includePlanTools,
             modelProfile: activeModelProfile,
+            source: args.source ?? "text",
           },
         },
       );
@@ -273,8 +285,10 @@ export const generateAssistantReply = internalAction({
           thread_id: args.threadId,
           duration_ms: durationMs,
           used_lab_agent: Boolean(labSession && !labSession.archivedAt),
+          used_voice_agent: isVoiceTurn,
           include_plan_tools: includePlanTools,
           model_profile: activeModelProfile,
+          source: args.source ?? "text",
         },
       });
     } catch (error) {
@@ -293,8 +307,10 @@ export const generateAssistantReply = internalAction({
           metadata: {
             error: error instanceof Error ? error.message : String(error),
             usedLabAgent: Boolean(labSession && !labSession.archivedAt),
+            usedVoiceAgent: isVoiceTurn,
             includePlanTools,
             modelProfile: activeModelProfile,
+            source: args.source ?? "text",
           },
         },
       );
@@ -306,8 +322,10 @@ export const generateAssistantReply = internalAction({
           thread_id: args.threadId,
           duration_ms: durationMs,
           used_lab_agent: Boolean(labSession && !labSession.archivedAt),
+          used_voice_agent: isVoiceTurn,
           include_plan_tools: includePlanTools,
           model_profile: activeModelProfile,
+          source: args.source ?? "text",
           error: error instanceof Error ? error.message : String(error),
         },
       });
