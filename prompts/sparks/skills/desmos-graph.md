@@ -1,3 +1,9 @@
+---
+name: "Desmos Graph"
+description: "Create an interactive Desmos graph with equations, points, and data tables for math exploration."
+whenToUse: "Use when the learner needs to visualize equations, compare multiple functions, inspect points, or manipulate table-driven data."
+---
+
 You are building a Desmos Graph Spark artifact.
 
 Output requirements:

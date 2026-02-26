@@ -32,7 +32,8 @@ import type {
 import { SparkPanel } from "@/components/sparks/SparkPanel";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { LabWorkspace } from "@/components/lab/LabWorkspace";
-import { VoiceModeOverlay } from "@/components/voice/VoiceModeOverlay";
+import { useVoiceSession } from "@/components/voice/useVoiceSession";
+import { VoiceWarningBanner } from "@/components/studi-chat/VoiceWarningBanner";
 import type { CreateWarningToolResult } from "@/lib/voice/contracts";
 
 const plansApi = (
@@ -106,6 +107,10 @@ export default function StudiChat() {
   const didBackfillRef = useRef(false);
   const selectedThreadIdRef = useRef<string | null>(null);
   const voicePersistChainRef = useRef<Promise<void>>(Promise.resolve());
+  // Deduplication: useVoiceSession fires onAssistantFinalTranscript twice per
+  // response (once from response.output_audio_transcript.done, once from
+  // response.done). Track recently saved texts to skip the second call.
+  const recentVoiceSavesRef = useRef<Map<string, number>>(new Map());
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -314,6 +319,23 @@ export default function StudiChat() {
         return;
       }
 
+      // Deduplicate: the hook fires onAssistantFinalTranscript twice for the
+      // same response (response.output_audio_transcript.done + response.done).
+      // Skip if the exact same role+text was saved within the last 4 seconds.
+      const dedupKey = `${role}:${normalized}`;
+      const lastSavedAt = recentVoiceSavesRef.current.get(dedupKey);
+      if (lastSavedAt !== undefined && Date.now() - lastSavedAt < 4000) {
+        return;
+      }
+      recentVoiceSavesRef.current.set(dedupKey, Date.now());
+      // Prune old entries to avoid unbounded growth
+      if (recentVoiceSavesRef.current.size > 50) {
+        const cutoff = Date.now() - 10000;
+        for (const [key, ts] of recentVoiceSavesRef.current) {
+          if (ts < cutoff) recentVoiceSavesRef.current.delete(key);
+        }
+      }
+
       voicePersistChainRef.current = voicePersistChainRef.current
         .then(async () => {
           await saveVoiceTranscriptTurn({
@@ -345,6 +367,52 @@ export default function StudiChat() {
     [persistVoiceTurn],
   );
 
+  const voiceSession = useVoiceSession({
+    threadId: selectedThreadId ?? "",
+    isActive: isVoiceMode && Boolean(selectedThreadId),
+    createClientSecret: ({ threadId }) =>
+      createRealtimeClientSecret({ threadId }),
+    onFinalTranscript: handleVoiceFinalTranscript,
+    onAssistantFinalTranscript: handleVoiceAssistantFinalTranscript,
+    onToolCall: (args) => {
+      const tid = selectedThreadIdRef.current!;
+      return executeRealtimeToolCall({
+        threadId: tid,
+        callId: args.callId,
+        toolName: args.toolName,
+        argumentsJson: args.argumentsJson,
+      }).then(async (result) => {
+        try {
+          await saveVoiceToolResultTurn({
+            threadId: tid,
+            callId: result.callId,
+            toolName: result.toolName,
+            output: result.output,
+          });
+        } catch (error) {
+          console.error("Failed to persist voice tool result", error);
+        }
+        return result;
+      });
+    },
+    onUsage: (args) =>
+      recordVoiceUsage({
+        threadId: selectedThreadIdRef.current!,
+        usageType: args.usageType,
+        model: args.model,
+        usage: args.usage,
+        providerMetadata: args.providerMetadata,
+      }),
+    onEvent: (args) =>
+      recordVoiceEvent({
+        threadId: selectedThreadIdRef.current!,
+        name: args.name,
+        status: args.status,
+        durationMs: args.durationMs,
+        metadata: args.metadata,
+      }),
+  });
+
   const handleOpenVoiceMode = useCallback(async () => {
     if (isOnWelcome) {
       try {
@@ -364,18 +432,20 @@ export default function StudiChat() {
   }, [createThreadAction, isOnWelcome, voiceDisabledReason]);
 
   const handleCloseVoiceMode = useCallback(() => {
+    void voiceSession.stop("manual_hangup");
     setIsVoiceMode(false);
-  }, []);
+  }, [voiceSession]);
 
   const handleVoiceSwitchToText = useCallback(
     (warning?: CreateWarningToolResult) => {
+      void voiceSession.stop("manual_hangup");
       setIsVoiceMode(false);
       if (warning?.suggestedPrompt && input.trim().length === 0) {
         setInput(warning.suggestedPrompt);
         setTimeout(() => textareaRef.current?.focus(), 50);
       }
     },
-    [input, textareaRef],
+    [input, textareaRef, voiceSession],
   );
 
   const removeAttachment = useCallback((attachmentId: Id<"attachments">) => {
@@ -595,7 +665,33 @@ export default function StudiChat() {
                     : handleExpandSpark
                 }
                 expandedSparkInstanceId={expandedSpark?.sparkInstanceId ?? null}
+                voiceActive={isVoiceMode}
+                liveUserTranscript={voiceSession.liveUserTranscript}
+                liveAssistantTranscript={voiceSession.liveAssistantTranscript}
+                assistantCurrentWord={voiceSession.assistantCurrentWord}
+                isSpeechActive={voiceSession.isSpeechActive}
               />
+              {/* Voice warning banner — shown between messages and composer */}
+              {isVoiceMode && voiceSession.activeWarning && (
+                <div
+                  className="mx-auto w-full px-4"
+                  style={{ maxWidth: "var(--column-max)" }}
+                >
+                  <VoiceWarningBanner
+                    warning={voiceSession.activeWarning}
+                    onDismiss={() => voiceSession.clearWarning()}
+                    onSwitchToText={(warning) => {
+                      void recordVoiceEvent({
+                        threadId: selectedThreadId!,
+                        name: "voice_warning_switch_to_text",
+                        status: "success",
+                        metadata: { reason: warning.reason },
+                      });
+                      handleVoiceSwitchToText(warning);
+                    }}
+                  />
+                </div>
+              )}
               <Composer
                 pendingAttachments={pendingAttachments}
                 input={input}
@@ -619,6 +715,21 @@ export default function StudiChat() {
                   void handleOpenVoiceMode();
                 }}
                 voiceDisabledReason={voiceDisabledReason}
+                voiceActive={isVoiceMode}
+                voiceState={{
+                  connectionState: voiceSession.connectionState,
+                  isSpeechActive: voiceSession.isSpeechActive,
+                  isMuted: voiceSession.isMuted,
+                  errorMessage: voiceSession.errorMessage,
+                  inputDevices: voiceSession.inputDevices,
+                  selectedInputDeviceId: voiceSession.selectedInputDeviceId,
+                }}
+                onVoiceToggleMute={() => voiceSession.toggleMute()}
+                onVoiceSelectInputDevice={(deviceId) =>
+                  voiceSession.selectInputDevice(deviceId)
+                }
+                onVoiceHangUp={handleCloseVoiceMode}
+                onVoiceRetry={() => void voiceSession.retry()}
               />
             </div>
             {isLabActive && selectedThreadId ? (
@@ -634,68 +745,6 @@ export default function StudiChat() {
           </div>
         )}
       </main>
-      {selectedThreadId && isVoiceMode ? (
-        <VoiceModeOverlay
-          isOpen={isVoiceMode}
-          threadId={selectedThreadId}
-          onClose={handleCloseVoiceMode}
-          onSwitchToText={(warning) => {
-            void recordVoiceEvent({
-              threadId: selectedThreadId,
-              name: "voice_warning_switch_to_text",
-              status: "success",
-              metadata: {
-                reason: warning?.reason,
-              },
-            });
-            handleVoiceSwitchToText(warning);
-          }}
-          createClientSecret={({ threadId }) =>
-            createRealtimeClientSecret({ threadId })
-          }
-          onFinalTranscript={handleVoiceFinalTranscript}
-          onAssistantFinalTranscript={handleVoiceAssistantFinalTranscript}
-          onToolCall={(args) =>
-            executeRealtimeToolCall({
-              threadId: selectedThreadId,
-              callId: args.callId,
-              toolName: args.toolName,
-              argumentsJson: args.argumentsJson,
-            }).then(async (result) => {
-              try {
-                await saveVoiceToolResultTurn({
-                  threadId: selectedThreadId,
-                  callId: result.callId,
-                  toolName: result.toolName,
-                  output: result.output,
-                });
-              } catch (error) {
-                console.error("Failed to persist voice tool result", error);
-              }
-
-              return result;
-            })
-          }
-          onUsage={(args) =>
-            recordVoiceUsage({
-              threadId: selectedThreadId,
-              usageType: args.usageType,
-              model: args.model,
-              usage: args.usage,
-              providerMetadata: args.providerMetadata,
-            })
-          }
-          onEvent={(args) =>
-            recordVoiceEvent({
-              threadId: selectedThreadId,
-              name: args.name,
-              status: args.status,
-              durationMs: args.durationMs,
-              metadata: args.metadata,
-            })
-          }
-        />
-      ) : null}
       {threadPendingDelete ? (
         <div
           className="thread-delete-modal-overlay"

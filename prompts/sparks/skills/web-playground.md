@@ -1,3 +1,9 @@
+---
+name: "Web Playground"
+description: "Create an editable HTML/CSS/JS playground spark with live preview for frontend practice."
+whenToUse: "Use when the learner should practice web fundamentals by editing HTML, CSS, and JavaScript and seeing immediate visual output."
+---
+
 You are building a Web Playground Spark artifact.
 
 Output requirements:

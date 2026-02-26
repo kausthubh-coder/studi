@@ -1,10 +1,6 @@
-import type { SparkType } from "./contracts";
-import { sparkCodePlaygroundSkill } from "./skills/codePlayground";
-import { sparkDesmosGraphSkill } from "./skills/desmosGraph";
-import { sparkFlashCardSkill } from "./skills/flashCard";
-import { sparkQuizSkill } from "./skills/quiz";
-import { sparkSceneSkill } from "./skills/scene";
-import { sparkWebPlaygroundSkill } from "./skills/webPlayground";
+import { loadPrompt } from "../prompts";
+import { sparkTypes, type SparkType } from "./contracts";
+import { sparkSkillMetadataById } from "./skills/generated";
 
 export type SparkSkillDefinition = {
   id: SparkType;
@@ -14,42 +10,26 @@ export type SparkSkillDefinition = {
   instructions: string;
 };
 
-export const sparkSkillCatalog: readonly SparkSkillDefinition[] = [
-  {
-    id: "scene",
-    ...sparkSceneSkill,
-  },
-  {
-    id: "quiz",
-    ...sparkQuizSkill,
-  },
-  {
-    id: "flash_card",
-    ...sparkFlashCardSkill,
-  },
-  {
-    id: "desmos_graph",
-    ...sparkDesmosGraphSkill,
-  },
-  {
-    id: "code_playground",
-    ...sparkCodePlaygroundSkill,
-  },
-  {
-    id: "web_playground",
-    ...sparkWebPlaygroundSkill,
-  },
-];
+function buildSkillDefinition(id: SparkType): SparkSkillDefinition {
+  const metadata = sparkSkillMetadataById[id];
+  return {
+    id,
+    name: metadata.name,
+    description: metadata.description,
+    whenToUse: metadata.whenToUse,
+    instructions: loadPrompt(metadata.promptPath),
+  };
+}
+
+export const sparkSkillCatalog: readonly SparkSkillDefinition[] =
+  sparkTypes.map((id) => buildSkillDefinition(id));
 
 export const sparkSkillById: Readonly<Record<SparkType, SparkSkillDefinition>> =
-  {
-    scene: sparkSkillCatalog[0],
-    quiz: sparkSkillCatalog[1],
-    flash_card: sparkSkillCatalog[2],
-    desmos_graph: sparkSkillCatalog[3],
-    code_playground: sparkSkillCatalog[4],
-    web_playground: sparkSkillCatalog[5],
-  };
+  Object.freeze(
+    Object.fromEntries(
+      sparkSkillCatalog.map((skill) => [skill.id, skill] as const),
+    ) as Record<SparkType, SparkSkillDefinition>,
+  );
 
 export function sparkCatalogPromptBlock(): string {
   return sparkSkillCatalog

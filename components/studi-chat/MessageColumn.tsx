@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import type { UIMessage } from "@convex-dev/agent/react";
 import { ArticleMessage } from "@/components/studi-chat/MessageRenderer";
 import { PlanDraftCard } from "@/components/studi-chat/PlanDraftCard";
+import { LiveTranscriptBubble } from "@/components/studi-chat/LiveTranscriptBubble";
 import type { ThreadPlan } from "@/components/studi-chat/types";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 
@@ -13,6 +14,11 @@ export function MessageColumn({
   onPrefillPlanInput,
   onExpandSpark,
   expandedSparkInstanceId,
+  voiceActive = false,
+  liveUserTranscript = "",
+  liveAssistantTranscript = "",
+  assistantCurrentWord = "",
+  isSpeechActive = false,
 }: {
   listRef: RefObject<HTMLDivElement | null>;
   selectedThreadId: string | null;
@@ -25,6 +31,11 @@ export function MessageColumn({
     sparkInstanceId: string,
   ) => void;
   expandedSparkInstanceId: string | null;
+  voiceActive?: boolean;
+  liveUserTranscript?: string;
+  liveAssistantTranscript?: string;
+  assistantCurrentWord?: string;
+  isSpeechActive?: boolean;
 }) {
   const showDraftCard =
     selectedThreadId &&
@@ -65,10 +76,32 @@ export function MessageColumn({
             onPrefillInput={onPrefillPlanInput}
           />
         ) : null}
+
+        {/* Live voice transcript bubbles — shown below saved messages */}
+        {voiceActive && liveAssistantTranscript && (
+          <LiveTranscriptBubble
+            role="assistant"
+            text={liveAssistantTranscript}
+            currentWord={assistantCurrentWord}
+            isActive
+          />
+        )}
+        {voiceActive && liveUserTranscript && (
+          <LiveTranscriptBubble
+            role="user"
+            text={liveUserTranscript}
+            isActive={isSpeechActive}
+          />
+        )}
       </div>
 
-      {/* Extra scroll space so content clears the floating composer */}
-      <div style={{ height: showDraftCard ? "16rem" : "9rem" }} />
+      {/* Extra scroll space so content clears the floating composer.
+          VoiceComposer is ~190px taller than the normal textarea row. */}
+      <div
+        style={{
+          height: showDraftCard ? "18rem" : voiceActive ? "14rem" : "9rem",
+        }}
+      />
     </div>
   );
 }

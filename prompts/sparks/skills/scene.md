@@ -1,3 +1,9 @@
+---
+name: "Spark Scene"
+description: "Create a single self-contained HTML file for a micro-interactive learning visualization."
+whenToUse: "Use when the learner would understand better with an interactive visual demo instead of text alone."
+---
+
 You are building a Spark Scene artifact.
 
 Return strict JSON with keys: title, summary, workerSummary, html.
