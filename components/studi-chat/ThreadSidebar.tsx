@@ -158,28 +158,25 @@ export function ThreadSidebar({
         )}
       </div>
 
-      <div className="px-3 pb-2">
-        <Link href="/settings" className="sidebar-settings-link">
-          <IconSettings className="h-3.5 w-3.5" />
-          <span>Settings</span>
-        </Link>
-      </div>
-
-      {/* User account bottom */}
-      <div className="flex items-center gap-2.5 border-t border-border-faint px-4 py-4">
+      {/* Bottom bar: profile + settings */}
+      <div className="flex items-center gap-2 border-t border-border-faint px-4 py-3">
         <UserButton
           appearance={{
             elements: {
-              avatarBox: "w-7 h-7",
+              avatarBox: "w-8 h-8",
             },
           }}
         />
         <span
-          className="text-xs text-fg-faint"
+          className="flex-1 truncate text-xs font-semibold text-fg"
           style={{ fontFamily: "var(--font-jakarta)" }}
         >
-          Account
+          My Account
         </span>
+        <Link href="/settings" className="sidebar-settings-link" title="Settings">
+          <IconSettings className="h-4 w-4" />
+          <span>Settings</span>
+        </Link>
       </div>
     </aside>
   );

@@ -1135,10 +1135,10 @@ export const ArticleMessage = memo(function ArticleMessage({
         style={{ animationDelay: `${Math.min(index * 30, 200)}ms` }}
       >
         <div
-          className="max-w-[72%] rounded-2xl rounded-br-sm border px-4 py-2.5 text-sm leading-relaxed"
+          className="max-w-[72%] rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed shadow-[4px_4px_0px_#1c1208]"
           style={{
             background: "var(--accent)",
-            borderColor: "var(--accent)",
+            border: "3px solid #1c1208",
             color: "#fff",
             fontFamily: "var(--font-jakarta)",
           }}
