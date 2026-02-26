@@ -14,6 +14,8 @@ export function ThreadSidebar({
   onCreateThread,
   onDeleteThread,
   deletingThreadId,
+  isMobileOpen = false,
+  onCloseMobile,
 }: {
   threads: ThreadSummary[];
   selectedThreadId: string | null;
@@ -21,14 +23,27 @@ export function ThreadSidebar({
   onCreateThread: () => void;
   onDeleteThread: (thread: ThreadSummary) => void;
   deletingThreadId: string | null;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }) {
   return (
     <aside
-      className="flex h-screen flex-shrink-0 flex-col overflow-hidden border-r border-border-warm bg-bg-alt"
+      className="studi-thread-sidebar flex h-screen flex-shrink-0 flex-col overflow-hidden border-r border-border-warm bg-bg-alt"
+      data-mobile-open={isMobileOpen}
       style={{ width: "var(--sidebar-w)" }}
     >
+      <div className="flex items-center justify-end px-3 pt-3 lg:hidden">
+        <button
+          type="button"
+          onClick={onCloseMobile}
+          className="rounded-full border border-border-faint p-1.5 text-fg-faint transition hover:text-fg"
+          aria-label="Close sidebar"
+        >
+          <IconX className="h-3.5 w-3.5" />
+        </button>
+      </div>
       {/* Brand logo */}
-      <div className="flex items-center gap-1.5 px-5 pb-3 pt-5">
+      <div className="flex items-center gap-1.5 px-5 pb-3 pt-3 lg:pt-5">
         <p
           className="font-brand text-2xl tracking-wide text-fg"
           style={{ lineHeight: 1 }}

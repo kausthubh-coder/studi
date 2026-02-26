@@ -8,6 +8,7 @@ import {
   useState,
   type ClipboardEvent,
   type FormEvent,
+  type TouchEvent,
 } from "react";
 import type { FunctionReference } from "convex/server";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -34,6 +35,7 @@ import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { LabWorkspace } from "@/components/lab/LabWorkspace";
 import { useVoiceSession } from "@/components/voice/useVoiceSession";
 import { VoiceWarningBanner } from "@/components/studi-chat/VoiceWarningBanner";
+import { IconCompose } from "@/components/studi-chat/icons";
 import type { CreateWarningToolResult } from "@/lib/voice/contracts";
 
 const plansApi = (
@@ -98,6 +100,8 @@ export default function StudiChat() {
   );
   const [isPlanExpanded, setIsPlanExpanded] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -113,6 +117,24 @@ export default function StudiChat() {
   const recentVoiceSavesRef = useRef<Map<string, number>>(new Map());
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const touchTrackingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      const nextIsMobile = event.matches;
+      setIsMobile(nextIsMobile);
+      if (!nextIsMobile) {
+        setIsMobileSidebarOpen(false);
+      }
+    };
+
+    handleChange(mediaQuery);
+    const listener = (event: MediaQueryListEvent) => handleChange(event);
+    mediaQuery.addEventListener("change", listener);
+    return () => mediaQuery.removeEventListener("change", listener);
+  }, []);
 
   useEffect(() => {
     if (didBackfillRef.current) {
@@ -500,6 +522,7 @@ export default function StudiChat() {
       return [];
     });
     setTimeout(() => textareaRef.current?.focus(), 50);
+    setIsMobileSidebarOpen(false);
   }, []);
 
   const handleSelectThread = useCallback((id: string | null) => {
@@ -507,7 +530,72 @@ export default function StudiChat() {
     setExpandedSpark(null);
     setIsPlanExpanded(false);
     setIsVoiceMode(false);
+    setIsMobileSidebarOpen(false);
   }, []);
+
+  const handleTouchStart = useCallback(
+    (event: TouchEvent<HTMLDivElement>) => {
+      if (!isMobile) {
+        touchStartRef.current = null;
+        touchTrackingRef.current = false;
+        return;
+      }
+
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const startX = touch.clientX;
+      const canOpenFromEdge = !isMobileSidebarOpen && startX <= 24;
+      const canCloseWhenOpen = isMobileSidebarOpen;
+      touchTrackingRef.current = canOpenFromEdge || canCloseWhenOpen;
+      touchStartRef.current = { x: startX, y: touch.clientY };
+    },
+    [isMobile, isMobileSidebarOpen],
+  );
+
+  const handleTouchMove = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    if (!touchStartRef.current || !touchTrackingRef.current) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+
+    if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      event.preventDefault();
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (event: TouchEvent<HTMLDivElement>) => {
+      if (!isMobile || !touchStartRef.current || !touchTrackingRef.current) {
+        touchStartRef.current = null;
+        touchTrackingRef.current = false;
+        return;
+      }
+
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+
+      const deltaX = touch.clientX - touchStartRef.current.x;
+      const deltaY = touch.clientY - touchStartRef.current.y;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+      if (absX > 60 && absY < 44) {
+        if (deltaX > 0 && !isMobileSidebarOpen) {
+          setIsMobileSidebarOpen(true);
+        } else if (deltaX < 0 && isMobileSidebarOpen) {
+          setIsMobileSidebarOpen(false);
+        }
+      }
+
+      touchStartRef.current = null;
+      touchTrackingRef.current = false;
+    },
+    [isMobile, isMobileSidebarOpen],
+  );
 
   const performThreadDelete = useCallback(
     async (thread: ThreadSummary) => {
@@ -608,7 +696,32 @@ export default function StudiChat() {
   }, [isVoiceMode, voiceDisabledReason]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-bg">
+    <div
+      className="flex h-screen overflow-hidden bg-bg"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {isMobile && !isMobileSidebarOpen ? (
+        <button
+          type="button"
+          className="absolute left-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-full border border-border-faint bg-bg-alt text-fg shadow-sm lg:hidden"
+          onClick={() => setIsMobileSidebarOpen(true)}
+          aria-label="Open sidebar"
+        >
+          <IconCompose className="h-4 w-4" />
+        </button>
+      ) : null}
+
+      {isMobile && isMobileSidebarOpen ? (
+        <button
+          type="button"
+          className="absolute inset-0 z-20 bg-black/35 lg:hidden"
+          aria-label="Close sidebar overlay"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      ) : null}
+
       <ThreadSidebar
         threads={threads}
         selectedThreadId={selectedThreadId}
@@ -616,6 +729,8 @@ export default function StudiChat() {
         onCreateThread={handleNewThread}
         onDeleteThread={handleDeleteThread}
         deletingThreadId={deletingThreadId}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       <main className="relative flex min-w-0 flex-1 overflow-hidden">
