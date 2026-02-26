@@ -11,7 +11,7 @@ export function MessageColumn({
   selectedThreadId,
   messages,
   threadPlan,
-  onPrefillPlanInput,
+  onSendPlanAcceptancePrompt,
   onExpandSpark,
   expandedSparkInstanceId,
   voiceActive = false,
@@ -24,7 +24,7 @@ export function MessageColumn({
   selectedThreadId: string | null;
   messages: UIMessage[];
   threadPlan: ThreadPlan | null | undefined;
-  onPrefillPlanInput: (value: string) => void;
+  onSendPlanAcceptancePrompt: () => Promise<void>;
   onExpandSpark: (
     artifact: SparkArtifact,
     threadId: string | null,
@@ -73,7 +73,7 @@ export function MessageColumn({
           <PlanDraftCard
             threadId={selectedThreadId}
             threadPlan={threadPlan}
-            onPrefillInput={onPrefillPlanInput}
+            onSendAcceptancePrompt={onSendPlanAcceptancePrompt}
           />
         ) : null}
 
