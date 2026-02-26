@@ -1,0 +1,32 @@
+{
+  "name": "observability-smoke-suite",
+  "defaults": {
+    "agentName": "studi",
+    "newThread": true,
+    "title": "Observability Smoke",
+    "pollMs": 300,
+    "includeContext": false,
+    "failOnToolError": true
+  },
+  "cases": [
+    {
+      "name": "spark-scene",
+      "prompt": "Create a spark scene that teaches binary search with a number line and range narrowing.",
+      "expectTools": ["create_spark"],
+      "repeat": 1
+    },
+    {
+      "name": "lab-startup",
+      "prompt": "Start lab mode for JavaScript practice, run a quick command, and inspect files.",
+      "expectTools": ["create_lab", "run", "glob"],
+      "repeat": 1
+    },
+    {
+      "name": "plan-draft",
+      "prompt": "I want a structured 6-week TypeScript study track. Start plan mode and generate a first draft plan.",
+      "expectPlanTools": ["start_plan_mode", "generate_plan_draft"],
+      "requirePlan": true,
+      "repeat": 1
+    }
+  ]
+}

@@ -9,7 +9,6 @@ import {
   activeModelProfile,
   getCodiAgentName,
   getModelConfig,
-  getShruAgentName,
   getStudiAgentName,
   type ModelProfile,
 } from "../lib/model-config";
@@ -31,7 +30,6 @@ import {
 } from "./labTools";
 import { planToolsAlways, planToolsWhenPresent } from "./planTools";
 import { createSparkToolForProfile } from "./sparks/tools";
-import { createWarningTool } from "./voiceTools";
 
 const internalApi = internal as unknown as {
   telemetry: {
@@ -163,10 +161,6 @@ const studiAgentInstructions = renderPrompt("agents/studi.md", {
 
 const codiAgentInstructions = loadPrompt("agents/codi.md");
 
-const shruAgentInstructions = renderPrompt("agents/shru.md", {
-  sparkCatalogPromptBlock: sparkCatalogPromptBlock(),
-});
-
 export function buildStudiToolset(
   profile: ModelProfile,
   includePlanTools: boolean,
@@ -198,13 +192,6 @@ export function buildCodiToolset(includePlanTools: boolean) {
   };
 }
 
-export function buildShruToolset(profile: ModelProfile) {
-  return {
-    create_spark: createSparkToolForProfile(profile),
-    create_warning: createWarningTool,
-  };
-}
-
 function createStudiAgent(profile: ModelProfile): Agent {
   const modelConfig = getModelConfig(profile);
   return new Agent(components.agent, {
@@ -229,18 +216,6 @@ function createCodiAgent(profile: ModelProfile): Agent {
   });
 }
 
-function createShruAgent(profile: ModelProfile): Agent {
-  const modelConfig = getModelConfig(profile);
-  return new Agent(components.agent, {
-    name: getShruAgentName(profile),
-    languageModel: openrouter.chat(modelConfig.shruAgent),
-    stopWhen: stepCountIs(6),
-    tools: buildShruToolset(profile),
-    instructions: shruAgentInstructions,
-    usageHandler,
-  });
-}
-
 export const studiAgentsByProfile: Record<ModelProfile, Agent> = {
   balanced: createStudiAgent("balanced"),
   fast: createStudiAgent("fast"),
@@ -253,26 +228,15 @@ export const codiAgentsByProfile: Record<ModelProfile, Agent> = {
   quality: createCodiAgent("quality"),
 };
 
-export const shruAgentsByProfile: Record<ModelProfile, Agent> = {
-  balanced: createShruAgent("balanced"),
-  fast: createShruAgent("fast"),
-  quality: createShruAgent("quality"),
-};
-
 export const studiAgent: Agent = studiAgentsByProfile[activeModelProfile];
 
 export const codiAgent: Agent = codiAgentsByProfile[activeModelProfile];
 
-export const shruAgent: Agent = shruAgentsByProfile[activeModelProfile];
-
 export const playgroundAgents: Agent[] = [
   studiAgentsByProfile.balanced,
   codiAgentsByProfile.balanced,
-  shruAgentsByProfile.balanced,
   studiAgentsByProfile.fast,
   codiAgentsByProfile.fast,
-  shruAgentsByProfile.fast,
   studiAgentsByProfile.quality,
   codiAgentsByProfile.quality,
-  shruAgentsByProfile.quality,
 ];

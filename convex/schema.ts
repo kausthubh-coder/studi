@@ -131,7 +131,6 @@ export default defineSchema({
       v.literal("spark"),
       v.literal("lab_tool"),
       v.literal("plan_tool"),
-      v.literal("voice"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),

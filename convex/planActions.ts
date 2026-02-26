@@ -8,12 +8,28 @@ import { z } from "zod";
 import { getActiveModelConfig } from "../lib/model-config";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import { capturePosthogEvent } from "./posthog";
 
 const internalApi = internal as unknown as {
   plans: {
     getPlanDraftingContextInternal: FunctionReference<"query", "internal">;
     savePlanDraftInternal: FunctionReference<"mutation", "internal">;
   };
+  telemetry: {
+    insertRawUsageInternal: FunctionReference<"mutation", "internal">;
+    insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
+  };
+};
+
+type UsageSnapshot = {
+  totalTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  inputTokenDetails?: unknown;
+  outputTokenDetails?: unknown;
+  raw?: unknown;
 };
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -148,6 +164,7 @@ async function generateDraftWithFallbackModels(prompt: string) {
       return {
         modelId,
         object: result.object,
+        usage: (result as { usage?: UsageSnapshot }).usage,
       };
     } catch (error) {
       errors.push(`${modelId}: ${formatProviderError(error)}`);
@@ -193,6 +210,51 @@ export const generatePlanDraft = internalAction({
     });
 
     const result = await generateDraftWithFallbackModels(prompt);
+
+    await ctx.runMutation(internalApi.telemetry.insertRawUsageInternal, {
+      userId: args.userId,
+      threadId: args.threadId,
+      agentName: "plan_worker",
+      model: result.modelId,
+      provider: "openrouter",
+      usage: {
+        totalTokens: result.usage?.totalTokens,
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+        reasoningTokens: result.usage?.reasoningTokens,
+        cachedInputTokens: result.usage?.cachedInputTokens,
+        inputTokenDetails: result.usage?.inputTokenDetails,
+        outputTokenDetails: result.usage?.outputTokenDetails,
+        raw: result.usage?.raw,
+      },
+      providerMetadata: undefined,
+    });
+
+    await ctx.runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
+      userId: args.userId,
+      threadId: args.threadId,
+      source: "agent_usage",
+      name: "plan_worker_generation",
+      status: "success",
+      model: result.modelId,
+      metadata: {
+        totalTokens: result.usage?.totalTokens,
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+      },
+    });
+
+    await capturePosthogEvent({
+      event: "plan_worker_generation",
+      distinctId: args.userId,
+      properties: {
+        thread_id: args.threadId,
+        model: result.modelId,
+        total_tokens: result.usage?.totalTokens,
+        input_tokens: result.usage?.inputTokens,
+        output_tokens: result.usage?.outputTokens,
+      },
+    });
 
     await ctx.runMutation(internalApi.plans.savePlanDraftInternal, {
       userId: args.userId,

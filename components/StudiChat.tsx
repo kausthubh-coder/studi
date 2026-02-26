@@ -32,8 +32,6 @@ import type {
 import { SparkPanel } from "@/components/sparks/SparkPanel";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { LabWorkspace } from "@/components/lab/LabWorkspace";
-import { VoiceModeOverlay } from "@/components/voice/VoiceModeOverlay";
-import type { CreateWarningToolResult } from "@/lib/voice/contracts";
 
 const plansApi = (
   api as unknown as {
@@ -76,11 +74,6 @@ export default function StudiChat() {
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
   const saveAttachment = useMutation(api.chat.saveAttachment);
   const startPlanMode = useMutation(planMutations.startPlanMode);
-  const createRealtimeClientSecret = useAction(
-    api.voiceActions.createRealtimeClientSecret,
-  );
-  const recordVoiceUsage = useAction(api.voiceActions.recordVoiceUsage);
-  const recordVoiceEvent = useAction(api.voiceActions.recordVoiceEvent);
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
@@ -90,8 +83,6 @@ export default function StudiChat() {
     null,
   );
   const [isPlanExpanded, setIsPlanExpanded] = useState(false);
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [isVoiceTurnSending, setIsVoiceTurnSending] = useState(false);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -100,7 +91,6 @@ export default function StudiChat() {
   >([]);
   const didBackfillRef = useRef(false);
   const selectedThreadIdRef = useRef<string | null>(null);
-  const voiceTranscriptQueueRef = useRef<string[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -159,19 +149,6 @@ export default function StudiChat() {
     selectedThreadId ? { threadId: selectedThreadId } : "skip",
   );
   const threadPlan = threadPlanQuery as ThreadPlan | null | undefined;
-
-  const voiceDisabledReason = useMemo(() => {
-    if (!selectedThreadId) {
-      return "Open a thread before starting voice mode.";
-    }
-    if (isLabActive) {
-      return "Voice mode is disabled while a lab session is active.";
-    }
-    if (threadPlan) {
-      return "Voice mode is disabled for plan and track threads.";
-    }
-    return null;
-  }, [isLabActive, selectedThreadId, threadPlan]);
 
   const canSend = useMemo(
     () =>
@@ -300,77 +277,6 @@ export default function StudiChat() {
     ],
   );
 
-  const flushVoiceTranscriptQueue = useCallback(async () => {
-    if (hasActiveAgentWork || isVoiceTurnSending) {
-      return;
-    }
-
-    const nextTranscript = voiceTranscriptQueueRef.current.shift();
-    if (!nextTranscript) {
-      return;
-    }
-
-    const targetThreadId = selectedThreadIdRef.current;
-    if (!targetThreadId) {
-      voiceTranscriptQueueRef.current = [];
-      return;
-    }
-
-    setIsVoiceTurnSending(true);
-    try {
-      await sendMessageMutation({
-        threadId: targetThreadId,
-        prompt: nextTranscript,
-        requestId: makeRequestId(),
-        source: "voice",
-      });
-    } catch (error) {
-      voiceTranscriptQueueRef.current.unshift(nextTranscript);
-      console.error("Failed to send voice transcript", error);
-    } finally {
-      setIsVoiceTurnSending(false);
-    }
-  }, [hasActiveAgentWork, isVoiceTurnSending, sendMessageMutation]);
-
-  useEffect(() => {
-    void flushVoiceTranscriptQueue();
-  }, [flushVoiceTranscriptQueue, hasActiveAgentWork, isVoiceTurnSending]);
-
-  const handleVoiceFinalTranscript = useCallback(
-    async (text: string) => {
-      const normalized = text.trim();
-      if (!normalized) {
-        return;
-      }
-
-      voiceTranscriptQueueRef.current.push(normalized);
-      await flushVoiceTranscriptQueue();
-    },
-    [flushVoiceTranscriptQueue],
-  );
-
-  const handleOpenVoiceMode = useCallback(() => {
-    if (voiceDisabledReason) {
-      return;
-    }
-    setIsVoiceMode(true);
-  }, [voiceDisabledReason]);
-
-  const handleCloseVoiceMode = useCallback(() => {
-    setIsVoiceMode(false);
-  }, []);
-
-  const handleVoiceSwitchToText = useCallback(
-    (warning?: CreateWarningToolResult) => {
-      setIsVoiceMode(false);
-      if (warning?.suggestedPrompt && input.trim().length === 0) {
-        setInput(warning.suggestedPrompt);
-        setTimeout(() => textareaRef.current?.focus(), 50);
-      }
-    },
-    [input, textareaRef],
-  );
-
   const removeAttachment = useCallback((attachmentId: Id<"attachments">) => {
     setPendingAttachments((previous) => {
       const item = previous.find(
@@ -416,8 +322,6 @@ export default function StudiChat() {
     setSelectedThreadId(null);
     setExpandedSpark(null);
     setIsPlanExpanded(false);
-    setIsVoiceMode(false);
-    voiceTranscriptQueueRef.current = [];
     setInput("");
     setPendingAttachments((prev) => {
       releaseAttachmentPreviewUrls(prev);
@@ -430,8 +334,6 @@ export default function StudiChat() {
     setSelectedThreadId(id);
     setExpandedSpark(null);
     setIsPlanExpanded(false);
-    setIsVoiceMode(false);
-    voiceTranscriptQueueRef.current = [];
   }, []);
 
   const performThreadDelete = useCallback(
@@ -526,12 +428,6 @@ export default function StudiChat() {
     }
   }, [expandedSpark, isLabActive]);
 
-  useEffect(() => {
-    if (isVoiceMode && voiceDisabledReason) {
-      setIsVoiceMode(false);
-    }
-  }, [isVoiceMode, voiceDisabledReason]);
-
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
       <ThreadSidebar
@@ -605,9 +501,6 @@ export default function StudiChat() {
                 isPlanExpanded={isPlanExpanded}
                 onTogglePlanExpanded={handleTogglePlanExpanded}
                 onPrefillPlanInput={handlePrefillPlanInput}
-                showVoiceButton
-                onOpenVoiceMode={handleOpenVoiceMode}
-                voiceDisabledReason={voiceDisabledReason}
               />
             </div>
             {isLabActive && selectedThreadId ? (
@@ -623,48 +516,6 @@ export default function StudiChat() {
           </div>
         )}
       </main>
-      {selectedThreadId && isVoiceMode ? (
-        <VoiceModeOverlay
-          isOpen={isVoiceMode}
-          threadId={selectedThreadId}
-          messages={uiMessages.results}
-          agentState={currentAgentState}
-          onClose={handleCloseVoiceMode}
-          onSwitchToText={(warning) => {
-            void recordVoiceEvent({
-              threadId: selectedThreadId,
-              name: "voice_warning_switch_to_text",
-              status: "success",
-              metadata: {
-                reason: warning?.reason,
-              },
-            });
-            handleVoiceSwitchToText(warning);
-          }}
-          createClientSecret={({ threadId }) =>
-            createRealtimeClientSecret({ threadId })
-          }
-          onFinalTranscript={handleVoiceFinalTranscript}
-          onUsage={(args) =>
-            recordVoiceUsage({
-              threadId: selectedThreadId,
-              usageType: args.usageType,
-              model: args.model,
-              usage: args.usage,
-              providerMetadata: args.providerMetadata,
-            })
-          }
-          onEvent={(args) =>
-            recordVoiceEvent({
-              threadId: selectedThreadId,
-              name: args.name,
-              status: args.status,
-              durationMs: args.durationMs,
-              metadata: args.metadata,
-            })
-          }
-        />
-      ) : null}
       {threadPendingDelete ? (
         <div
           className="thread-delete-modal-overlay"

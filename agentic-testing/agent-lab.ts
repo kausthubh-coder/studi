@@ -5,9 +5,15 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 import {
+  getStudiAgentName,
+  isModelProfile,
+  type ModelProfile,
+} from "../lib/model-config";
+import {
   isCreateSparkToolResult,
   isSparkArtifact,
   type CreateSparkToolResult,
+  type SparkArtifact,
 } from "../lib/sparks/contracts";
 
 type Command = "run" | "suite";
@@ -75,6 +81,7 @@ type ToolRun = {
 
 type SceneFileExport = {
   toolCallId: string;
+  sparkType: string;
   filePath: string;
   title: string;
   summary?: string;
@@ -109,6 +116,41 @@ type RunConfig = {
   requirePlan: boolean;
   expectPlanPhase?: "discovery" | "draft_review" | "active" | "completed";
   minPlanProgress?: number;
+  verifyTelemetry: boolean;
+  verifyPosthog: boolean;
+  posthogWaitMs: number;
+};
+
+type TelemetrySummary = {
+  usage: {
+    calls: number;
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+  };
+  telemetry: {
+    events: number;
+    failures: number;
+    sparkFailures: number;
+    labToolFailures: number;
+    planToolFailures: number;
+    runtimeFailures: number;
+    lastFailureAt?: number;
+  };
+};
+
+type PosthogValidation = {
+  attempted: boolean;
+  ok: boolean;
+  host?: string;
+  projectId?: number;
+  fromIso?: string;
+  toIso?: string;
+  eventCounts: Record<string, number>;
+  totalMatched: number;
+  missingExpectedEvents: string[];
+  note?: string;
+  query?: string;
 };
 
 type PlanSnapshot = {
@@ -174,6 +216,8 @@ type RunResult = {
   assertionFailures: string[];
   sparkArtifacts: SparkArtifactSummary[];
   sceneFiles: SceneFileExport[];
+  telemetrySummary?: TelemetrySummary;
+  posthog?: PosthogValidation;
   rawMessages?: PlaygroundMessage[];
   context?: unknown;
 };
@@ -262,19 +306,24 @@ Run a suite file:
 
 Shared flags:
   --agentName studi           Agent name (default: studi)
+  --profile fast              Resolve agentName from model profile
+  --cheap                     Shortcut for --profile fast
   --pollMs 250                Poll interval in ms (default: 250)
   --context                   Fetch and store prompt context
   --verbose                   Print detailed timeline while running
   --debugRaw                  Include raw message payloads in artifact JSON
   --modelLabel sonnet-4.6     Tag run metadata for comparison
-  --saveSceneHtml             Save generated spark_scene HTML files locally
-  --sceneOutDir <path>        Custom directory for saved scene files
+  --saveSceneHtml             Save generated HTML-capable sparks locally (scene + web_playground)
+  --sceneOutDir <path>        Custom directory for saved HTML spark files
   --expectTools a,b,c         Assert these tools were called at least once
   --expectPlanTools a,b,c     Assert plan tools were called (plan-only)
   --failOnToolError           Exit with non-zero if any tool call fails
   --requirePlan               Assert a plan exists by end of run
   --expectPlanPhase <phase>   Assert final plan phase (discovery|draft_review|active|completed)
   --minPlanProgress <0-100>   Assert minimum final plan progress percent
+  --verifyTelemetry           Fetch Convex telemetry summary for thread
+  --verifyPosthog             Query PostHog for expected events after run
+  --posthogWaitMs <ms>        Wait before PostHog query (default: 4000)
 
 Run-specific flags:
   --threadId <id>             Use existing thread
@@ -284,6 +333,11 @@ Run-specific flags:
 Env vars required:
   CONVEX_URL (or NEXT_PUBLIC_CONVEX_URL)
   STUDI_PLAYGROUND_API_KEY (or PLAYGROUND_API_KEY)
+
+Env vars for --verifyPosthog:
+  POSTHOG_PERSONAL_API_KEY
+  POSTHOG_PROJECT_ID
+  POSTHOG_HOST (optional, default https://us.i.posthog.com)
 `);
   process.exit(1);
 }
@@ -376,6 +430,26 @@ function parsePlanPhaseFlag(
   );
 }
 
+function parseModelProfileFlag(
+  flags: Map<string, string[]>,
+): ModelProfile | undefined {
+  const explicit = getSingleFlag(flags, "profile");
+  if (explicit) {
+    if (!isModelProfile(explicit)) {
+      printUsageAndExit(
+        `Invalid --profile value: ${explicit}. Expected balanced|fast|quality.`,
+      );
+    }
+    return explicit;
+  }
+
+  if (getBooleanFlag(flags, "cheap")) {
+    return "fast";
+  }
+
+  return undefined;
+}
+
 function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
@@ -391,6 +465,7 @@ function safeString(value: unknown): string {
   if (typeof value === "string") {
     return value;
   }
+
   try {
     return JSON.stringify(value);
   } catch {
@@ -796,6 +871,229 @@ function aggregateUsage(messages: PlaygroundMessage[]): {
   return { promptTokens, completionTokens, totalTokens };
 }
 
+const POSTHOG_EXPECTED_EVENTS = [
+  "agent_usage_recorded",
+  "agent_reply_completed",
+  "agent_reply_failed",
+  "spark_generation_result",
+  "lab_tool_result",
+  "plan_tool_result",
+  "plan_worker_generation",
+] as const;
+
+function sqlString(value: string): string {
+  return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "''")}'`;
+}
+
+async function fetchTelemetrySummary(
+  client: ConvexHttpClient,
+  userId: string,
+  threadId: string,
+): Promise<TelemetrySummary | undefined> {
+  try {
+    const telemetryApi = api as unknown as {
+      playground?: {
+        getThreadObservabilitySummary?: unknown;
+      };
+    };
+    const queryRef = telemetryApi.playground?.getThreadObservabilitySummary;
+    if (!queryRef) {
+      return undefined;
+    }
+
+    const result = (await client.action(
+      queryRef as never,
+      {
+        userId,
+        threadId,
+      } as never,
+    )) as TelemetrySummary;
+    return result;
+  } catch (error) {
+    console.warn(`Telemetry summary fetch failed: ${safeString(error)}`);
+    return undefined;
+  }
+}
+
+async function queryPosthogValidation(params: {
+  userId: string;
+  threadId: string;
+  startedAt: number;
+  endedAt: number;
+}): Promise<PosthogValidation> {
+  const personalApiKey =
+    process.env.POSTHOG_PERSONAL_API_KEY ?? process.env.POSTHOG_API_KEY;
+  const projectIdRaw = process.env.POSTHOG_PROJECT_ID;
+  const projectId = projectIdRaw ? Number.parseInt(projectIdRaw, 10) : NaN;
+  const host = (process.env.POSTHOG_HOST ?? "https://us.i.posthog.com").replace(
+    /\/+$/,
+    "",
+  );
+
+  const baseResult: PosthogValidation = {
+    attempted: false,
+    ok: false,
+    host,
+    projectId: Number.isFinite(projectId) ? projectId : undefined,
+    eventCounts: Object.fromEntries(
+      POSTHOG_EXPECTED_EVENTS.map((name) => [name, 0]),
+    ) as Record<string, number>,
+    totalMatched: 0,
+    missingExpectedEvents: [...POSTHOG_EXPECTED_EVENTS],
+  };
+
+  if (!personalApiKey) {
+    return {
+      ...baseResult,
+      note: "Missing POSTHOG_PERSONAL_API_KEY (or POSTHOG_API_KEY fallback).",
+    };
+  }
+  if (!Number.isFinite(projectId) || projectId <= 0) {
+    return {
+      ...baseResult,
+      note: "Missing or invalid POSTHOG_PROJECT_ID.",
+    };
+  }
+
+  const fromIso = new Date(params.startedAt - 60_000).toISOString();
+  const toIso = new Date(params.endedAt + 5 * 60_000).toISOString();
+  const inClause = POSTHOG_EXPECTED_EVENTS.map((name) => sqlString(name)).join(
+    ", ",
+  );
+
+  const query = [
+    "SELECT event, count() AS count",
+    "FROM events",
+    `WHERE distinct_id = ${sqlString(params.userId)}`,
+    `  AND properties.thread_id = ${sqlString(params.threadId)}`,
+    `  AND timestamp >= toDateTime(${sqlString(fromIso)})`,
+    `  AND timestamp <= toDateTime(${sqlString(toIso)})`,
+    `  AND event IN (${inClause})`,
+    "GROUP BY event",
+    "ORDER BY event ASC",
+  ].join("\n");
+
+  let response: Response;
+  try {
+    response = await fetch(`${host}/api/projects/${projectId}/query/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${personalApiKey}`,
+      },
+      body: JSON.stringify({
+        query: {
+          kind: "HogQLQuery",
+          query,
+        },
+      }),
+    });
+  } catch (error) {
+    return {
+      ...baseResult,
+      attempted: true,
+      fromIso,
+      toIso,
+      query,
+      note: `PostHog query failed: ${safeString(error)}`,
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ...baseResult,
+      attempted: true,
+      fromIso,
+      toIso,
+      query,
+      note: `PostHog query failed with status ${response.status}.`,
+    };
+  }
+
+  const payload = (await response.json().catch(() => null)) as {
+    results?: Array<Record<string, unknown> | unknown[]>;
+    columns?: string[];
+  } | null;
+
+  if (!payload || !Array.isArray(payload.results)) {
+    return {
+      ...baseResult,
+      attempted: true,
+      fromIso,
+      toIso,
+      query,
+      note: "PostHog query returned unexpected payload.",
+    };
+  }
+
+  const nextCounts = { ...baseResult.eventCounts };
+  const columns = Array.isArray(payload.columns) ? payload.columns : [];
+  const eventIndex = columns.findIndex((name) => name === "event");
+  const countIndex = columns.findIndex((name) => name === "count");
+
+  for (const row of payload.results) {
+    let eventName: string | undefined;
+    let countValue: unknown;
+
+    if (Array.isArray(row)) {
+      if (eventIndex >= 0) {
+        const candidate = row[eventIndex];
+        if (typeof candidate === "string") {
+          eventName = candidate;
+        }
+      }
+      if (countIndex >= 0) {
+        countValue = row[countIndex];
+      }
+    } else if (row && typeof row === "object") {
+      const record = row as Record<string, unknown>;
+      if (typeof record.event === "string") {
+        eventName = record.event;
+      }
+      countValue = record.count;
+    }
+
+    if (!eventName || !(eventName in nextCounts)) {
+      continue;
+    }
+
+    const parsed =
+      typeof countValue === "number"
+        ? countValue
+        : Number.parseInt(String(countValue ?? "0"), 10);
+    nextCounts[eventName] = Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  const totalMatched = Object.values(nextCounts).reduce(
+    (sum, value) => sum + value,
+    0,
+  );
+  const missingExpectedEvents = POSTHOG_EXPECTED_EVENTS.filter(
+    (name) => (nextCounts[name] ?? 0) <= 0,
+  );
+  const hasReplyEvent =
+    (nextCounts.agent_reply_completed ?? 0) > 0 ||
+    (nextCounts.agent_reply_failed ?? 0) > 0;
+  const hasUsageEvent = (nextCounts.agent_usage_recorded ?? 0) > 0;
+  const ok = totalMatched > 0 && hasReplyEvent && hasUsageEvent;
+
+  return {
+    attempted: true,
+    ok,
+    host,
+    projectId,
+    fromIso,
+    toIso,
+    query,
+    eventCounts: nextCounts,
+    totalMatched,
+    missingExpectedEvents,
+    note: ok
+      ? undefined
+      : "Missing baseline PostHog events (agent reply and/or usage).",
+  };
+}
+
 const PLAN_TOOL_NAMES = new Set([
   "start_plan_mode",
   "get_plan_context",
@@ -939,6 +1237,66 @@ function toFileUri(filePath: string): string {
   return resolved.startsWith("/")
     ? `file://${resolved}`
     : `file:///${resolved}`;
+}
+
+function ensureHtmlDocument(rawHtml: string): string {
+  const trimmed = rawHtml.trim();
+  let html = trimmed.length > 0 ? trimmed : "<div></div>";
+
+  if (!/<html[\s>]/i.test(html)) {
+    html = `<!doctype html>\n<html><head></head><body>${html}</body></html>`;
+  }
+
+  if (!/<head[\s>]/i.test(html)) {
+    html = html.replace(/<html([^>]*)>/i, "<html$1><head></head>");
+  }
+
+  if (!/<body[\s>]/i.test(html)) {
+    if (/<\/head>/i.test(html)) {
+      html = html.replace(/<\/head>/i, "</head><body></body>");
+    } else if (/<\/html>/i.test(html)) {
+      html = html.replace(/<\/html>/i, "<body></body></html>");
+    } else {
+      html = `${html}<body></body>`;
+    }
+  }
+
+  if (!/<!doctype html>/i.test(html)) {
+    html = `<!doctype html>\n${html}`;
+  }
+
+  return html;
+}
+
+function escapeInlineScript(value: string): string {
+  return value.replace(/<\/(script)/gi, "<\\/$1");
+}
+
+function getExportableSparkHtml(artifact: SparkArtifact): string | null {
+  if (artifact.kind === "spark_scene") {
+    return artifact.payload.html;
+  }
+
+  if (artifact.kind !== "spark_web_playground") {
+    return null;
+  }
+
+  const base = ensureHtmlDocument(artifact.payload.html);
+  const cssTag = artifact.payload.css?.trim()
+    ? `<style>\n${artifact.payload.css}\n</style>`
+    : "";
+  const jsTag = artifact.payload.js?.trim()
+    ? `<script>\n${escapeInlineScript(artifact.payload.js)}\n</script>`
+    : "";
+
+  const withCss = cssTag
+    ? base.replace(/<\/head>/i, `${cssTag}\n</head>`)
+    : base;
+  const withJs = jsTag
+    ? withCss.replace(/<\/body>/i, `${jsTag}\n</body>`)
+    : withCss;
+
+  return withJs;
 }
 
 async function runSingle(
@@ -1235,26 +1593,29 @@ async function runSingle(
             if (
               config.saveSceneHtml &&
               spark?.result?.status === "success" &&
-              spark.result.artifact.kind === "spark_scene" &&
               !savedSceneToolCalls.has(toolCallId)
             ) {
-              savedSceneToolCalls.add(toolCallId);
-              const artifact = spark.result.artifact;
-              const titleSegment = sanitizeFilenameSegment(
-                artifact.title,
-              ).slice(0, 48);
-              const filePath = path.join(
-                sceneOutDir,
-                `${sceneFiles.length + 1}-${toolCallId}-${titleSegment}.html`,
-              );
-              await mkdir(sceneOutDir, { recursive: true });
-              await writeFile(filePath, `${artifact.payload.html}\n`, "utf8");
-              sceneFiles.push({
-                toolCallId,
-                filePath,
-                title: artifact.title,
-                summary: artifact.summary,
-              });
+              const exportHtml = getExportableSparkHtml(spark.result.artifact);
+              if (exportHtml) {
+                savedSceneToolCalls.add(toolCallId);
+                const artifact = spark.result.artifact;
+                const titleSegment = sanitizeFilenameSegment(
+                  artifact.title,
+                ).slice(0, 48);
+                const filePath = path.join(
+                  sceneOutDir,
+                  `${sceneFiles.length + 1}-${toolCallId}-${titleSegment}.html`,
+                );
+                await mkdir(sceneOutDir, { recursive: true });
+                await writeFile(filePath, `${exportHtml}\n`, "utf8");
+                sceneFiles.push({
+                  toolCallId,
+                  sparkType: artifact.sparkType,
+                  filePath,
+                  title: artifact.title,
+                  summary: artifact.summary,
+                });
+              }
             }
           }
 
@@ -1375,6 +1736,49 @@ async function runSingle(
     config.minPlanProgress,
   );
 
+  let telemetrySummary: TelemetrySummary | undefined;
+  if (config.verifyTelemetry) {
+    telemetrySummary = await fetchTelemetrySummary(
+      client,
+      config.userId,
+      threadId,
+    );
+    if (!telemetrySummary) {
+      assertionFailures.push(
+        "Telemetry summary is unavailable (check convex codegen/deploy).",
+      );
+    } else {
+      if (telemetrySummary.usage.calls <= 0) {
+        assertionFailures.push(
+          "Telemetry usage calls are zero for this thread.",
+        );
+      }
+      if (telemetrySummary.telemetry.events <= 0) {
+        assertionFailures.push(
+          "Telemetry event count is zero for this thread.",
+        );
+      }
+    }
+  }
+
+  let posthog: PosthogValidation | undefined;
+  if (config.verifyPosthog) {
+    if (config.posthogWaitMs > 0) {
+      await sleep(config.posthogWaitMs);
+    }
+    posthog = await queryPosthogValidation({
+      userId: config.userId,
+      threadId,
+      startedAt,
+      endedAt,
+    });
+    if (!posthog.ok) {
+      assertionFailures.push(
+        `PostHog validation failed: ${posthog.note ?? "unknown reason"}`,
+      );
+    }
+  }
+
   const context = config.includeContext
     ? await fetchPromptContext(client, apiKey, {
         userId: config.userId,
@@ -1455,6 +1859,8 @@ async function runSingle(
     assertionFailures,
     sparkArtifacts,
     sceneFiles,
+    telemetrySummary,
+    posthog,
     rawMessages: config.debugRaw ? newMessages : undefined,
     context,
   };
@@ -1487,6 +1893,19 @@ function printRunSummary(run: RunResult): void {
   console.log(
     `- plan: calls=${run.plan.calls}, failures=${run.plan.failures}, start=${run.plan.startPlanModeCalls}, draft=${run.plan.generatePlanDraftCalls}, accept=${run.plan.acceptPlanDraftCalls}, set_item=${run.plan.setPlanItemStatusCalls}, phase=${run.plan.finalSnapshot.phase ?? "n/a"}, progress=${run.plan.finalSnapshot.progressPercent ?? "n/a"}`,
   );
+  if (run.telemetrySummary) {
+    console.log(
+      `- telemetry: usageCalls=${run.telemetrySummary.usage.calls}, usageTotalTokens=${run.telemetrySummary.usage.totalTokens}, events=${run.telemetrySummary.telemetry.events}, failures=${run.telemetrySummary.telemetry.failures}, sparkFailures=${run.telemetrySummary.telemetry.sparkFailures}, labFailures=${run.telemetrySummary.telemetry.labToolFailures}, planFailures=${run.telemetrySummary.telemetry.planToolFailures}, runtimeFailures=${run.telemetrySummary.telemetry.runtimeFailures}`,
+    );
+  }
+  if (run.posthog) {
+    console.log(
+      `- posthog: attempted=${run.posthog.attempted}, ok=${run.posthog.ok}, totalMatched=${run.posthog.totalMatched}, missing=${run.posthog.missingExpectedEvents.join(",") || "none"}`,
+    );
+    if (run.posthog.note) {
+      console.log(`  note: ${run.posthog.note}`);
+    }
+  }
 
   if (run.tools.length > 0) {
     console.log("- toolRuns:");
@@ -1519,10 +1938,12 @@ function printRunSummary(run: RunResult): void {
   }
 
   if (run.sceneFiles.length > 0) {
-    console.log("- sceneFiles:");
+    console.log("- htmlSparkFiles:");
     for (const scene of run.sceneFiles) {
       const uri = toFileUri(scene.filePath);
-      console.log(`  - ${scene.title} (${scene.toolCallId}) ${scene.filePath}`);
+      console.log(
+        `  - ${scene.sparkType} ${scene.title} (${scene.toolCallId}) ${scene.filePath}`,
+      );
       console.log(
         `    agent-browser: npx agent-browser --allow-file-access open \"${uri}\" && npx agent-browser snapshot -i && npx agent-browser screenshot --full`,
       );
@@ -1566,7 +1987,10 @@ async function runCommand(parsed: ParsedArgs): Promise<void> {
   const pollMs = pollMsFlag
     ? parseNumberFlag(parsed.flags, "pollMs", 250)
     : 250;
-  const agentName = getSingleFlag(parsed.flags, "agentName") ?? "studi";
+  const profile = parseModelProfileFlag(parsed.flags);
+  const profileAgentName = profile ? getStudiAgentName(profile) : undefined;
+  const agentName =
+    getSingleFlag(parsed.flags, "agentName") ?? profileAgentName ?? "studi";
   const title = getSingleFlag(parsed.flags, "title") ?? "Agent Lab Thread";
   const modelLabel = getSingleFlag(parsed.flags, "modelLabel");
   const sceneOutDir = getSingleFlag(parsed.flags, "sceneOutDir");
@@ -1581,6 +2005,12 @@ async function runCommand(parsed: ParsedArgs): Promise<void> {
     parsed.flags,
     "minPlanProgress",
   );
+  const verifyTelemetry = getBooleanFlag(parsed.flags, "verifyTelemetry");
+  const verifyPosthog = getBooleanFlag(parsed.flags, "verifyPosthog");
+  const posthogWaitMsFlag = getSingleFlag(parsed.flags, "posthogWaitMs");
+  const posthogWaitMs = posthogWaitMsFlag
+    ? parseNumberFlag(parsed.flags, "posthogWaitMs", 4000)
+    : 4000;
 
   const run = await runSingle(client, apiKey, {
     userId,
@@ -1603,6 +2033,9 @@ async function runCommand(parsed: ParsedArgs): Promise<void> {
     requirePlan,
     expectPlanPhase,
     minPlanProgress,
+    verifyTelemetry,
+    verifyPosthog,
+    posthogWaitMs,
   });
 
   printRunSummary(run);
@@ -1653,6 +2086,8 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
   const client = new ConvexHttpClient(convexUrl);
   const overrideUserId = getSingleFlag(parsed.flags, "userId");
   const overrideAgentName = getSingleFlag(parsed.flags, "agentName");
+  const profile = parseModelProfileFlag(parsed.flags);
+  const profileAgentName = profile ? getStudiAgentName(profile) : undefined;
   const pollMsFlag = getSingleFlag(parsed.flags, "pollMs");
   const pollMs = pollMsFlag
     ? parseNumberFlag(parsed.flags, "pollMs", 250)
@@ -1678,6 +2113,12 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
     parsed.flags,
     "minPlanProgress",
   );
+  const verifyTelemetry = getBooleanFlag(parsed.flags, "verifyTelemetry");
+  const verifyPosthog = getBooleanFlag(parsed.flags, "verifyPosthog");
+  const posthogWaitMsFlag = getSingleFlag(parsed.flags, "posthogWaitMs");
+  const posthogWaitMs = posthogWaitMsFlag
+    ? parseNumberFlag(parsed.flags, "posthogWaitMs", 4000)
+    : 4000;
 
   const results: RunResult[] = [];
   let previousThreadId: string | undefined;
@@ -1694,6 +2135,7 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
         "agentic-test-user";
       const agentName =
         overrideAgentName ??
+        profileAgentName ??
         testCase.agentName ??
         suite.defaults?.agentName ??
         "studi";
@@ -1764,6 +2206,9 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
         requirePlan,
         expectPlanPhase,
         minPlanProgress,
+        verifyTelemetry,
+        verifyPosthog,
+        posthogWaitMs,
       });
 
       printRunSummary(run);
@@ -1789,6 +2234,10 @@ async function runSuiteCommand(parsed: ParsedArgs): Promise<void> {
     sparkFailures: run.spark.failures,
     labFailures: run.lab.failures,
     planFailures: run.plan.failures,
+    telemetryEvents: run.telemetrySummary?.telemetry.events,
+    telemetryFailures: run.telemetrySummary?.telemetry.failures,
+    posthogOk: run.posthog?.ok,
+    posthogMatched: run.posthog?.totalMatched,
     planPhase: run.plan.finalSnapshot.phase,
     planProgress: run.plan.finalSnapshot.progressPercent,
     assertionFailures: run.assertionFailures.length,

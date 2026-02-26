@@ -275,7 +275,6 @@ export const sendMessage = mutation({
     prompt: v.optional(v.string()),
     attachmentIds: v.optional(v.array(v.id("attachments"))),
     requestId: v.string(),
-    source: v.optional(v.union(v.literal("text"), v.literal("voice"))),
   },
   returns: queuedSendResultValidator,
   handler: async (ctx, args) => {
@@ -370,7 +369,6 @@ export const sendMessage = mutation({
         threadId: args.threadId,
         userId: identity.subject,
         promptMessageId: messageId,
-        source: args.source ?? "text",
       },
     );
 

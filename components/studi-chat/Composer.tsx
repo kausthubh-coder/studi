@@ -4,16 +4,12 @@ import type { Id } from "@/convex/_generated/dataModel";
 import {
   IconArrow,
   IconBook,
-  IconMic,
   IconPaperclip,
   IconPlus,
   IconX,
 } from "@/components/studi-chat/icons";
 import { PlanProgressBar } from "@/components/studi-chat/PlanProgressBar";
-import type {
-  PendingAttachment,
-  ThreadPlan,
-} from "@/components/studi-chat/types";
+import type { PendingAttachment, ThreadPlan } from "@/components/studi-chat/types";
 
 export function Composer({
   pendingAttachments,
@@ -34,9 +30,6 @@ export function Composer({
   isPlanExpanded,
   onTogglePlanExpanded,
   onPrefillPlanInput,
-  showVoiceButton,
-  onOpenVoiceMode,
-  voiceDisabledReason,
 }: {
   pendingAttachments: PendingAttachment[];
   input: string;
@@ -56,9 +49,6 @@ export function Composer({
   isPlanExpanded?: boolean;
   onTogglePlanExpanded?: () => void;
   onPrefillPlanInput?: (value: string) => void;
-  showVoiceButton?: boolean;
-  onOpenVoiceMode?: () => void;
-  voiceDisabledReason?: string | null;
 }) {
   const isWelcome = variant === "welcome";
 
@@ -105,19 +95,15 @@ export function Composer({
       data-has-plan={hasPlanBar ? "true" : undefined}
     >
       {/* Plan progress bar — attached to top of composer */}
-      {threadId &&
-        threadPlan &&
-        onTogglePlanExpanded &&
-        onPrefillPlanInput &&
-        !isWelcome && (
-          <PlanProgressBar
-            threadId={threadId}
-            threadPlan={threadPlan}
-            onPrefillInput={onPrefillPlanInput}
-            isExpanded={isPlanExpanded ?? false}
-            onToggleExpand={onTogglePlanExpanded}
-          />
-        )}
+      {threadId && threadPlan && onTogglePlanExpanded && onPrefillPlanInput && !isWelcome && (
+        <PlanProgressBar
+          threadId={threadId}
+          threadPlan={threadPlan}
+          onPrefillInput={onPrefillPlanInput}
+          isExpanded={isPlanExpanded ?? false}
+          onToggleExpand={onTogglePlanExpanded}
+        />
+      )}
 
       {/* Attachment preview row */}
       {pendingAttachments.length > 0 && (
@@ -168,7 +154,9 @@ export function Composer({
           }
         }}
         placeholder={
-          isWelcome ? "What would you like to learn?" : "Ask a follow-up..."
+          isWelcome
+            ? "What would you like to learn?"
+            : "Ask a follow-up..."
         }
         rows={isWelcome ? 3 : 1}
         className={isWelcome ? "min-h-[80px]" : "min-h-[42px] max-h-40"}
@@ -242,19 +230,6 @@ export function Composer({
             }
           }}
         />
-
-        {showVoiceButton ? (
-          <button
-            type="button"
-            className="composer-icon-btn disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Open voice mode"
-            onClick={() => onOpenVoiceMode?.()}
-            disabled={Boolean(voiceDisabledReason)}
-            title={voiceDisabledReason ?? "Open voice mode"}
-          >
-            <IconMic />
-          </button>
-        ) : null}
 
         <button
           type="submit"

@@ -25,10 +25,14 @@ import {
   writeFile,
   type DaytonaToolError,
 } from "./daytona";
+import { capturePosthogEvent } from "./posthog";
 
 const internalApi = internal as unknown as {
   plans: {
     ensureLabPlanInternal: FunctionReference<"mutation", "internal">;
+  };
+  telemetry: {
+    insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
   };
 };
 
@@ -63,6 +67,56 @@ type LabSessionLookup = {
 };
 
 const MAX_MATCHES = 300;
+
+async function recordLabToolTelemetry(
+  ctx: {
+    runMutation: MutationRunner;
+  },
+  params: {
+    userId?: string;
+    threadId?: string;
+    name: string;
+    status: "success" | "failed";
+    durationMs: number;
+    errorCategory?: string;
+    retriable?: boolean;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  if (!params.userId) {
+    return;
+  }
+
+  await ctx
+    .runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
+      userId: params.userId,
+      threadId: params.threadId,
+      source: "lab_tool",
+      name: params.name,
+      status: params.status,
+      durationMs: params.durationMs,
+      errorCategory: params.errorCategory,
+      retriable: params.retriable,
+      metadata: params.metadata,
+    })
+    .catch((error) => {
+      console.error("Failed to store lab telemetry", error);
+    });
+
+  await capturePosthogEvent({
+    event: "lab_tool_result",
+    distinctId: params.userId,
+    properties: {
+      thread_id: params.threadId,
+      tool_name: params.name,
+      status: params.status,
+      duration_ms: params.durationMs,
+      error_category: params.errorCategory,
+      retriable: params.retriable,
+      ...(params.metadata ?? {}),
+    },
+  });
+}
 
 function failure(
   operation: string,
@@ -166,6 +220,7 @@ export const createLabTool = createTool<
     "Create or resume a coding lab for the current thread and switch to the lab agent.",
   args: createLabSchema,
   handler: async (ctx, args) => {
+    const startedAt = Date.now();
     const userId = ctx.userId;
     const threadId = ctx.threadId;
 
@@ -208,6 +263,19 @@ export const createLabTool = createTool<
         objective: args.objective,
       });
 
+      await recordLabToolTelemetry(ctx, {
+        userId,
+        threadId,
+        name: "create_lab",
+        status: "success",
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          topic: args.topic,
+          objective: args.objective,
+          sandboxId,
+        },
+      });
+
       return {
         status: "active",
         summary:
@@ -219,6 +287,22 @@ export const createLabTool = createTool<
         },
       };
     } catch (error) {
+      const detail = classifyDaytonaError(error);
+      await recordLabToolTelemetry(ctx, {
+        userId,
+        threadId,
+        name: "create_lab",
+        status: "failed",
+        durationMs: Date.now() - startedAt,
+        errorCategory: detail.category,
+        retriable: detail.retriable,
+        metadata: {
+          topic: args.topic,
+          objective: args.objective,
+          error: detail.message,
+          httpStatus: detail.httpStatus,
+        },
+      });
       return failure("create_lab", error, {
         threadId,
       });
@@ -242,6 +326,7 @@ export const archiveLabTool = createTool<
   description: "Archive the current lab and stop its sandbox.",
   args: archiveLabSchema,
   handler: async (ctx) => {
+    const startedAt = Date.now();
     const userId = ctx.userId;
     const threadId = ctx.threadId;
 
@@ -267,11 +352,33 @@ export const archiveLabTool = createTool<
         threadId,
       });
 
+      await recordLabToolTelemetry(ctx, {
+        userId,
+        threadId,
+        name: "archive_lab",
+        status: "success",
+        durationMs: Date.now() - startedAt,
+      });
+
       return {
         status: "archived",
         summary: "Lab archived. Sandbox stopped and state preserved.",
       };
     } catch (error) {
+      const detail = classifyDaytonaError(error);
+      await recordLabToolTelemetry(ctx, {
+        userId,
+        threadId,
+        name: "archive_lab",
+        status: "failed",
+        durationMs: Date.now() - startedAt,
+        errorCategory: detail.category,
+        retriable: detail.retriable,
+        metadata: {
+          error: detail.message,
+          httpStatus: detail.httpStatus,
+        },
+      });
       return failure("archive_lab", error, {
         threadId,
       });
@@ -441,6 +548,10 @@ export const runTool = createTool<z.infer<typeof runSchema>, RunResult>({
   description: "Run a shell command in the active lab sandbox.",
   args: runSchema,
   handler: async (ctx, args) => {
+    const startedAt = Date.now();
+    const userId = ctx.userId;
+    const threadId = ctx.threadId;
+
     try {
       const { sandboxId } = await getActiveSandbox(ctx);
       const result = await runCommand({
@@ -448,6 +559,19 @@ export const runTool = createTool<z.infer<typeof runSchema>, RunResult>({
         command: args.command,
         cwd: args.cwd,
         timeoutSeconds: args.timeoutSeconds,
+      });
+
+      await recordLabToolTelemetry(ctx, {
+        userId,
+        threadId,
+        name: "run",
+        status: "success",
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          command: args.command,
+          cwd: result.cwd,
+          exitCode: result.exitCode,
+        },
       });
 
       return {
@@ -459,6 +583,22 @@ export const runTool = createTool<z.infer<typeof runSchema>, RunResult>({
         output: truncateOutput(result.output),
       };
     } catch (error) {
+      const detail = classifyDaytonaError(error);
+      await recordLabToolTelemetry(ctx, {
+        userId,
+        threadId,
+        name: "run",
+        status: "failed",
+        durationMs: Date.now() - startedAt,
+        errorCategory: detail.category,
+        retriable: detail.retriable,
+        metadata: {
+          command: args.command,
+          cwd: args.cwd,
+          error: detail.message,
+          httpStatus: detail.httpStatus,
+        },
+      });
       return failure("run", error, {
         command: args.command,
         cwd: args.cwd,

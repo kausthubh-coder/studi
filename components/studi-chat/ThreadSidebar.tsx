@@ -1,5 +1,10 @@
+import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { IconCompose, IconX } from "@/components/studi-chat/icons";
+import {
+  IconCompose,
+  IconSettings,
+  IconX,
+} from "@/components/studi-chat/icons";
 import type { ThreadSummary } from "@/components/studi-chat/types";
 
 export function ThreadSidebar({
@@ -96,24 +101,14 @@ export function ThreadSidebar({
                         </span>
                       )}
                     </p>
-                    <span className="flex items-center gap-1.5">
-                      {thread.hasLab ? (
-                        <span
-                          className="sidebar-thread-lab-tag"
-                          data-active-lab={thread.hasActiveLab}
-                        >
-                          Lab
-                        </span>
-                      ) : null}
-                      {thread.hasPlan ? (
-                        <span
-                          className="sidebar-thread-plan-tag"
-                          data-phase={thread.planPhase ?? "active"}
-                        >
-                          Plan {thread.planProgressPercent ?? 0}%
-                        </span>
-                      ) : null}
-                    </span>
+                    {thread.hasLab ? (
+                      <span
+                        className="sidebar-thread-lab-tag"
+                        data-active-lab={thread.hasActiveLab}
+                      >
+                        Lab
+                      </span>
+                    ) : null}
                   </div>
                   {thread.lastMessageAt && (
                     <p
@@ -128,6 +123,18 @@ export function ThreadSidebar({
                         },
                       )}
                     </p>
+                  )}
+                  {thread.hasPlan && (
+                    <div
+                      className="sidebar-thread-progress"
+                      data-phase={thread.planPhase ?? "active"}
+                    >
+                      <span
+                        style={{
+                          width: `${thread.planProgressPercent ?? 0}%`,
+                        }}
+                      />
+                    </div>
                   )}
                 </button>
                 <button
@@ -149,6 +156,13 @@ export function ThreadSidebar({
             );
           })
         )}
+      </div>
+
+      <div className="px-3 pb-2">
+        <Link href="/settings" className="sidebar-settings-link">
+          <IconSettings className="h-3.5 w-3.5" />
+          <span>Settings</span>
+        </Link>
       </div>
 
       {/* User account bottom */}

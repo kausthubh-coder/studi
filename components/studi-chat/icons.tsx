@@ -247,24 +247,3 @@ export function IconSettings({ className }: { className?: string }) {
     </svg>
   );
 }
-
-export function IconMic({ className }: { className?: string }) {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <rect x="9" y="2" width="6" height="12" rx="3" />
-      <path d="M5 10a7 7 0 0 0 14 0" />
-      <path d="M12 17v5" />
-      <path d="M8 22h8" />
-    </svg>
-  );
-}

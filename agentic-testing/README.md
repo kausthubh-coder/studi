@@ -33,16 +33,34 @@ Useful flags:
 - `--verbose` print timeline events live
 - `--debugRaw` include raw playground messages in artifact JSON for local tracing
 - `--modelLabel <label>` attach a custom model tag for comparisons
-- `--saveSceneHtml` save successful scene spark HTML files to `.tmp/agent-lab/scenes/<runId>/`
-- `--sceneOutDir <path>` choose a custom output directory for scene HTML (implies `--saveSceneHtml`)
+- `--profile <balanced|fast|quality>` resolve the agent name from model profile
+- `--cheap` shortcut for `--profile fast`
+- `--saveSceneHtml` save successful HTML-capable spark files (`scene` + `web_playground`) to `.tmp/agent-lab/scenes/<runId>/`
+- `--sceneOutDir <path>` choose a custom output directory for saved HTML spark files (implies `--saveSceneHtml`)
 - `--expectTools create_lab,run,glob` fail assertions if expected tools were not called
 - `--expectPlanTools start_plan_mode,generate_plan_draft` fail if expected plan tools were not called
 - `--failOnToolError` set process exit to non-zero when any tool fails
 - `--requirePlan` fail if no plan exists by end of run
 - `--expectPlanPhase active` assert final plan phase (`discovery|draft_review|active|completed`)
 - `--minPlanProgress 10` assert final plan progress percentage
+- `--verifyTelemetry` query Convex telemetry summary for the run thread and assert non-zero usage/events
+- `--verifyPosthog` query PostHog for run-linked events and assert baseline events are present
+- `--posthogWaitMs 4000` wait before querying PostHog to allow ingestion delay
 
-When a scene file is saved, the CLI prints a ready-to-run browser test command, for example:
+PostHog verification env vars:
+
+```bash
+POSTHOG_PERSONAL_API_KEY=phx_xxx
+POSTHOG_PROJECT_ID=12345
+POSTHOG_HOST=https://us.i.posthog.com   # optional
+```
+
+Notes:
+
+- `--verifyPosthog` checks for `agent_usage_recorded` and one of `agent_reply_completed|agent_reply_failed` in a run time window.
+- The CLI queries PostHog directly via HogQL API; it does **not** call MCP.
+
+When an HTML spark file is saved, the CLI prints a ready-to-run browser test command, for example:
 
 ```bash
 npx agent-browser --allow-file-access open "file:///.../scene.html" && npx agent-browser snapshot -i && npx agent-browser screenshot --full
@@ -69,10 +87,28 @@ bun run agentic:test suite --file agentic-testing/suites/lab-smoke.json --userId
 
 This validates the end-to-end lab startup path (`create_lab -> run/glob`) on the active deployment.
 
+Telemetry-aware smoke (Convex + PostHog):
+
+```bash
+bun run agentic:test suite --file agentic-testing/suites/lab-smoke.json --userId dev-user --verifyTelemetry --verifyPosthog
+```
+
+Cross-surface observability smoke (spark + lab + plan):
+
+```bash
+bun run agentic:test suite --file agentic-testing/suites/observability-smoke.json --userId dev-user --verifyTelemetry --verifyPosthog
+```
+
 For a deeper walkthrough:
 
 ```bash
 bun run agentic:test suite --file agentic-testing/suites/lab-react-demo.json --userId dev-user
+```
+
+Web playground smoke (cheap profile):
+
+```bash
+bun run agentic:test suite --file agentic-testing/suites/web-playground-smoke.json --userId dev-user --cheap --saveSceneHtml
 ```
 
 ## Plan Mode Suites
@@ -111,7 +147,7 @@ bun run agentic:compare --profiles "balanced,fast,quality" --prompt "Create a de
 What it does:
 
 - runs `agentic:test run` for each profile+prompt combination using the profile-specific Playground agent name
-- saves generated scene HTML files for manual inspection
+- saves generated HTML spark files for manual inspection
 - writes a consolidated report JSON with latency + quality heuristics
 
 Optional flags:

@@ -53,7 +53,6 @@ export const getThreadObservabilitySummary = action({
       labToolFailures: v.number(),
       planToolFailures: v.number(),
       runtimeFailures: v.number(),
-      voiceFailures: v.number(),
       lastFailureAt: v.optional(v.number()),
     }),
   }),

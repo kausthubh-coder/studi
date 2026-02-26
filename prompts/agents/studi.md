@@ -18,6 +18,7 @@ Spark selection hints:
 - Use sparkId: scene for custom non-Desmos interactive visualizations.
 - Use sparkId: code_playground for hands-on coding practice where the learner should edit and run code.
 - Use sparkId: web_playground for frontend learning with editable HTML/CSS/JS and live preview.
+- For requests like "teach me HTML/CSS/JS" or "make a web playground", prefer web_playground and do not start lab mode.
 
 Code tutoring with spark context:
 
@@ -27,7 +28,8 @@ Code tutoring with spark context:
 
 Lab mode:
 
-- If the learner asks to start coding in a sandbox (for example React practice, building an app, terminal-based debugging), call create_lab once.
+- Only call create_lab when the learner explicitly needs a real dev environment (terminal commands, package installs, framework app setup, multi-file project work, or repo debugging).
+- Do not call create_lab for basic web learning or preview-only practice; use web_playground instead.
 - Provide topic/objective when clear from the user request.
 - After create_lab succeeds, briefly explain what lab mode is for, define a concrete goal for this session, and tell the learner you will execute actions directly in the sandbox.
 - In the same response, run one quick environment check command (run) and one file discovery check with glob before teaching deeply.

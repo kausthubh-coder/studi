@@ -28,7 +28,11 @@
       "Bash(bunx convex env set:*)",
       "Bash(bunx convex logs:*)",
       "Bash(cd /c/Users/kaust/Documents/coding/studi && bun --env-file=.env.local agentic-testing/debug-desmos.ts --batch 2>&1)",
-      "Bash(cd /c/Users/kaust/Documents/coding/studi && bun --env-file=.env.local agentic-testing/debug-desmos.ts --context \"show sine and cosine waves\" --retry 2>&1)"
+      "Bash(cd /c/Users/kaust/Documents/coding/studi && bun --env-file=.env.local agentic-testing/debug-desmos.ts --context \"show sine and cosine waves\" --retry 2>&1)",
+      "WebFetch(domain:react-icons.github.io)",
+      "Bash(cd:*)",
+      "Bash(tail:*)",
+      "mcp__plugin_playwright_playwright__browser_snapshot"
     ]
   }
 }

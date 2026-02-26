@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import type { UIMessage } from "@convex-dev/agent/react";
 import { ArticleMessage } from "@/components/studi-chat/MessageRenderer";
-import { PlanPanel } from "@/components/studi-chat/PlanPanel";
+import { PlanDraftCard } from "@/components/studi-chat/PlanDraftCard";
 import type { ThreadPlan } from "@/components/studi-chat/types";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 
@@ -26,27 +26,25 @@ export function MessageColumn({
   ) => void;
   expandedSparkInstanceId: string | null;
 }) {
+  const showDraftCard =
+    selectedThreadId &&
+    threadPlan &&
+    threadPlan.phase === "draft_review" &&
+    threadPlan.hasDraft;
+
   return (
     <div ref={listRef} className="flex-1 overflow-y-auto">
       <div
-        className="mx-auto px-8 pb-36 pt-14"
+        className="mx-auto px-8 pt-14"
         style={{ maxWidth: "var(--column-max)" }}
       >
-        {selectedThreadId && messages.length === 0 && (
+        {selectedThreadId && messages.length === 0 && !threadPlan && (
           <div className="py-24 text-center">
             <p className="font-heading text-base italic text-fg-faint">
               Start by asking a question below.
             </p>
           </div>
         )}
-
-        {selectedThreadId ? (
-          <PlanPanel
-            threadId={selectedThreadId}
-            threadPlan={threadPlan}
-            onPrefillInput={onPrefillPlanInput}
-          />
-        ) : null}
 
         {messages.map((message, idx) => (
           <ArticleMessage
@@ -58,7 +56,19 @@ export function MessageColumn({
             expandedSparkInstanceId={expandedSparkInstanceId}
           />
         ))}
+
+        {/* Inline draft review card after messages */}
+        {showDraftCard ? (
+          <PlanDraftCard
+            threadId={selectedThreadId}
+            threadPlan={threadPlan}
+            onPrefillInput={onPrefillPlanInput}
+          />
+        ) : null}
       </div>
+
+      {/* Extra scroll space so content clears the floating composer */}
+      <div style={{ height: showDraftCard ? "16rem" : "9rem" }} />
     </div>
   );
 }
