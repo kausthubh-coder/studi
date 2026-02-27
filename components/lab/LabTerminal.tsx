@@ -1,13 +1,16 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Play, Terminal } from "lucide-react";
+import { ExternalLink, Loader2, Play, Terminal } from "lucide-react";
 
 type LabTerminalProps = {
+  cwd: string;
   commandInput: string;
   onCommandInputChange: (value: string) => void;
   onRunCommand: () => void;
   isRunning: boolean;
   terminalOutput: string;
   lastExitCode: number | null;
+  onOpenWebTerminal: () => void;
+  isOpeningWebTerminal: boolean;
 };
 
 const BUILTIN_SUGGESTIONS = [
@@ -54,12 +57,15 @@ function loadCommandHistory(): string[] {
 }
 
 export const LabTerminal = memo(function LabTerminal({
+  cwd,
   commandInput,
   onCommandInputChange,
   onRunCommand,
   isRunning,
   terminalOutput,
   lastExitCode,
+  onOpenWebTerminal,
+  isOpeningWebTerminal,
 }: LabTerminalProps) {
   const [terminalHeight, setTerminalHeight] = useState(180);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -246,8 +252,9 @@ export const LabTerminal = memo(function LabTerminal({
 
       {/* Input row */}
       <div className="lab-terminal-input-row">
-        <span className="lab-terminal-prompt">
+        <span className="lab-terminal-prompt" title={cwd}>
           <Terminal size={13} strokeWidth={2.2} />
+          <span className="lab-terminal-prompt-text">studi@lab:{cwd} $</span>
         </span>
         <input
           className="lab-terminal-input"
@@ -299,6 +306,22 @@ export const LabTerminal = memo(function LabTerminal({
             ))}
           </div>
         )}
+      </div>
+      <div className="lab-terminal-meta">
+        <div className="lab-terminal-shortcuts">↵ run · ↑/↓ history · tab suggest</div>
+        <button
+          type="button"
+          className="lab-terminal-link-btn"
+          disabled={isOpeningWebTerminal}
+          onClick={onOpenWebTerminal}
+        >
+          {isOpeningWebTerminal ? (
+            <Loader2 size={12} className="animate-spin" strokeWidth={2.5} />
+          ) : (
+            <ExternalLink size={12} strokeWidth={2.2} />
+          )}
+          Web Terminal
+        </button>
       </div>
 
       {/* Output */}

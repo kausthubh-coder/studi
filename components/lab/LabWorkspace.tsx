@@ -52,6 +52,7 @@ type PersistedState = {
   currentPath?: string;
   selectedFilePath?: string;
   commandInput?: string;
+  previewPort?: number;
 };
 
 function getStorageKey(threadId: string): string {
@@ -76,6 +77,8 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const readFileAction = useAction(api.labIde.readLabFile);
   const writeFileAction = useAction(api.labIde.writeLabFile);
   const runCommandAction = useAction(api.labIde.runLabCommand);
+  const getPreviewLinkAction = useAction(api.labIde.getLabPreviewLink);
+  const getTerminalLinkAction = useAction(api.labIde.getLabTerminalLink);
 
   const [currentPath, setCurrentPath] = useState("workspace");
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -91,6 +94,9 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const [isRunningCommand, setIsRunningCommand] = useState(false);
   const [terminalOutput, setTerminalOutput] = useState<string>("");
   const [lastExitCode, setLastExitCode] = useState<number | null>(null);
+  const [previewPortInput, setPreviewPortInput] = useState("3000");
+  const [isOpeningPreview, setIsOpeningPreview] = useState(false);
+  const [isOpeningWebTerminal, setIsOpeningWebTerminal] = useState(false);
 
   const initialHydratedRef = useRef(false);
   const initialSelectedFileRef = useRef<string | null>(null);
@@ -113,6 +119,9 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
         initialSelectedFileRef.current = parsed.selectedFilePath;
       }
       if (parsed.commandInput) setCommandInput(parsed.commandInput);
+      if (typeof parsed.previewPort === "number") {
+        setPreviewPortInput(String(parsed.previewPort));
+      }
     } catch {
       /* ignore */
     }
@@ -124,12 +133,13 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
       currentPath,
       selectedFilePath: selectedFilePath ?? undefined,
       commandInput,
+      previewPort: Number.parseInt(previewPortInput, 10) || 3000,
     };
     window.localStorage.setItem(
       getStorageKey(threadId),
       JSON.stringify(payload),
     );
-  }, [threadId, currentPath, selectedFilePath, commandInput]);
+  }, [threadId, currentPath, selectedFilePath, commandInput, previewPortInput]);
 
   const refreshEntries = useCallback(
     async (pathOverride?: string) => {
@@ -311,6 +321,53 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     void runCommand();
   }, [runCommand]);
 
+  const openWebTerminal = useCallback(async () => {
+    setIsOpeningWebTerminal(true);
+    setWorkspaceError(null);
+    try {
+      const response = await getTerminalLinkAction({
+        threadId,
+        expiresInSeconds: 3600,
+      });
+
+      if (response.status === "failed") {
+        setWorkspaceError(response.summary);
+        return;
+      }
+
+      window.open(response.url, "_blank", "noopener,noreferrer");
+    } finally {
+      setIsOpeningWebTerminal(false);
+    }
+  }, [getTerminalLinkAction, threadId]);
+
+  const openPreview = useCallback(async () => {
+    const parsedPort = Number.parseInt(previewPortInput.trim(), 10);
+    if (!Number.isFinite(parsedPort) || parsedPort < 3000 || parsedPort > 9999) {
+      setWorkspaceError("Preview port must be between 3000 and 9999.");
+      return;
+    }
+
+    setIsOpeningPreview(true);
+    setWorkspaceError(null);
+    try {
+      const response = await getPreviewLinkAction({
+        threadId,
+        port: parsedPort,
+        expiresInSeconds: 3600,
+      });
+
+      if (response.status === "failed") {
+        setWorkspaceError(response.summary);
+        return;
+      }
+
+      window.open(response.url, "_blank", "noopener,noreferrer");
+    } finally {
+      setIsOpeningPreview(false);
+    }
+  }, [getPreviewLinkAction, previewPortInput, threadId]);
+
   const editorLanguage = useMemo(
     () => (selectedFilePath ? pickLanguage(selectedFilePath) : "plaintext"),
     [selectedFilePath],
@@ -373,13 +430,39 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           )}
         </div>
 
+        <div className="lab-preview-toolbar">
+          <label className="lab-preview-label" htmlFor="lab-preview-port">
+            Preview port
+          </label>
+          <input
+            id="lab-preview-port"
+            className="lab-preview-input"
+            value={previewPortInput}
+            onChange={(e) => setPreviewPortInput(e.target.value)}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="3000"
+          />
+          <button
+            type="button"
+            className="lab-preview-btn"
+            disabled={isOpeningPreview}
+            onClick={() => void openPreview()}
+          >
+            {isOpeningPreview ? "Opening…" : "Open Preview"}
+          </button>
+        </div>
+
         <LabTerminal
+          cwd={currentPath}
           commandInput={commandInput}
           onCommandInputChange={setCommandInput}
           onRunCommand={handleRunCommand}
           isRunning={isRunningCommand}
           terminalOutput={terminalOutput}
           lastExitCode={lastExitCode}
+          onOpenWebTerminal={openWebTerminal}
+          isOpeningWebTerminal={isOpeningWebTerminal}
         />
 
         {isTruncated && selectedFilePath && !isBinary && (
