@@ -781,10 +781,6 @@ export default function StudiChat() {
                 }
                 expandedSparkInstanceId={expandedSpark?.sparkInstanceId ?? null}
                 voiceActive={isVoiceMode}
-                liveUserTranscript={voiceSession.liveUserTranscript}
-                liveAssistantTranscript={voiceSession.liveAssistantTranscript}
-                assistantCurrentWord={voiceSession.assistantCurrentWord}
-                isSpeechActive={voiceSession.isSpeechActive}
               />
               {/* Voice warning banner — shown between messages and composer */}
               {isVoiceMode && voiceSession.activeWarning && (

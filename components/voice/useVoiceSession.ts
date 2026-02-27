@@ -103,14 +103,6 @@ function readRealtimeErrorMessage(payload: Record<string, unknown>): string {
   return message || suffix;
 }
 
-function readLastSpokenWord(text: string): string {
-  const words = text.match(/[A-Za-z0-9']+/g);
-  if (!words || words.length === 0) {
-    return "";
-  }
-  return words[words.length - 1] ?? "";
-}
-
 function extractTranscriptFromResponseDone(
   payload: Record<string, unknown>,
 ): string {
@@ -238,7 +230,6 @@ export function useVoiceSession({
   const [isSpeechActive, setIsSpeechActive] = useState(false);
   const [liveUserTranscript, setLiveUserTranscript] = useState("");
   const [liveAssistantTranscript, setLiveAssistantTranscript] = useState("");
-  const [assistantCurrentWord, setAssistantCurrentWord] = useState("");
   const [assistantTranscriptHistory, setAssistantTranscriptHistory] = useState<
     string[]
   >([]);
@@ -486,7 +477,6 @@ export function useVoiceSession({
     setIsSpeechActive(false);
     setLiveUserTranscript("");
     setLiveAssistantTranscript("");
-    setAssistantCurrentWord("");
     setAssistantTranscriptHistory([]);
     setActiveSpark(null);
     setActiveWarning(null);
@@ -531,14 +521,12 @@ export function useVoiceSession({
       const text = rawText.trim();
       if (!text) {
         setLiveAssistantTranscript("");
-        setAssistantCurrentWord("");
         return;
       }
 
       if (responseId) {
         if (seenAssistantResponseIdsRef.current.has(responseId)) {
           setLiveAssistantTranscript("");
-          setAssistantCurrentWord("");
           return;
         }
         seenAssistantResponseIdsRef.current.add(responseId);
@@ -555,7 +543,6 @@ export function useVoiceSession({
       });
 
       setLiveAssistantTranscript("");
-      setAssistantCurrentWord("");
 
       if (!shouldPersist) {
         return;
@@ -952,11 +939,7 @@ export function useVoiceSession({
         if (type === "response.output_audio_transcript.delta") {
           const delta = pickString(data, ["delta", "text"]);
           if (delta) {
-            setLiveAssistantTranscript((previous) => {
-              const next = `${previous}${delta}`;
-              setAssistantCurrentWord(readLastSpokenWord(next));
-              return next;
-            });
+            setLiveAssistantTranscript((previous) => `${previous}${delta}`);
           }
           return;
         }
@@ -1323,7 +1306,6 @@ export function useVoiceSession({
     liveTranscript: liveUserTranscript,
     liveUserTranscript,
     liveAssistantTranscript,
-    assistantCurrentWord,
     assistantTranscriptHistory,
     activeSpark,
     activeWarning,
