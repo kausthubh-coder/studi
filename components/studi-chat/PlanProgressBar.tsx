@@ -12,13 +12,11 @@ import type {
 export function PlanProgressBar({
   threadId,
   threadPlan,
-  onPrefillInput,
   isExpanded,
   onToggleExpand,
 }: {
   threadId: string;
   threadPlan: ThreadPlan;
-  onPrefillInput: (value: string) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) {
@@ -114,25 +112,10 @@ export function PlanProgressBar({
                 Last requested change: {threadPlan.latestChangeRequest}
               </p>
             ) : null}
-            <div className="plan-panel-actions">
-              <button
-                type="button"
-                className="plan-btn"
-                onClick={() =>
-                  onPrefillInput(
-                    [
-                      "Goal:",
-                      "Current level:",
-                      "Timeline:",
-                      "Time per week:",
-                      "Anything to include or avoid:",
-                    ].join("\n"),
-                  )
-                }
-              >
-                Fill answer template
-              </button>
-            </div>
+            <p className="plan-panel-copy">
+              Reply in chat and the tutor will ask follow-ups, then create a
+              draft you can revise until it feels right.
+            </p>
           </div>
         )}
 

@@ -44,7 +44,6 @@ export function Composer({
   threadPlan,
   isPlanExpanded,
   onTogglePlanExpanded,
-  onPrefillPlanInput,
   showVoiceButton,
   onOpenVoiceMode,
   voiceDisabledReason,
@@ -72,7 +71,6 @@ export function Composer({
   threadPlan?: ThreadPlan | null | undefined;
   isPlanExpanded?: boolean;
   onTogglePlanExpanded?: () => void;
-  onPrefillPlanInput?: (value: string) => void;
   showVoiceButton?: boolean;
   onOpenVoiceMode?: () => void;
   voiceDisabledReason?: string | null;
@@ -132,12 +130,10 @@ export function Composer({
       {threadId &&
         threadPlan &&
         onTogglePlanExpanded &&
-        onPrefillPlanInput &&
         !isWelcome && (
           <PlanProgressBar
             threadId={threadId}
             threadPlan={threadPlan}
-            onPrefillInput={onPrefillPlanInput}
             isExpanded={isPlanExpanded ?? false}
             onToggleExpand={onTogglePlanExpanded}
           />

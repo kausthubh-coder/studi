@@ -329,6 +329,18 @@ export default function StudiChat() {
     ],
   );
 
+  const sendPlanKickoffMessage = useCallback(
+    async (threadId: string, prompt: string) => {
+      await sendMessageMutation({
+        threadId,
+        prompt,
+        attachmentIds: [],
+        requestId: makeRequestId(),
+      });
+    },
+    [sendMessageMutation],
+  );
+
   const persistVoiceTurn = useCallback(
     async (role: "user" | "assistant", text: string) => {
       const normalized = text.trim();
@@ -487,25 +499,36 @@ export default function StudiChat() {
     setTimeout(() => textareaRef.current?.focus(), 50);
   }, []);
 
-  const handlePrefillPlanInput = useCallback((value: string) => {
-    setInput(value);
-    setTimeout(() => textareaRef.current?.focus(), 50);
-  }, []);
+
+  const handleSendPlanAcceptancePrompt = useCallback(async () => {
+    if (!selectedThreadId) return;
+    try {
+      await sendPlanKickoffMessage(
+        selectedThreadId,
+        "I've accepted the learning plan — let's start with the first milestone!",
+      );
+    } catch (error) {
+      console.error("Failed to send plan acceptance message", error);
+    }
+  }, [selectedThreadId, sendPlanKickoffMessage]);
 
   const handleStartTrack = useCallback(async () => {
     if (!selectedThreadId) return;
-    await startPlanMode({ threadId: selectedThreadId });
-    setInput(
-      [
-        "Yes, let's make this a track.",
-        "My goal:",
-        "Current level:",
-        "Timeline:",
-        "Time per week:",
-      ].join("\n"),
-    );
-    setTimeout(() => textareaRef.current?.focus(), 50);
-  }, [selectedThreadId, startPlanMode]);
+    setIsSending(true);
+    try {
+      await startPlanMode({ threadId: selectedThreadId });
+      await sendPlanKickoffMessage(
+        selectedThreadId,
+        "Yes, let's make this a track. Ask me the setup questions one-by-one, then draft a plan we can revise until it's ready.",
+      );
+      setInput("");
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    } catch (error) {
+      console.error("Failed to start track", error);
+    } finally {
+      setIsSending(false);
+    }
+  }, [selectedThreadId, sendPlanKickoffMessage, startPlanMode]);
 
   const handleTogglePlanExpanded = useCallback(() => {
     setIsPlanExpanded((v) => !v);
@@ -771,7 +794,7 @@ export default function StudiChat() {
                 selectedThreadId={selectedThreadId}
                 messages={uiMessages.results}
                 threadPlan={threadPlan}
-                onPrefillPlanInput={handlePrefillPlanInput}
+                onSendPlanAcceptancePrompt={handleSendPlanAcceptancePrompt}
                 onExpandSpark={
                   isLabActive
                     ? () => {
@@ -824,7 +847,6 @@ export default function StudiChat() {
                 threadPlan={threadPlan}
                 isPlanExpanded={isPlanExpanded}
                 onTogglePlanExpanded={handleTogglePlanExpanded}
-                onPrefillPlanInput={handlePrefillPlanInput}
                 showVoiceButton
                 onOpenVoiceMode={() => {
                   void handleOpenVoiceMode();

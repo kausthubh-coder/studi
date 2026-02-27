@@ -11,11 +11,11 @@ import type { ThreadPlan } from "@/components/studi-chat/types";
 export function PlanDraftCard({
   threadId,
   threadPlan,
-  onPrefillInput,
+  onSendAcceptancePrompt,
 }: {
   threadId: string;
   threadPlan: ThreadPlan;
-  onPrefillInput: (prompt: string) => void;
+  onSendAcceptancePrompt: () => Promise<void>;
 }) {
   const acceptDraftPlan = useMutation(plansApi.acceptDraftPlan);
 
@@ -38,9 +38,7 @@ export function PlanDraftCard({
     setBusyAction("accept");
     try {
       await acceptDraftPlan({ threadId });
-      onPrefillInput(
-        "I've accepted the learning plan — let's start with the first milestone!",
-      );
+      await onSendAcceptancePrompt();
     } finally {
       setBusyAction(null);
     }
