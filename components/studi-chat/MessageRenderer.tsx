@@ -138,6 +138,10 @@ function splitAssistantTextSegments(
   };
 }
 
+function normalizeRenderableText(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 function mapToolStateToStatus(state: string | undefined): ActivityStepStatus {
   if (state === "output-error") {
     return "error";
@@ -900,7 +904,12 @@ function AssistantParts({
   );
 
   const shouldShowIntroText =
-    activity.isStreaming && textSegments.introText.trim().length > 0;
+    textSegments.introText.trim().length > 0;
+
+  const introMatchesFinal =
+    shouldShowIntroText &&
+    normalizeRenderableText(textSegments.introText) ===
+      normalizeRenderableText(textSegments.finalText);
 
   const finalText = textSegments.hasToolBoundary
     ? textSegments.finalText
@@ -1079,7 +1088,7 @@ function AssistantParts({
 
   return (
     <>
-      {shouldShowIntroText ? (
+      {shouldShowIntroText && !introMatchesFinal ? (
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
           rehypePlugins={[rehypeKatex, rehypeHighlight]}
@@ -1089,6 +1098,9 @@ function AssistantParts({
       ) : null}
       <AssistantActivityPanel message={message} activity={activity} />
       {sparkBuildingCards}
+      {/* Intended sequence: show Spark output first, then post-tool guidance text. */}
+      {sparkFailures}
+      {sparkArtifacts}
       {textToRender ? (
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
@@ -1097,8 +1109,6 @@ function AssistantParts({
           {textToRender}
         </ReactMarkdown>
       ) : null}
-      {sparkFailures}
-      {sparkArtifacts}
       {fileArtifacts}
     </>
   );
