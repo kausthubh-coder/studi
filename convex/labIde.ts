@@ -18,6 +18,8 @@ import {
   listFiles,
   readFile,
   runCommand,
+  getSignedPreviewLink,
+  getTerminalLink,
   truncateOutput,
   writeFile,
 } from "./daytona";
@@ -435,3 +437,90 @@ export const globLabFiles = action({
     }
   },
 });
+
+export const getLabPreviewLink = action({
+  args: {
+    threadId: v.string(),
+    port: v.number(),
+    expiresInSeconds: v.optional(v.number()),
+  },
+  returns: v.union(
+    v.object({
+      status: v.literal("success"),
+      summary: v.string(),
+      port: v.number(),
+      url: v.string(),
+      token: v.optional(v.string()),
+    }),
+    failureValidator,
+  ),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+
+    try {
+      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
+      const preview = await getSignedPreviewLink({
+        sandboxId,
+        port: args.port,
+        expiresInSeconds: args.expiresInSeconds,
+      });
+
+      return {
+        status: "success" as const,
+        summary: `Preview URL ready for port ${args.port}.`,
+        port: args.port,
+        url: preview.url,
+        token: preview.token,
+      };
+    } catch (error) {
+      return {
+        status: "failed" as const,
+        summary: formatErrorSummary("get preview link", error),
+        error: classifyDaytonaError(error),
+      };
+    }
+  },
+});
+
+export const getLabTerminalLink = action({
+  args: {
+    threadId: v.string(),
+    expiresInSeconds: v.optional(v.number()),
+  },
+  returns: v.union(
+    v.object({
+      status: v.literal("success"),
+      summary: v.string(),
+      url: v.string(),
+      token: v.optional(v.string()),
+      port: v.number(),
+    }),
+    failureValidator,
+  ),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+
+    try {
+      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
+      const terminal = await getTerminalLink({
+        sandboxId,
+        expiresInSeconds: args.expiresInSeconds,
+      });
+
+      return {
+        status: "success" as const,
+        summary: "Daytona web terminal link ready.",
+        url: terminal.url,
+        token: terminal.token,
+        port: 22222,
+      };
+    } catch (error) {
+      return {
+        status: "failed" as const,
+        summary: formatErrorSummary("get terminal link", error),
+        error: classifyDaytonaError(error),
+      };
+    }
+  },
+});
+

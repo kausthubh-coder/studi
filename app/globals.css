@@ -3704,9 +3704,16 @@ body::after {
 .lab-terminal-prompt {
   display: flex;
   align-items: center;
+  gap: 0.35rem;
   color: var(--accent2);
   flex-shrink: 0;
   font-weight: 700;
+}
+
+.lab-terminal-prompt-text {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
 }
 
 .lab-terminal-input {
@@ -3835,6 +3842,94 @@ body::after {
 .lab-terminal-suggestion[data-active="true"] {
   background: var(--accent2-dim);
   color: var(--accent2);
+}
+
+.lab-terminal-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.3rem 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--border-faint);
+  background: var(--bg-alt);
+}
+
+.lab-terminal-shortcuts {
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.64rem;
+  color: var(--fg-faint);
+}
+
+.lab-terminal-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--fg-muted);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lab-terminal-link-btn:hover:not(:disabled) {
+  color: var(--accent2);
+  border-color: var(--accent2);
+}
+
+.lab-terminal-link-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.lab-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--border-faint);
+  border-bottom: 1px solid var(--border-faint);
+  background: color-mix(in srgb, var(--bg-alt) 88%, #fff 12%);
+}
+
+.lab-preview-label {
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.66rem;
+  color: var(--fg-muted);
+  font-weight: 600;
+}
+
+.lab-preview-input {
+  width: 5.5rem;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 0.2rem 0.4rem;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.72rem;
+}
+
+.lab-preview-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--accent2);
+  background: color-mix(in srgb, var(--accent2-dim) 65%, #fff 35%);
+  color: var(--accent2);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lab-preview-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* Error bar */

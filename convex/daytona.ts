@@ -758,6 +758,78 @@ export async function runCommand(params: {
   };
 }
 
+type PreviewLinkResponse = {
+  url: string;
+  token?: string;
+};
+
+export async function getPreviewLink(params: {
+  sandboxId: string;
+  port: number;
+}): Promise<PreviewLinkResponse> {
+  return await daytonaRequest<PreviewLinkResponse>({
+    path: `/sandbox/${encodeURIComponent(params.sandboxId)}/preview-link/${params.port}`,
+  });
+}
+
+export async function getSignedPreviewLink(params: {
+  sandboxId: string;
+  port: number;
+  expiresInSeconds?: number;
+}): Promise<PreviewLinkResponse> {
+  const candidates: Array<{ path: string; method?: RequestMethod; body?: unknown }> = [
+    {
+      path: `/sandbox/${encodeURIComponent(params.sandboxId)}/preview-link/${params.port}/signed`,
+      method: "POST",
+      body: { expiresInSeconds: params.expiresInSeconds ?? 3600 },
+    },
+    {
+      path: `/sandbox/${encodeURIComponent(params.sandboxId)}/preview-link/${params.port}/signed-url`,
+      method: "POST",
+      body: { expiresInSeconds: params.expiresInSeconds ?? 3600 },
+    },
+    {
+      path: `/sandbox/${encodeURIComponent(params.sandboxId)}/preview/${params.port}/signed`,
+      method: "POST",
+      body: { expiresInSeconds: params.expiresInSeconds ?? 3600 },
+    },
+  ];
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return await daytonaRequest<PreviewLinkResponse>({
+        path: candidate.path,
+        method: candidate.method,
+        body: candidate.body,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("Unable to create signed preview URL.");
+}
+
+export async function getTerminalLink(params: {
+  sandboxId: string;
+  expiresInSeconds?: number;
+}): Promise<PreviewLinkResponse> {
+  const terminalPort = 22222;
+  try {
+    return await getSignedPreviewLink({
+      sandboxId: params.sandboxId,
+      port: terminalPort,
+      expiresInSeconds: params.expiresInSeconds ?? 3600,
+    });
+  } catch {
+    return await getPreviewLink({
+      sandboxId: params.sandboxId,
+      port: terminalPort,
+    });
+  }
+}
+
 export function classifyDaytonaError(error: unknown): DaytonaToolError {
   if (error instanceof DaytonaRequestError) {
     const status = error.status;
