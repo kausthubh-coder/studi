@@ -12,6 +12,7 @@ import type * as agent from "../agent.js";
 import type * as chat from "../chat.js";
 import type * as chatActions from "../chatActions.js";
 import type * as daytona from "../daytona.js";
+import type * as http from "../http.js";
 import type * as labIde from "../labIde.js";
 import type * as labTools from "../labTools.js";
 import type * as labs from "../labs.js";
@@ -25,6 +26,8 @@ import type * as sparks_tools from "../sparks/tools.js";
 import type * as telemetry from "../telemetry.js";
 import type * as voiceActions from "../voiceActions.js";
 import type * as voiceTools from "../voiceTools.js";
+import type * as waitlist from "../waitlist.js";
+import type * as waitlistActions from "../waitlistActions.js";
 
 import type {
   ApiFromModules,
@@ -37,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   chat: typeof chat;
   chatActions: typeof chatActions;
   daytona: typeof daytona;
+  http: typeof http;
   labIde: typeof labIde;
   labTools: typeof labTools;
   labs: typeof labs;
@@ -50,6 +54,8 @@ declare const fullApi: ApiFromModules<{
   telemetry: typeof telemetry;
   voiceActions: typeof voiceActions;
   voiceTools: typeof voiceTools;
+  waitlist: typeof waitlist;
+  waitlistActions: typeof waitlistActions;
 }>;
 
 /**

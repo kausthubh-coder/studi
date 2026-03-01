@@ -25,6 +25,7 @@
     "debug:desmos": "bun agentic-testing/debug-desmos.ts"
   },
   "dependencies": {
+    "@clerk/backend": "^2.33.0",
     "@clerk/clerk-react": "^5.60.0",
     "@clerk/nextjs": "^6.37.3",
     "@convex-dev/agent": "^0.3.2",

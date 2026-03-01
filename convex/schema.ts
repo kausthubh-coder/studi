@@ -61,6 +61,10 @@ export default defineSchema({
     metadata: v.object({
       topic: v.optional(v.string()),
       objective: v.optional(v.string()),
+      language: v.optional(v.string()),
+      framework: v.optional(v.string()),
+      template: v.optional(v.string()),
+      runtimeProfileId: v.optional(v.string()),
     }),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -153,4 +157,30 @@ export default defineSchema({
       "source",
       "createdAt",
     ]),
+
+  waitlistWebhookEvents: defineTable({
+    source: v.literal("tally_waitlist"),
+    dedupeKey: v.string(),
+    eventId: v.optional(v.string()),
+    submissionId: v.optional(v.string()),
+    formId: v.optional(v.string()),
+    emailAddress: v.string(),
+    payload: v.any(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("synced"),
+      v.literal("failed"),
+    ),
+    attempts: v.number(),
+    lastError: v.optional(v.string()),
+    clerkWaitlistEntryId: v.optional(v.string()),
+    receivedAt: v.number(),
+    lastAttemptAt: v.optional(v.number()),
+    processedAt: v.optional(v.number()),
+  })
+    .index("by_dedupeKey", ["dedupeKey"])
+    .index("by_eventId", ["eventId"])
+    .index("by_submissionId", ["submissionId"])
+    .index("by_status_and_receivedAt", ["status", "receivedAt"])
+    .index("by_emailAddress_and_receivedAt", ["emailAddress", "receivedAt"]),
 });
