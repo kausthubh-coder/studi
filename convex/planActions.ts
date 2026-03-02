@@ -39,7 +39,7 @@ if (!openRouterApiKey) {
   );
 }
 
-const plannerModel = "xiaomi/mimo-v2-flash";
+const plannerModel = "z-ai/glm-5";
 
 const fallbackPlannerModels = [
   plannerModel,

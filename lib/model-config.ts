@@ -11,7 +11,7 @@ export type ModelConfig = {
   sparkFlash: string;
 };
 
-const universalModel = "xiaomi/mimo-v2-flash";
+const universalModel = "z-ai/glm-5";
 
 const modelProfiles: Record<ModelProfile, ModelConfig> = {
   balanced: {
