@@ -39,7 +39,7 @@ if (!openRouterApiKey) {
   );
 }
 
-const plannerModel = "moonshotai/kimi-k2.5";
+const plannerModel = "xiaomi/mimo-v2-flash";
 
 const fallbackPlannerModels = [
   plannerModel,

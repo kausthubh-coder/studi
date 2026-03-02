@@ -11,7 +11,7 @@ export type ModelConfig = {
   sparkFlash: string;
 };
 
-const universalModel = "moonshotai/kimi-k2.5";
+const universalModel = "xiaomi/mimo-v2-flash";
 
 const modelProfiles: Record<ModelProfile, ModelConfig> = {
   balanced: {
