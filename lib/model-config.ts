@@ -11,36 +11,38 @@ export type ModelConfig = {
   sparkFlash: string;
 };
 
+const universalModel = "moonshotai/kimi-k2.5";
+
 const modelProfiles: Record<ModelProfile, ModelConfig> = {
   balanced: {
-    studiAgent: "anthropic/claude-sonnet-4.6",
-    codiAgent: "anthropic/claude-sonnet-4.6",
-    shruAgent: "anthropic/claude-sonnet-4.6",
-    sparkScene: "google/gemini-3-flash-preview",
-    sparkDesmos: "google/gemini-3-flash-preview",
-    sparkCode: "google/gemini-3-flash-preview",
-    sparkQuiz: "google/gemini-3-flash-preview",
-    sparkFlash: "google/gemini-3-flash-preview",
+    studiAgent: universalModel,
+    codiAgent: universalModel,
+    shruAgent: universalModel,
+    sparkScene: universalModel,
+    sparkDesmos: universalModel,
+    sparkCode: universalModel,
+    sparkQuiz: universalModel,
+    sparkFlash: universalModel,
   },
   fast: {
-    studiAgent: "anthropic/claude-haiku-4.5",
-    codiAgent: "anthropic/claude-haiku-4.5",
-    shruAgent: "anthropic/claude-haiku-4.5",
-    sparkScene: "anthropic/claude-haiku-4.5",
-    sparkDesmos: "anthropic/claude-haiku-4.5",
-    sparkCode: "anthropic/claude-haiku-4.5",
-    sparkQuiz: "anthropic/claude-haiku-4.5",
-    sparkFlash: "anthropic/claude-haiku-4.5",
+    studiAgent: universalModel,
+    codiAgent: universalModel,
+    shruAgent: universalModel,
+    sparkScene: universalModel,
+    sparkDesmos: universalModel,
+    sparkCode: universalModel,
+    sparkQuiz: universalModel,
+    sparkFlash: universalModel,
   },
   quality: {
-    studiAgent: "x-ai/grok-4.1-fast",
-    codiAgent: "x-ai/grok-4.1-fast",
-    shruAgent: "x-ai/grok-4.1-fast",
-    sparkScene: "google/gemini-3-flash-preview",
-    sparkDesmos: "google/gemini-3-flash-preview",
-    sparkCode: "google/gemini-3-flash-preview",
-    sparkQuiz: "google/gemini-3-flash-preview",
-    sparkFlash: "google/gemini-3-flash-preview",
+    studiAgent: universalModel,
+    codiAgent: universalModel,
+    shruAgent: universalModel,
+    sparkScene: universalModel,
+    sparkDesmos: universalModel,
+    sparkCode: universalModel,
+    sparkQuiz: universalModel,
+    sparkFlash: universalModel,
   },
 };
 

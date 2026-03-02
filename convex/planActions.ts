@@ -5,7 +5,6 @@ import { generateObject } from "ai";
 import type { FunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { z } from "zod";
-import { getActiveModelConfig } from "../lib/model-config";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { capturePosthogEvent } from "./posthog";
@@ -40,16 +39,10 @@ if (!openRouterApiKey) {
   );
 }
 
-const plannerModel =
-  process.env.PLAN_WORKER_MODEL ??
-  process.env.OPENROUTER_MODEL ??
-  "openai/gpt-4.1-mini";
+const plannerModel = "moonshotai/kimi-k2.5";
 
 const fallbackPlannerModels = [
   plannerModel,
-  getActiveModelConfig().studiAgent,
-  "openai/gpt-4.1-mini",
-  "google/gemini-2.5-flash",
 ].filter((value, index, all) => all.indexOf(value) === index);
 
 const openrouter = createOpenRouter({
