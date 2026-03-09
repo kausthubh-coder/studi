@@ -12,6 +12,7 @@ const internalApi = internal as unknown as {
       "query",
       "internal"
     >;
+    getThreadUsageBreakdownInternal: FunctionReference<"query", "internal">;
   };
 };
 
@@ -60,6 +61,60 @@ export const getThreadObservabilitySummary = action({
   handler: async (ctx, args) => {
     return await ctx.runQuery(
       internalApi.telemetry.getThreadObservabilitySummaryInternal,
+      {
+        userId: args.userId,
+        threadId: args.threadId,
+      },
+    );
+  },
+});
+
+export const getThreadUsageBreakdown = action({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+  },
+  returns: v.object({
+    totals: v.object({
+      calls: v.number(),
+      totalTokens: v.number(),
+      inputTokens: v.number(),
+      outputTokens: v.number(),
+      reasoningTokens: v.number(),
+      cachedInputTokens: v.number(),
+      estimatedCostUsd: v.number(),
+    }),
+    byModel: v.array(
+      v.object({
+        model: v.string(),
+        provider: v.string(),
+        calls: v.number(),
+        totalTokens: v.number(),
+        inputTokens: v.number(),
+        outputTokens: v.number(),
+        reasoningTokens: v.number(),
+        cachedInputTokens: v.number(),
+        estimatedCostUsd: v.number(),
+        lastCallAt: v.optional(v.number()),
+      }),
+    ),
+    byAgent: v.array(
+      v.object({
+        agentName: v.string(),
+        calls: v.number(),
+        totalTokens: v.number(),
+        inputTokens: v.number(),
+        outputTokens: v.number(),
+        reasoningTokens: v.number(),
+        cachedInputTokens: v.number(),
+        estimatedCostUsd: v.number(),
+        lastCallAt: v.optional(v.number()),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    return await ctx.runQuery(
+      internalApi.telemetry.getThreadUsageBreakdownInternal,
       {
         userId: args.userId,
         threadId: args.threadId,

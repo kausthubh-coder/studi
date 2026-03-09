@@ -1,0 +1,73 @@
+{
+  "runId": "2026-02-25T09-33-02-789Z-4muaw1",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --agentName studi-fast --prompt What is a closure in JavaScript? one sentence. --newThread --verifyTelemetry",
+  "userId": "dev-user",
+  "threadId": "m578ag6p7wfvknwfp1kyhq8fxx81tkh3",
+  "agentName": "studi-fast",
+  "prompt": "What is a closure in JavaScript? one sentence.",
+  "promptHash": "43937e56420bad65",
+  "startedAt": 1772011982789,
+  "endedAt": 1772011989260,
+  "totalDurationMs": 6471,
+  "firstAssistantEventMs": 6471,
+  "actionResultText": "A closure in JavaScript is a function that captures and remembers the variables from its surrounding (lexical) scope, allowing those variables to be accessed even after the outer function has completed execution.",
+  "actionResultTextHash": "742a7bbe56950754",
+  "messageCount": 2,
+  "newMessageCount": 2,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [],
+  "timeline": [
+    {
+      "at": 1772011980491.796,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks77pvettzerycs99bq8evx5c181vvdw",
+      "kind": "user",
+      "detail": "What is a closure in JavaScript? one sentence."
+    },
+    {
+      "at": 1772011989260,
+      "relativeMs": 6471,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "A closure in JavaScript is a function that captures and remembers the variables from its surrounding (lexical) scope, a..."
+    }
+  ],
+  "spark": {
+    "calls": 0,
+    "failures": 0,
+    "totalDurationMs": 0
+  },
+  "lab": {
+    "calls": 0,
+    "failures": 0,
+    "createLabCalls": 0,
+    "archiveLabCalls": 0,
+    "runCalls": 0,
+    "globCalls": 0,
+    "hadActivation": false
+  },
+  "plan": {
+    "calls": 0,
+    "failures": 0,
+    "startPlanModeCalls": 0,
+    "getPlanContextCalls": 0,
+    "generatePlanDraftCalls": 0,
+    "acceptPlanDraftCalls": 0,
+    "requestPlanChangesCalls": 0,
+    "setPlanItemStatusCalls": 0,
+    "finalSnapshot": {
+      "exists": false
+    }
+  },
+  "assertionFailures": [
+    "Telemetry summary is unavailable (check convex codegen/deploy)."
+  ],
+  "sparkArtifacts": [],
+  "sceneFiles": []
+}

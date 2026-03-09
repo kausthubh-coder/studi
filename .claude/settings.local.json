@@ -32,7 +32,12 @@
       "WebFetch(domain:react-icons.github.io)",
       "Bash(cd:*)",
       "Bash(tail:*)",
-      "mcp__plugin_playwright_playwright__browser_snapshot"
+      "mcp__plugin_playwright_playwright__browser_snapshot",
+      "Bash(wc -l /c/Users/kaust/Documents/coding/studi/components/voice/*.ts* /c/Users/kaust/Documents/coding/studi/convex/voice*.ts)",
+      "Bash(bun test)",
+      "Bash(bun test --testPathPattern=\"^\\(?!.*examples\\)\")",
+      "Bash(bun test lib/ convex/ components/voice/input-device-utils.test.ts)",
+      "Bash(bun run lint)"
     ]
   }
 }

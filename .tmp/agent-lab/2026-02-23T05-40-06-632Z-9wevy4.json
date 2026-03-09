@@ -1,0 +1,149 @@
+{
+  "runId": "2026-02-23T05-40-06-632Z-9wevy4",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --prompt Create a quiz spark on fractions with 3 questions. --modelLabel quiz-debug --debugRaw",
+  "userId": "dev-user",
+  "threadId": "m57bmdyz9bg7sdzgatfbch701181pkd4",
+  "agentName": "studi",
+  "prompt": "Create a quiz spark on fractions with 3 questions.",
+  "promptHash": "abc163844d360650",
+  "modelLabel": "quiz-debug",
+  "startedAt": 1771825206632,
+  "endedAt": 1771825218524,
+  "totalDurationMs": 11892,
+  "firstAssistantEventMs": 11892,
+  "actionResultText": "The Spark quiz couldn't be generated this time, but no worries! Here's a **3-question Fractions Quiz** you can work through right here:\n\n---\n\n### 🧮 Fractions Quiz\n\n**Question 1 — Identifying Parts**\nIn the fraction $\\dfrac{5}{8}$, what is the **numerator** and what is the **denominator**?\n\n> **Answer:** Numerator = **5** (parts you have), Denominator = **8** (total equal parts).\n\n---\n\n**Question 2 — Simplifying Fractions**\nSimplify $\\dfrac{6}{8}$ to its lowest terms.\n\n> **Answer:** Divide both by their GCF (2): $\\dfrac{6 \\div 2}{8 \\div 2} = \\dfrac{3}{4}$\n\n---\n\n**Question 3 — Adding Fractions**\nSolve: $\\dfrac{1}{3} + \\dfrac{1}{4}$\n\n> **Answer:** Find a common denominator (12):\n> $$\\frac{1}{3} = \\frac{4}{12}, \\quad \\frac{1}{4} = \\frac{3}{12}$$\n> $$\\frac{4}{12} + \\frac{3}{12} = \\frac{7}{12}$$\n\n---\n\n### 🎯 How did you do?\n- **3/3** — Fraction master! 🏆\n- **2/3** — Great work, review the one you missed!\n- **1/3 or below** — Let's practice more together!\n\nWould you like me to **explain any question in depth** or try another topic? 😊",
+  "actionResultTextHash": "c1181a6b088a84be",
+  "messageCount": 4,
+  "newMessageCount": 4,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "toolu_vrtx_01DthAQun4RcnHx7fsJaUc5U",
+      "toolName": "create_spark",
+      "startedAt": 1771825206632,
+      "endedAt": 1771825207798.5676,
+      "durationMs": 1166.567626953125,
+      "durationEstimated": true,
+      "status": "error",
+      "sparkStatus": "failed",
+      "error": "Provider fault: name=SparkWorkerError | message=Spark worker provider error (model: anthropic/claude-haiku-4.5) - name=AI_APICallError | status=400 | message=Provider returned error | response={\"error\":{\"message\":\"Provider returned error\",\"code\":400,\"metadata\":{\"raw\":\"{\\\"message\\\":\\\"out..."
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1771825204531.0815,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks76qs42kcjffne6svdwarnfth81qk6e",
+      "kind": "user",
+      "detail": "Create a quiz spark on fractions with 3 questions."
+    },
+    {
+      "at": 1771825207798.5676,
+      "relativeMs": 1166.567626953125,
+      "order": 0,
+      "stepOrder": 2,
+      "messageId": "ks76zkc0ynvsz8a2b4hezc7xb981pwhg",
+      "kind": "tool_result",
+      "detail": "{\"error\":\"Provider fault: name=SparkWorkerError | message=Spark worker provider error (model: anthropic/claude-haiku-4....",
+      "toolName": "create_spark",
+      "toolCallId": "toolu_vrtx_01DthAQun4RcnHx7fsJaUc5U",
+      "status": "error"
+    },
+    {
+      "at": 1771825218524,
+      "relativeMs": 11892,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "The Spark quiz couldn't be generated this time, but no worries! Here's a **3-question Fractions Quiz** you can work thr..."
+    }
+  ],
+  "spark": {
+    "calls": 1,
+    "failures": 1,
+    "totalDurationMs": 1166.567626953125
+  },
+  "sceneFiles": [],
+  "rawMessages": [
+    {
+      "_creationTime": 1771825204531.0815,
+      "_id": "ks76qs42kcjffne6svdwarnfth81qk6e",
+      "message": {
+        "content": "Create a quiz spark on fractions with 3 questions.",
+        "role": "user"
+      },
+      "order": 0,
+      "status": "success",
+      "stepOrder": 0,
+      "text": "Create a quiz spark on fractions with 3 questions.",
+      "threadId": "m57bmdyz9bg7sdzgatfbch701181pkd4",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771825204531.0818,
+      "_id": "ks7bbe9tcr8ryq2b7dc7s3qwh981qkse",
+      "message": {
+        "content": [],
+        "role": "assistant"
+      },
+      "order": 0,
+      "status": "pending",
+      "stepOrder": 1,
+      "threadId": "m57bmdyz9bg7sdzgatfbch701181pkd4",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771825207798.5676,
+      "_id": "ks76zkc0ynvsz8a2b4hezc7xb981pwhg",
+      "agentName": "studi",
+      "message": {
+        "content": [
+          {
+            "output": {
+              "type": "json",
+              "value": {
+                "error": "Provider fault: name=SparkWorkerError | message=Spark worker provider error (model: anthropic/claude-haiku-4.5) - name=AI_APICallError | status=400 | message=Provider returned error | response={\"error\":{\"message\":\"Provider returned error\",\"code\":400,\"metadata\":{\"raw\":\"{\\\"message\\\":\\\"out...",
+                "status": "failed",
+                "warnings": [],
+                "workerSummary": "Quiz generation failed due to provider fault."
+              }
+            },
+            "toolCallId": "toolu_vrtx_01DthAQun4RcnHx7fsJaUc5U",
+            "toolName": "create_spark",
+            "type": "tool-result"
+          }
+        ],
+        "role": "tool"
+      },
+      "order": 0,
+      "sources": [],
+      "status": "success",
+      "stepOrder": 2,
+      "threadId": "m57bmdyz9bg7sdzgatfbch701181pkd4",
+      "tool": true,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771825207798.5679,
+      "_id": "ks7db984znkwd2ewf3jwrkgat181qdb6",
+      "agentName": "studi",
+      "message": {
+        "content": [],
+        "role": "assistant"
+      },
+      "order": 0,
+      "status": "pending",
+      "stepOrder": 3,
+      "threadId": "m57bmdyz9bg7sdzgatfbch701181pkd4",
+      "tool": false,
+      "userId": "dev-user"
+    }
+  ]
+}

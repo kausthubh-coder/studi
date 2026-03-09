@@ -1,0 +1,209 @@
+{
+  "suiteName": "lab-smoke-suite",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/lab-smoke.json --userId dev-user",
+  "generatedAt": 1771977944591,
+  "totalRuns": 1,
+  "runs": [
+    {
+      "runId": "2026-02-25T00-05-12-854Z-sefzik",
+      "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/lab-smoke.json --userId dev-user",
+      "userId": "dev-user",
+      "threadId": "m570awxqfm87xvvy1sem74gqm981vz1w",
+      "agentName": "studi",
+      "prompt": "I want to learn React. Start lab mode, explain the goal, then run a quick sandbox check command and inspect files.",
+      "promptHash": "94731486a0b1254a",
+      "modelLabel": "default",
+      "startedAt": 1771977912854,
+      "endedAt": 1771977944581,
+      "totalDurationMs": 31727,
+      "firstAssistantEventMs": 31727,
+      "actionResultText": "### ▶️ How to use this Spark:\n1. **Edit** the `name` in `Greeting(\"Alice\")` to your own name\n2. **Change** the favorite language on the second line to yours\n3. Hit **Run** to see your output and pass the tests\n\n---\n\nOnce you've played with that, we'll move on to **State with `useState`** — where components come alive with interactivity (think: buttons, counters, forms). \n\n**Quick check:** Do you have any React experience at all, or are you starting completely fresh? That'll help me pace things perfectly for you! 🙌",
+      "actionResultTextHash": "f16e8d7c7efb5307",
+      "messageCount": 8,
+      "newMessageCount": 8,
+      "usage": {
+        "promptTokens": 0,
+        "completionTokens": 0,
+        "totalTokens": 0
+      },
+      "tools": [
+        {
+          "toolCallId": "toolu_vrtx_01LJNn9SRMwz6nR1SAJozaAZ",
+          "toolName": "create_lab",
+          "startedAt": 1771977912854,
+          "endedAt": 1771977914661.823,
+          "durationMs": 1807.822998046875,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "active",
+          "outputSummary": "Lab is active. I will now use sandbox tools directly and report exact command/file results."
+        },
+        {
+          "toolCallId": "toolu_bdrk_013eeJab8mdeXHaxUCfNjzE7",
+          "toolName": "run",
+          "startedAt": 1771977912854,
+          "endedAt": 1771977917294.1655,
+          "durationMs": 4440.16552734375,
+          "durationEstimated": true,
+          "status": "error",
+          "outputStatus": "failed",
+          "outputSummary": "run failed (401): unauthorized: failed to get auth URL: failed to parse request host: invalid host format: port and sandbox ID not found",
+          "errorCategory": "auth",
+          "retriable": false,
+          "error": "unauthorized: failed to get auth URL: failed to parse request host: invalid host format: port and sandbox ID not found"
+        },
+        {
+          "toolCallId": "toolu_bdrk_01TW7RSZVGmXZSGCDrQwX7J9",
+          "toolName": "list",
+          "startedAt": 1771977912854,
+          "endedAt": 1771977917294.1655,
+          "durationMs": 4440.16552734375,
+          "durationEstimated": true,
+          "status": "error",
+          "outputStatus": "failed",
+          "outputSummary": "list failed (404): not found: not found",
+          "errorCategory": "not_found",
+          "retriable": false,
+          "error": "not found: not found"
+        },
+        {
+          "toolCallId": "toolu_vrtx_01Ry25w2Pmzokf9JcXpBzDsM",
+          "toolName": "create_spark",
+          "startedAt": 1771977912854,
+          "endedAt": 1771977938378.9263,
+          "durationMs": 25524.92626953125,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "sparkStatus": "success"
+        }
+      ],
+      "timeline": [
+        {
+          "at": 1771977912468.4026,
+          "relativeMs": 0,
+          "order": 0,
+          "stepOrder": 0,
+          "messageId": "ks7d8kqc89z72w4a1nq6ng2zfs81t55m",
+          "kind": "user",
+          "detail": "I want to learn React. Start lab mode, explain the goal, then run a quick sandbox check command and inspect files."
+        },
+        {
+          "at": 1771977914661.823,
+          "relativeMs": 1807.822998046875,
+          "order": 0,
+          "stepOrder": 2,
+          "messageId": "ks70y87kjx4d0623h94r10qbyx81tf6h",
+          "kind": "tool_result",
+          "detail": "Lab is active. I will now use sandbox tools directly and report exact command/file results.",
+          "toolName": "create_lab",
+          "toolCallId": "toolu_vrtx_01LJNn9SRMwz6nR1SAJozaAZ",
+          "status": "success"
+        },
+        {
+          "at": 1771977917294.1655,
+          "relativeMs": 4440.16552734375,
+          "order": 0,
+          "stepOrder": 4,
+          "messageId": "ks74tgvyf10eraqz9zy8n9gtj981tpvk",
+          "kind": "tool_result",
+          "detail": "unauthorized: failed to get auth URL: failed to parse request host: invalid host format: port and sandbox ID not found",
+          "toolName": "run",
+          "toolCallId": "toolu_bdrk_013eeJab8mdeXHaxUCfNjzE7",
+          "status": "error"
+        },
+        {
+          "at": 1771977917294.1655,
+          "relativeMs": 4440.16552734375,
+          "order": 0,
+          "stepOrder": 4,
+          "messageId": "ks74tgvyf10eraqz9zy8n9gtj981tpvk",
+          "kind": "tool_result",
+          "detail": "not found: not found",
+          "toolName": "list",
+          "toolCallId": "toolu_bdrk_01TW7RSZVGmXZSGCDrQwX7J9",
+          "status": "error"
+        },
+        {
+          "at": 1771977938378.9263,
+          "relativeMs": 25524.92626953125,
+          "order": 0,
+          "stepOrder": 6,
+          "messageId": "ks713jwc8g05g5fv5wygyr91x981tn19",
+          "kind": "tool_result",
+          "detail": "{\"artifact\":{\"artifactId\":\"db790b0f-8818-4a2d-b6a2-25e762ab59e6\",\"kind\":\"spark_code_playground\",\"mode\":\"editable\",\"payl...",
+          "toolName": "create_spark",
+          "toolCallId": "toolu_vrtx_01Ry25w2Pmzokf9JcXpBzDsM",
+          "status": "success"
+        },
+        {
+          "at": 1771977944581,
+          "relativeMs": 31727,
+          "messageId": "action-result",
+          "kind": "assistant_text",
+          "detail": "### ▶️ How to use this Spark:\n1. **Edit** the `name` in `Greeting(\"Alice\")` to your own name\n2. **Change** the favorite..."
+        }
+      ],
+      "spark": {
+        "calls": 1,
+        "failures": 0,
+        "totalDurationMs": 25524.92626953125
+      },
+      "lab": {
+        "calls": 3,
+        "failures": 2,
+        "createLabCalls": 1,
+        "archiveLabCalls": 0,
+        "runCalls": 1,
+        "globCalls": 0,
+        "hadActivation": true
+      },
+      "assertionFailures": [
+        "Expected tool 'glob' was not called.",
+        "Tool 'run' failed (toolu_bdrk_013eeJab8mdeXHaxUCfNjzE7): unauthorized: failed to get auth URL: failed to parse request host: invalid host format: port and sandbox ID not found",
+        "Tool 'list' failed (toolu_bdrk_01TW7RSZVGmXZSGCDrQwX7J9): not found: not found"
+      ],
+      "sparkArtifacts": [
+        {
+          "toolCallId": "toolu_vrtx_01Ry25w2Pmzokf9JcXpBzDsM",
+          "kind": "spark_code_playground",
+          "sparkType": "code_playground",
+          "title": "Your First React Component",
+          "summary": "Write and render a Greeting component with props"
+        }
+      ],
+      "sceneFiles": []
+    }
+  ],
+  "caseSummaries": [
+    {
+      "runId": "2026-02-25T00-05-12-854Z-sefzik",
+      "userId": "dev-user",
+      "threadId": "m570awxqfm87xvvy1sem74gqm981vz1w",
+      "promptHash": "94731486a0b1254a",
+      "modelLabel": "default",
+      "totalDurationMs": 31727,
+      "firstAssistantEventMs": 31727,
+      "totalTokens": 0,
+      "sparkFailures": 0,
+      "labFailures": 2,
+      "assertionFailures": 3,
+      "responseHash": "f16e8d7c7efb5307"
+    }
+  ],
+  "comparisons": [
+    {
+      "promptHash": "94731486a0b1254a",
+      "runs": 1,
+      "durationMs": {
+        "min": 31727,
+        "max": 31727,
+        "avg": 31727
+      },
+      "sparkFailures": 0,
+      "labFailures": 2,
+      "assertionFailures": 3,
+      "distinctResponseHashes": 1
+    }
+  ]
+}

@@ -15,7 +15,7 @@ import {
   shruAgent,
   studiAgent,
 } from "./agent";
-import { classifyDaytonaError, getSandbox, stopSandbox } from "./daytona";
+import { classifyDaytonaError, deleteSandbox } from "./daytona";
 
 const internalApi = internal as unknown as {
   plans: {
@@ -144,10 +144,7 @@ export const deleteThread: ReturnType<typeof action> = action({
 
     if (labSession) {
       try {
-        const sandbox = await getSandbox(labSession.sandboxId);
-        if (sandbox.state === "started") {
-          await stopSandbox(labSession.sandboxId);
-        }
+        await deleteSandbox(labSession.sandboxId);
       } catch (error) {
         const detail = classifyDaytonaError(error);
         if (detail.category !== "not_found") {

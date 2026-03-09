@@ -156,6 +156,26 @@ Optional flags:
 - `--context` include prompt context snapshots in each run artifact
 - `--debugRaw` include raw playground message payloads
 
+## Model Bakeoff (Cost + Manual Quality)
+
+Run a low-budget bakeoff across fixed candidate models with real tool calls.
+
+```bash
+bun run agentic:bakeoff preflight
+bun run agentic:bakeoff run --budgetUsd 0.50 --userId bakeoff-user
+```
+
+After `run`, fill the generated `manual-scores.template.json`, save as `manual-scores.json`, then rank:
+
+```bash
+bun run agentic:bakeoff rank --report .tmp/agent-lab/model-bakeoff/<runId>/report.json --scores .tmp/agent-lab/model-bakeoff/<runId>/manual-scores.json
+```
+
+Default ranking weights:
+
+- `70%` cost (`lower is better`)
+- `30%` manual quality (`0-100`, or `1-5` auto-scaled)
+
 ## Model Profiles
 
 All model routing now lives in `lib/model-config.ts`.

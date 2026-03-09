@@ -101,6 +101,11 @@ export default function StudiChat() {
   const [isPlanExpanded, setIsPlanExpanded] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [labChatWidth, setLabChatWidth] = useState(480);
+  const labResizingRef = useRef(false);
+  const [sparkChatWidth, setSparkChatWidth] = useState(420);
+  const sparkResizingRef = useRef(false);
+  const [mobileLabView, setMobileLabView] = useState<"chat" | "lab">("chat");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -482,6 +487,108 @@ export default function StudiChat() {
     [input, textareaRef, voiceSession],
   );
 
+  const handleLabResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      labResizingRef.current = true;
+      const startX = e.clientX;
+      const startWidth = labChatWidth;
+      const onMove = (moveEvent: MouseEvent) => {
+        const delta = moveEvent.clientX - startX;
+        const next = Math.max(320, Math.min(startWidth + delta, window.innerWidth - 400));
+        setLabChatWidth(next);
+      };
+      const onUp = () => {
+        labResizingRef.current = false;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [labChatWidth],
+  );
+
+  const handleLabResizeTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+      labResizingRef.current = true;
+      const startX = touch.clientX;
+      const startWidth = labChatWidth;
+      const onMove = (moveEvent: globalThis.TouchEvent) => {
+        const t = moveEvent.touches[0];
+        if (!t) return;
+        const delta = t.clientX - startX;
+        const next = Math.max(320, Math.min(startWidth + delta, window.innerWidth - 400));
+        setLabChatWidth(next);
+      };
+      const onEnd = () => {
+        labResizingRef.current = false;
+        document.removeEventListener("touchmove", onMove);
+        document.removeEventListener("touchend", onEnd);
+      };
+      document.addEventListener("touchmove", onMove, { passive: false });
+      document.addEventListener("touchend", onEnd);
+    },
+    [labChatWidth],
+  );
+
+  const handleSparkResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      sparkResizingRef.current = true;
+      const startX = e.clientX;
+      const startWidth = sparkChatWidth;
+      const onMove = (moveEvent: MouseEvent) => {
+        const delta = moveEvent.clientX - startX;
+        const next = Math.max(320, Math.min(startWidth + delta, window.innerWidth - 400));
+        setSparkChatWidth(next);
+      };
+      const onUp = () => {
+        sparkResizingRef.current = false;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [sparkChatWidth],
+  );
+
+  const handleSparkResizeTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+      sparkResizingRef.current = true;
+      const startX = touch.clientX;
+      const startWidth = sparkChatWidth;
+      const onMove = (moveEvent: globalThis.TouchEvent) => {
+        const t = moveEvent.touches[0];
+        if (!t) return;
+        const delta = t.clientX - startX;
+        const next = Math.max(320, Math.min(startWidth + delta, window.innerWidth - 400));
+        setSparkChatWidth(next);
+      };
+      const onEnd = () => {
+        sparkResizingRef.current = false;
+        document.removeEventListener("touchmove", onMove);
+        document.removeEventListener("touchend", onEnd);
+      };
+      document.addEventListener("touchmove", onMove, { passive: false });
+      document.addEventListener("touchend", onEnd);
+    },
+    [sparkChatWidth],
+  );
+
   const removeAttachment = useCallback((attachmentId: Id<"attachments">) => {
     setPendingAttachments((previous) => {
       const item = previous.find(
@@ -519,7 +626,7 @@ export default function StudiChat() {
       await startPlanMode({ threadId: selectedThreadId });
       await sendPlanKickoffMessage(
         selectedThreadId,
-        "Yes, let's make this a track. Ask me the setup questions one-by-one, then draft a plan we can revise until it's ready.",
+        "Yes, let's make this a track. Ask only the minimum questions needed to tailor it, then draft a plan we can revise.",
       );
       setInput("");
       setTimeout(() => textareaRef.current?.focus(), 50);
@@ -539,6 +646,7 @@ export default function StudiChat() {
     setExpandedSpark(null);
     setIsPlanExpanded(false);
     setIsVoiceMode(false);
+    setMobileLabView("chat");
     setInput("");
     setPendingAttachments((prev) => {
       releaseAttachmentPreviewUrls(prev);
@@ -553,6 +661,7 @@ export default function StudiChat() {
     setExpandedSpark(null);
     setIsPlanExpanded(false);
     setIsVoiceMode(false);
+    setMobileLabView("chat");
     setIsMobileSidebarOpen(false);
   }, []);
 
@@ -702,6 +811,7 @@ export default function StudiChat() {
       sparkInstanceId: string,
     ) => {
       setExpandedSpark({ artifact, threadId, sparkInstanceId });
+      setMobileLabView("lab");
     },
     [],
   );
@@ -711,6 +821,12 @@ export default function StudiChat() {
       setExpandedSpark(null);
     }
   }, [expandedSpark, isLabActive]);
+
+  useEffect(() => {
+    if (!isLabActive) {
+      setMobileLabView("chat");
+    }
+  }, [isLabActive]);
 
   useEffect(() => {
     if (isVoiceMode && voiceDisabledReason) {
@@ -777,17 +893,45 @@ export default function StudiChat() {
           />
         ) : (
           <div
-            className={`flex flex-1 overflow-hidden ${isLabActive ? "flex-col lg:flex-row" : ""}`}
+            className={`flex flex-1 overflow-hidden ${
+              isLabActive || expandedSpark ? "flex-col lg:flex-row" : ""
+            }`}
           >
-            {/* Chat column */}
+            {/* Mobile tab bar for lab / spark threads */}
+            {(isLabActive || expandedSpark) && isMobile && (
+              <div className="mobile-panel-tabs">
+                <button
+                  type="button"
+                  className={`mobile-panel-tab ${mobileLabView === "chat" ? "mobile-panel-tab-active" : ""}`}
+                  onClick={() => setMobileLabView("chat")}
+                >
+                  Chat
+                </button>
+                <button
+                  type="button"
+                  className={`mobile-panel-tab ${mobileLabView === "lab" ? "mobile-panel-tab-active" : ""}`}
+                  onClick={() => setMobileLabView("lab")}
+                >
+                  {isLabActive ? "Lab" : "Spark"}
+                </button>
+              </div>
+            )}
+            {/* Chat column — side-by-side on desktop, tab-switched on mobile */}
             <div
-              className={`relative flex min-w-0 flex-col overflow-hidden transition-[width] duration-300 ease-out ${
+              className={`relative flex min-w-0 flex-col overflow-hidden ${
                 isLabActive
-                  ? "flex-1 lg:w-[44%] lg:max-w-[44%]"
+                  ? `lab-chat-column flex-1 lg:flex-none ${isMobile && mobileLabView !== "chat" ? "hidden" : ""}`
                   : expandedSpark
-                    ? "w-[420px] shrink-0"
+                    ? `spark-chat-column flex-1 lg:flex-none ${isMobile && mobileLabView !== "chat" ? "hidden" : ""}`
                     : "flex-1"
               }`}
+              style={
+                isLabActive
+                  ? ({ "--lab-chat-width": `${labChatWidth}px` } as React.CSSProperties)
+                  : expandedSpark
+                    ? ({ "--spark-chat-width": `${sparkChatWidth}px` } as React.CSSProperties)
+                    : undefined
+              }
             >
               <MessageColumn
                 listRef={listRef}
@@ -805,7 +949,6 @@ export default function StudiChat() {
                 expandedSparkInstanceId={expandedSpark?.sparkInstanceId ?? null}
                 voiceActive={isVoiceMode}
               />
-              {/* Voice warning banner — shown between messages and composer */}
               {isVoiceMode && voiceSession.activeWarning && (
                 <div
                   className="mx-auto w-full px-4"
@@ -865,15 +1008,35 @@ export default function StudiChat() {
                 onVoiceRetry={() => void voiceSession.retry()}
               />
             </div>
+            {/* Lab resize handle + workspace */}
             {isLabActive && selectedThreadId ? (
-              <LabWorkspace threadId={selectedThreadId} />
+              <div className={`flex min-w-0 flex-1 ${isMobile && mobileLabView !== "lab" ? "hidden" : ""}`}>
+                <div
+                  className="lab-resize-handle"
+                  onMouseDown={handleLabResizeStart}
+                  onTouchStart={handleLabResizeTouchStart}
+                  title="Drag to resize"
+                />
+                <LabWorkspace threadId={selectedThreadId} />
+              </div>
             ) : null}
-            {/* Spark panel */}
+            {/* Spark panel — side-by-side on desktop, full view on mobile */}
             {!isLabActive && expandedSpark && (
-              <SparkPanel
-                spark={expandedSpark}
-                onClose={() => setExpandedSpark(null)}
-              />
+              <div className={`flex min-w-0 flex-1 ${isMobile && mobileLabView !== "lab" ? "hidden" : ""}`}>
+                <div
+                  className="spark-resize-handle"
+                  onMouseDown={handleSparkResizeStart}
+                  onTouchStart={handleSparkResizeTouchStart}
+                  title="Drag to resize"
+                />
+                <SparkPanel
+                  spark={expandedSpark}
+                  onClose={() => {
+                    setExpandedSpark(null);
+                    setMobileLabView("chat");
+                  }}
+                />
+              </div>
             )}
           </div>
         )}

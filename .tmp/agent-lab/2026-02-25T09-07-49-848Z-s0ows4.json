@@ -1,0 +1,73 @@
+{
+  "runId": "2026-02-25T09-07-49-848Z-s0ows4",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --agentName studi-fast --prompt Define recursion in one sentence. --newThread --verifyTelemetry",
+  "userId": "dev-user",
+  "threadId": "m57dmazzc4jq9qw4bbb2cy01zx81v2st",
+  "agentName": "studi-fast",
+  "prompt": "Define recursion in one sentence.",
+  "promptHash": "a1122c91474bfa19",
+  "startedAt": 1772010469849,
+  "endedAt": 1772010472545,
+  "totalDurationMs": 2696,
+  "firstAssistantEventMs": 2696,
+  "actionResultText": "Recursion is a programming concept where a function solves a problem by calling itself repeatedly on smaller instances of that problem until it reaches a base case.",
+  "actionResultTextHash": "b0e36cdbc85fe769",
+  "messageCount": 2,
+  "newMessageCount": 2,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [],
+  "timeline": [
+    {
+      "at": 1772010467316.215,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks7fgbyq6f2zkhngn94jh6a6sd81v0sh",
+      "kind": "user",
+      "detail": "Define recursion in one sentence."
+    },
+    {
+      "at": 1772010472545,
+      "relativeMs": 2696,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "Recursion is a programming concept where a function solves a problem by calling itself repeatedly on smaller instances..."
+    }
+  ],
+  "spark": {
+    "calls": 0,
+    "failures": 0,
+    "totalDurationMs": 0
+  },
+  "lab": {
+    "calls": 0,
+    "failures": 0,
+    "createLabCalls": 0,
+    "archiveLabCalls": 0,
+    "runCalls": 0,
+    "globCalls": 0,
+    "hadActivation": false
+  },
+  "plan": {
+    "calls": 0,
+    "failures": 0,
+    "startPlanModeCalls": 0,
+    "getPlanContextCalls": 0,
+    "generatePlanDraftCalls": 0,
+    "acceptPlanDraftCalls": 0,
+    "requestPlanChangesCalls": 0,
+    "setPlanItemStatusCalls": 0,
+    "finalSnapshot": {
+      "exists": false
+    }
+  },
+  "assertionFailures": [
+    "Telemetry summary is unavailable (check convex codegen/deploy)."
+  ],
+  "sparkArtifacts": [],
+  "sceneFiles": []
+}

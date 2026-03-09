@@ -1,0 +1,489 @@
+{
+  "suiteName": "lab-react-demo",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/lab-react-demo.json --userId dev-user",
+  "generatedAt": 1771978698238,
+  "totalRuns": 2,
+  "runs": [
+    {
+      "runId": "2026-02-25T00-17-39-329Z-hmvv5n",
+      "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/lab-react-demo.json --userId dev-user",
+      "userId": "dev-user",
+      "threadId": "m57fve2vccmydmh7edh4ef81a581v0jf",
+      "agentName": "studi",
+      "prompt": "I want to learn React from scratch. Create a lab, state today's learning goal, inspect the sandbox, and scaffold a first React file.",
+      "promptHash": "353749df7fb403f7",
+      "modelLabel": "default",
+      "startedAt": 1771978659329,
+      "endedAt": 1771978683836,
+      "totalDurationMs": 24507,
+      "actionResultText": "",
+      "messageCount": 13,
+      "newMessageCount": 13,
+      "usage": {
+        "promptTokens": 0,
+        "completionTokens": 0,
+        "totalTokens": 0
+      },
+      "tools": [
+        {
+          "toolCallId": "toolu_01NpjqjsAVvavnDfFhFc9TyP",
+          "toolName": "create_lab",
+          "startedAt": 1771978659329,
+          "endedAt": 1771978661547.4111,
+          "durationMs": 2218.4111328125,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "active",
+          "outputSummary": "Lab is active. I will now use sandbox tools directly and report exact command/file results."
+        },
+        {
+          "toolCallId": "toolu_vrtx_01Ltwmuh98SJLfZtzVynMGwG",
+          "toolName": "run",
+          "startedAt": 1771978659329,
+          "endedAt": 1771978664132.0715,
+          "durationMs": 4803.071533203125,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        },
+        {
+          "toolCallId": "toolu_vrtx_01WatYzdJ74GynjcF7rerF3r",
+          "toolName": "glob",
+          "startedAt": 1771978659329,
+          "endedAt": 1771978664132.0715,
+          "durationMs": 4803.071533203125,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Found 0 file(s)."
+        },
+        {
+          "toolCallId": "toolu_vrtx_01WkVCQe5n5wQ6tCVoD9SHhw",
+          "toolName": "run",
+          "startedAt": 1771978659329,
+          "endedAt": 1771978666573.0525,
+          "durationMs": 7244.052490234375,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        },
+        {
+          "toolCallId": "toolu_bdrk_015d5Nt7gtbk7a31haNtkjDx",
+          "toolName": "glob",
+          "startedAt": 1771978659329,
+          "endedAt": 1771978668543.2888,
+          "durationMs": 9214.288818359375,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Found 0 file(s)."
+        },
+        {
+          "toolCallId": "toolu_vrtx_016qR7xauaL88GhsbxzaZ1QA",
+          "toolName": "run",
+          "startedAt": 1771978659329,
+          "endedAt": 1771978674465.594,
+          "durationMs": 15136.593994140625,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        },
+        {
+          "toolCallId": "toolu_01L4t66Bc9qAvtgw25JTtsNR",
+          "toolName": "run",
+          "startedAt": 1771978659329,
+          "endedAt": 1771978681569.2744,
+          "durationMs": 22240.2744140625,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        }
+      ],
+      "timeline": [
+        {
+          "at": 1771978658898.5608,
+          "relativeMs": 0,
+          "order": 0,
+          "stepOrder": 0,
+          "messageId": "ks78d42h4y8v73cbmwc7crh26181tb68",
+          "kind": "user",
+          "detail": "I want to learn React from scratch. Create a lab, state today's learning goal, inspect the sandbox, and scaffold a firs..."
+        },
+        {
+          "at": 1771978661547.4111,
+          "relativeMs": 2218.4111328125,
+          "order": 0,
+          "stepOrder": 2,
+          "messageId": "ks704mg9n4h60yr7pzhxfj1hzd81vj31",
+          "kind": "tool_result",
+          "detail": "Lab is active. I will now use sandbox tools directly and report exact command/file results.",
+          "toolName": "create_lab",
+          "toolCallId": "toolu_01NpjqjsAVvavnDfFhFc9TyP",
+          "status": "success"
+        },
+        {
+          "at": 1771978664132.0715,
+          "relativeMs": 4803.071533203125,
+          "order": 0,
+          "stepOrder": 4,
+          "messageId": "ks73nhhj2enszv039gqaqjnmks81t630",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_vrtx_01Ltwmuh98SJLfZtzVynMGwG",
+          "status": "success"
+        },
+        {
+          "at": 1771978664132.0715,
+          "relativeMs": 4803.071533203125,
+          "order": 0,
+          "stepOrder": 4,
+          "messageId": "ks73nhhj2enszv039gqaqjnmks81t630",
+          "kind": "tool_result",
+          "detail": "Found 0 file(s).",
+          "toolName": "glob",
+          "toolCallId": "toolu_vrtx_01WatYzdJ74GynjcF7rerF3r",
+          "status": "success"
+        },
+        {
+          "at": 1771978666573.0525,
+          "relativeMs": 7244.052490234375,
+          "order": 0,
+          "stepOrder": 6,
+          "messageId": "ks7684p5z75ww710shsmppchm181txky",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_vrtx_01WkVCQe5n5wQ6tCVoD9SHhw",
+          "status": "success"
+        },
+        {
+          "at": 1771978668543.2888,
+          "relativeMs": 9214.288818359375,
+          "order": 0,
+          "stepOrder": 8,
+          "messageId": "ks76923atty501w9nm4kpnvds181v7g8",
+          "kind": "tool_result",
+          "detail": "Found 0 file(s).",
+          "toolName": "glob",
+          "toolCallId": "toolu_bdrk_015d5Nt7gtbk7a31haNtkjDx",
+          "status": "success"
+        },
+        {
+          "at": 1771978674465.594,
+          "relativeMs": 15136.593994140625,
+          "order": 0,
+          "stepOrder": 10,
+          "messageId": "ks7fv5tqgvks76abmxwawf7cmd81vg2v",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_vrtx_016qR7xauaL88GhsbxzaZ1QA",
+          "status": "success"
+        },
+        {
+          "at": 1771978681569.2744,
+          "relativeMs": 22240.2744140625,
+          "order": 0,
+          "stepOrder": 12,
+          "messageId": "ks79ak8y8xdr5gvrpqb3zfv9mx81tm8s",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_01L4t66Bc9qAvtgw25JTtsNR",
+          "status": "success"
+        }
+      ],
+      "spark": {
+        "calls": 0,
+        "failures": 0,
+        "totalDurationMs": 0
+      },
+      "lab": {
+        "calls": 7,
+        "failures": 0,
+        "createLabCalls": 1,
+        "archiveLabCalls": 0,
+        "runCalls": 4,
+        "globCalls": 2,
+        "hadActivation": true
+      },
+      "assertionFailures": [],
+      "sparkArtifacts": [],
+      "sceneFiles": []
+    },
+    {
+      "runId": "2026-02-25T00-18-03-836Z-k7x04q",
+      "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/lab-react-demo.json --userId dev-user",
+      "userId": "dev-user",
+      "threadId": "m570y7yjdehes6dbvvdtjda92n81v3qh",
+      "agentName": "studi",
+      "prompt": "Continue the lab. Add a small component with props and run a command to verify files.",
+      "promptHash": "ebbbfc269b6f37ec",
+      "modelLabel": "default",
+      "startedAt": 1771978683836,
+      "endedAt": 1771978698236,
+      "totalDurationMs": 14400,
+      "actionResultText": "",
+      "messageCount": 13,
+      "newMessageCount": 13,
+      "usage": {
+        "promptTokens": 0,
+        "completionTokens": 0,
+        "totalTokens": 0
+      },
+      "tools": [
+        {
+          "toolCallId": "toolu_vrtx_01FPVeeQ4vwrqPwF41veJPRQ",
+          "toolName": "glob",
+          "startedAt": 1771978683836,
+          "endedAt": 1771978685036.9128,
+          "durationMs": 1200.912841796875,
+          "durationEstimated": true,
+          "status": "error",
+          "outputStatus": "failed",
+          "outputSummary": "glob failed: No active lab session in this thread.",
+          "errorCategory": "unknown",
+          "retriable": false,
+          "error": "No active lab session in this thread."
+        },
+        {
+          "toolCallId": "toolu_bdrk_01HZ4doqWiXWaCZmQ916WQZS",
+          "toolName": "create_lab",
+          "startedAt": 1771978683836,
+          "endedAt": 1771978687457.8167,
+          "durationMs": 3621.816650390625,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "active",
+          "outputSummary": "Lab is active. I will now use sandbox tools directly and report exact command/file results."
+        },
+        {
+          "toolCallId": "toolu_bdrk_016oS2w9xPtdfL8sYQviCk4z",
+          "toolName": "run",
+          "startedAt": 1771978683836,
+          "endedAt": 1771978689632.0513,
+          "durationMs": 5796.05126953125,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        },
+        {
+          "toolCallId": "toolu_bdrk_01XCAFMk2A7Yizgmb2rkvBoS",
+          "toolName": "glob",
+          "startedAt": 1771978683836,
+          "endedAt": 1771978689632.0513,
+          "durationMs": 5796.05126953125,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Found 0 file(s)."
+        },
+        {
+          "toolCallId": "toolu_vrtx_01FqYyFabCopmWtsYAVR4xgf",
+          "toolName": "run",
+          "startedAt": 1771978683836,
+          "endedAt": 1771978692059.1565,
+          "durationMs": 8223.156494140625,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        },
+        {
+          "toolCallId": "toolu_vrtx_01AZ7AcX6A9Wu5R4xtoJr4ZM",
+          "toolName": "run",
+          "startedAt": 1771978683836,
+          "endedAt": 1771978693848.6033,
+          "durationMs": 10012.603271484375,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        },
+        {
+          "toolCallId": "toolu_bdrk_014kchUPcP81oPfLnqvYzKfU",
+          "toolName": "run",
+          "startedAt": 1771978683836,
+          "endedAt": 1771978696356.9927,
+          "durationMs": 12520.99267578125,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        }
+      ],
+      "timeline": [
+        {
+          "at": 1771978683195.302,
+          "relativeMs": 0,
+          "order": 0,
+          "stepOrder": 0,
+          "messageId": "ks73xgbzsfrzjcjejp464mep4181vmh1",
+          "kind": "user",
+          "detail": "Continue the lab. Add a small component with props and run a command to verify files."
+        },
+        {
+          "at": 1771978685036.9128,
+          "relativeMs": 1200.912841796875,
+          "order": 0,
+          "stepOrder": 2,
+          "messageId": "ks77zm0d5sx1x4z77we0psy3t581tnmj",
+          "kind": "tool_result",
+          "detail": "No active lab session in this thread.",
+          "toolName": "glob",
+          "toolCallId": "toolu_vrtx_01FPVeeQ4vwrqPwF41veJPRQ",
+          "status": "error"
+        },
+        {
+          "at": 1771978687457.8167,
+          "relativeMs": 3621.816650390625,
+          "order": 0,
+          "stepOrder": 4,
+          "messageId": "ks7a49rst3jyv7zs6mww5fte9x81t0f3",
+          "kind": "tool_result",
+          "detail": "Lab is active. I will now use sandbox tools directly and report exact command/file results.",
+          "toolName": "create_lab",
+          "toolCallId": "toolu_bdrk_01HZ4doqWiXWaCZmQ916WQZS",
+          "status": "success"
+        },
+        {
+          "at": 1771978689632.0513,
+          "relativeMs": 5796.05126953125,
+          "order": 0,
+          "stepOrder": 6,
+          "messageId": "ks75xfke5sa8jy0z42qq0fp03s81vr7p",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_bdrk_016oS2w9xPtdfL8sYQviCk4z",
+          "status": "success"
+        },
+        {
+          "at": 1771978689632.0513,
+          "relativeMs": 5796.05126953125,
+          "order": 0,
+          "stepOrder": 6,
+          "messageId": "ks75xfke5sa8jy0z42qq0fp03s81vr7p",
+          "kind": "tool_result",
+          "detail": "Found 0 file(s).",
+          "toolName": "glob",
+          "toolCallId": "toolu_bdrk_01XCAFMk2A7Yizgmb2rkvBoS",
+          "status": "success"
+        },
+        {
+          "at": 1771978692059.1565,
+          "relativeMs": 8223.156494140625,
+          "order": 0,
+          "stepOrder": 8,
+          "messageId": "ks71dx6zjrvb36mtng7p41nn3981vsb9",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_vrtx_01FqYyFabCopmWtsYAVR4xgf",
+          "status": "success"
+        },
+        {
+          "at": 1771978693848.6033,
+          "relativeMs": 10012.603271484375,
+          "order": 0,
+          "stepOrder": 10,
+          "messageId": "ks7a105hzbnsh6617wwvkwbm4x81vf83",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_vrtx_01AZ7AcX6A9Wu5R4xtoJr4ZM",
+          "status": "success"
+        },
+        {
+          "at": 1771978696356.9927,
+          "relativeMs": 12520.99267578125,
+          "order": 0,
+          "stepOrder": 12,
+          "messageId": "ks743dhp5eb5ara8eh95w9e36981v0tj",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_bdrk_014kchUPcP81oPfLnqvYzKfU",
+          "status": "success"
+        }
+      ],
+      "spark": {
+        "calls": 0,
+        "failures": 0,
+        "totalDurationMs": 0
+      },
+      "lab": {
+        "calls": 7,
+        "failures": 1,
+        "createLabCalls": 1,
+        "archiveLabCalls": 0,
+        "runCalls": 4,
+        "globCalls": 2,
+        "hadActivation": true
+      },
+      "assertionFailures": [],
+      "sparkArtifacts": [],
+      "sceneFiles": []
+    }
+  ],
+  "caseSummaries": [
+    {
+      "runId": "2026-02-25T00-17-39-329Z-hmvv5n",
+      "userId": "dev-user",
+      "threadId": "m57fve2vccmydmh7edh4ef81a581v0jf",
+      "promptHash": "353749df7fb403f7",
+      "modelLabel": "default",
+      "totalDurationMs": 24507,
+      "totalTokens": 0,
+      "sparkFailures": 0,
+      "labFailures": 0,
+      "assertionFailures": 0
+    },
+    {
+      "runId": "2026-02-25T00-18-03-836Z-k7x04q",
+      "userId": "dev-user",
+      "threadId": "m570y7yjdehes6dbvvdtjda92n81v3qh",
+      "promptHash": "ebbbfc269b6f37ec",
+      "modelLabel": "default",
+      "totalDurationMs": 14400,
+      "totalTokens": 0,
+      "sparkFailures": 0,
+      "labFailures": 1,
+      "assertionFailures": 0
+    }
+  ],
+  "comparisons": [
+    {
+      "promptHash": "353749df7fb403f7",
+      "runs": 1,
+      "durationMs": {
+        "min": 24507,
+        "max": 24507,
+        "avg": 24507
+      },
+      "sparkFailures": 0,
+      "labFailures": 0,
+      "assertionFailures": 0,
+      "distinctResponseHashes": 0
+    },
+    {
+      "promptHash": "ebbbfc269b6f37ec",
+      "runs": 1,
+      "durationMs": {
+        "min": 14400,
+        "max": 14400,
+        "avg": 14400
+      },
+      "sparkFailures": 0,
+      "labFailures": 1,
+      "assertionFailures": 0,
+      "distinctResponseHashes": 0
+    }
+  ]
+}

@@ -158,6 +158,8 @@ async function generateDraftWithFallbackModels(prompt: string) {
         modelId,
         object: result.object,
         usage: (result as { usage?: UsageSnapshot }).usage,
+        providerMetadata: (result as { providerMetadata?: unknown })
+          .providerMetadata,
       };
     } catch (error) {
       errors.push(`${modelId}: ${formatProviderError(error)}`);
@@ -220,7 +222,7 @@ export const generatePlanDraft = internalAction({
         outputTokenDetails: result.usage?.outputTokenDetails,
         raw: result.usage?.raw,
       },
-      providerMetadata: undefined,
+      providerMetadata: result.providerMetadata,
     });
 
     await ctx.runMutation(internalApi.telemetry.insertTelemetryEventInternal, {

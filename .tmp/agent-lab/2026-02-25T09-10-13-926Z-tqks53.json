@@ -1,0 +1,105 @@
+{
+  "runId": "2026-02-25T09-10-13-926Z-tqks53",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --agentName studi-fast --prompt Define recursion in one sentence. --newThread --verifyTelemetry",
+  "userId": "dev-user",
+  "threadId": "m57bavs4z0anzbesqrkn9a8ybx81vxfd",
+  "agentName": "studi-fast",
+  "prompt": "Define recursion in one sentence.",
+  "promptHash": "a1122c91474bfa19",
+  "startedAt": 1772010613926,
+  "endedAt": 1772010625840,
+  "totalDurationMs": 11914,
+  "firstAssistantEventMs": 11914,
+  "actionResultText": "Recursion is a programming technique where a function calls itself directly or indirectly to solve a problem by breaking it down into simpler subproblems until reaching a base case.\n\nTo help solidify this, use the flash card Spark below for active recall practice: flip each card to test yourself on the definition and related concepts, aiming to get them right before checking. Flip back for another attempt if needed!",
+  "actionResultTextHash": "38cf61cc91c2aafb",
+  "messageCount": 4,
+  "newMessageCount": 4,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "call_69009436",
+      "toolName": "create_spark",
+      "startedAt": 1772010613926,
+      "endedAt": 1772010617922.6467,
+      "durationMs": 3996.646728515625,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "success",
+      "sparkStatus": "success"
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1772010611656.3652,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks7ack0w6wq0m5z445m05gjag181vt0c",
+      "kind": "user",
+      "detail": "Define recursion in one sentence."
+    },
+    {
+      "at": 1772010617922.6467,
+      "relativeMs": 3996.646728515625,
+      "order": 0,
+      "stepOrder": 2,
+      "messageId": "ks7f11r8517jjh2v7h9dk7fns581vp9e",
+      "kind": "tool_result",
+      "detail": "{\"artifact\":{\"artifactId\":\"e5eeac1c-6c8b-4c0a-9b80-4bf478ce9c41\",\"kind\":\"spark_flash_card\",\"mode\":\"readonly\",\"payload\":...",
+      "toolName": "create_spark",
+      "toolCallId": "call_69009436",
+      "status": "success"
+    },
+    {
+      "at": 1772010625840,
+      "relativeMs": 11914,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "Recursion is a programming technique where a function calls itself directly or indirectly to solve a problem by breakin..."
+    }
+  ],
+  "spark": {
+    "calls": 1,
+    "failures": 0,
+    "totalDurationMs": 3996.646728515625
+  },
+  "lab": {
+    "calls": 0,
+    "failures": 0,
+    "createLabCalls": 0,
+    "archiveLabCalls": 0,
+    "runCalls": 0,
+    "globCalls": 0,
+    "hadActivation": false
+  },
+  "plan": {
+    "calls": 0,
+    "failures": 0,
+    "startPlanModeCalls": 0,
+    "getPlanContextCalls": 0,
+    "generatePlanDraftCalls": 0,
+    "acceptPlanDraftCalls": 0,
+    "requestPlanChangesCalls": 0,
+    "setPlanItemStatusCalls": 0,
+    "finalSnapshot": {
+      "exists": false
+    }
+  },
+  "assertionFailures": [
+    "Telemetry summary is unavailable (check convex codegen/deploy)."
+  ],
+  "sparkArtifacts": [
+    {
+      "toolCallId": "call_69009436",
+      "kind": "spark_flash_card",
+      "sparkType": "flash_card",
+      "title": "Recursion Definition Flash Card",
+      "summary": "Memorize the concise definition of recursion through active recall."
+    }
+  ],
+  "sceneFiles": []
+}

@@ -11,6 +11,7 @@ import { internal } from "./_generated/api";
 import {
   classifyDaytonaError,
   createSandbox,
+  deleteSandbox,
   editFile,
   ensureSandboxStarted,
   formatErrorSummary,
@@ -26,6 +27,7 @@ import {
   type DaytonaToolError,
 } from "./daytona";
 import { capturePosthogEvent } from "./posthog";
+import { resolveLabRuntime } from "../lib/lab-runtime/profiles";
 
 const internalApi = internal as unknown as {
   plans: {
@@ -60,6 +62,12 @@ type ToolFailurePayload = {
 type LabSessionLookup = {
   session: {
     sandboxId: string;
+    metadata?: {
+      language?: string;
+      framework?: string;
+      template?: string;
+      runtimeProfileId?: string;
+    };
     archivedAt?: number;
   } | null;
   userId: string;
@@ -198,6 +206,11 @@ async function getActiveSandbox(ctx: {
 const createLabSchema = z.object({
   topic: z.string().optional(),
   objective: z.string().optional(),
+  language: z.string().optional(),
+  framework: z.string().optional(),
+  template: z.string().optional(),
+  createTrack: z.boolean().optional(),
+  forceNewSandbox: z.boolean().optional(),
 });
 
 type CreateLabResult =
@@ -208,6 +221,10 @@ type CreateLabResult =
       metadata: {
         topic?: string;
         objective?: string;
+        language?: string;
+        framework?: string;
+        template?: string;
+        runtimeProfileId?: string;
       };
     }
   | ToolFailurePayload;
@@ -229,19 +246,49 @@ export const createLabTool = createTool<
     }
 
     try {
+      const runtime = resolveLabRuntime({
+        language: args.language,
+        framework: args.framework,
+      });
+      const shouldCreateTrack = args.createTrack === true;
+      const forceNewSandbox = args.forceNewSandbox === true;
       const existing = (await ctx.runQuery(
         internal.labs.getLabSessionByThreadForUserInternal,
         {
           userId,
           threadId,
         },
-      )) as { sandboxId: string } | null;
+      )) as LabSessionLookup["session"];
 
-      let sandboxId = existing?.sandboxId;
-      if (sandboxId) {
+      let sandboxId: string;
+      let reusedExisting = false;
+      let cleanupWarning: string | undefined;
+      const existingProfileId = existing?.metadata?.runtimeProfileId;
+      if (existing?.sandboxId && !forceNewSandbox) {
+        sandboxId = existing.sandboxId;
+        reusedExisting = true;
         await ensureSandboxStarted(sandboxId);
       } else {
-        const created = await createSandbox();
+        if (existing?.sandboxId && forceNewSandbox) {
+          try {
+            await deleteSandbox(existing.sandboxId);
+          } catch (error) {
+            const detail = classifyDaytonaError(error);
+            if (detail.category !== "not_found") {
+              cleanupWarning = detail.message;
+            }
+          }
+        }
+
+        const created = await createSandbox({
+          language: runtime.language,
+          labels: {
+            runtime_language: runtime.language,
+            runtime_framework: runtime.framework,
+            runtime_profile: runtime.runtimeProfileId,
+            runtime_template: args.template,
+          },
+        });
         sandboxId = created.sandboxId;
       }
 
@@ -252,16 +299,32 @@ export const createLabTool = createTool<
         metadata: {
           topic: args.topic,
           objective: args.objective,
+          language: runtime.language,
+          framework: runtime.framework,
+          template: args.template?.trim() || undefined,
+          runtimeProfileId: runtime.runtimeProfileId,
         },
         unarchive: true,
       });
 
-      await ctx.runMutation(internalApi.plans.ensureLabPlanInternal, {
-        userId,
-        threadId,
-        topic: args.topic,
-        objective: args.objective,
-      });
+      if (shouldCreateTrack) {
+        await ctx.runMutation(internalApi.plans.ensureLabPlanInternal, {
+          userId,
+          threadId,
+          topic: args.topic,
+          objective: args.objective,
+        });
+      }
+
+      const runtimeNotice =
+        reusedExisting &&
+        existingProfileId &&
+        existingProfileId !== runtime.runtimeProfileId
+          ? ` Reused existing sandbox runtime (${existingProfileId}); use forceNewSandbox=true to switch.`
+          : "";
+      const cleanupNotice = cleanupWarning
+        ? ` Previous sandbox cleanup warning: ${cleanupWarning}`
+        : "";
 
       await recordLabToolTelemetry(ctx, {
         userId,
@@ -272,18 +335,30 @@ export const createLabTool = createTool<
         metadata: {
           topic: args.topic,
           objective: args.objective,
+          language: runtime.language,
+          framework: runtime.framework,
+          template: args.template,
+          runtimeProfileId: runtime.runtimeProfileId,
+          inferredFromFramework: runtime.inferredFromFramework,
+          createdTrack: shouldCreateTrack,
+          forceNewSandbox,
+          reusedExisting,
+          cleanupWarning,
           sandboxId,
         },
       });
 
       return {
         status: "active",
-        summary:
-          "Lab is active. I will now use sandbox tools directly and report exact command/file results.",
+        summary: `Lab is active. I will now use sandbox tools directly and report exact command/file results.${runtimeNotice}${cleanupNotice}`,
         sandboxId,
         metadata: {
           topic: args.topic,
           objective: args.objective,
+          language: runtime.language,
+          framework: runtime.framework,
+          template: args.template?.trim() || undefined,
+          runtimeProfileId: runtime.runtimeProfileId,
         },
       };
     } catch (error) {
@@ -299,6 +374,11 @@ export const createLabTool = createTool<
         metadata: {
           topic: args.topic,
           objective: args.objective,
+          language: args.language,
+          framework: args.framework,
+          template: args.template,
+          createTrack: args.createTrack,
+          forceNewSandbox: args.forceNewSandbox,
           error: detail.message,
           httpStatus: detail.httpStatus,
         },

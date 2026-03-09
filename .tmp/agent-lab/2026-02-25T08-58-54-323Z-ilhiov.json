@@ -1,0 +1,103 @@
+{
+  "runId": "2026-02-25T08-58-54-323Z-ilhiov",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --agentName studi-fast --prompt Create one spark scene to teach linear interpolation with a slider and explain in 2 short bullets. --newThread --expectTools create_spark",
+  "userId": "dev-user",
+  "threadId": "m57bwj1q3f7wzeqssmkwz1f6ex81vahx",
+  "agentName": "studi-fast",
+  "prompt": "Create one spark scene to teach linear interpolation with a slider and explain in 2 short bullets.",
+  "promptHash": "f8b47e7f43642332",
+  "startedAt": 1772009934323,
+  "endedAt": 1772009949358,
+  "totalDurationMs": 15035,
+  "firstAssistantEventMs": 15035,
+  "actionResultText": "- **Linear interpolation formula**: $ y = y_0 + (y_1 - y_0) \\cdot x $, where $x$ ranges from 0 to 1, blending between start value $y_0$ and end value $y_1$.\n- **Interactive demo**: Move the slider below to change $x$ and watch the interpolated value update in real-time, shown graphically on a simple scale.",
+  "actionResultTextHash": "91965514b51b332e",
+  "messageCount": 4,
+  "newMessageCount": 4,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "call_51306315",
+      "toolName": "create_spark",
+      "startedAt": 1772009934323,
+      "endedAt": 1772009943110.208,
+      "durationMs": 8787.2080078125,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "success",
+      "sparkStatus": "success"
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1772009931923.9043,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks724rhsbjfdxcneqm5b7fc2xs81vxcp",
+      "kind": "user",
+      "detail": "Create one spark scene to teach linear interpolation with a slider and explain in 2 short bullets."
+    },
+    {
+      "at": 1772009943110.208,
+      "relativeMs": 8787.2080078125,
+      "order": 0,
+      "stepOrder": 2,
+      "messageId": "ks7a0c4yvxrvfwt7w79dvjpfjd81vh6f",
+      "kind": "tool_result",
+      "detail": "{\"artifact\":{\"kind\":\"spark_scene\",\"mode\":\"readonly\",\"payload\":{\"html\":\"<!doctype html><html><head><meta charset=\\\"UTF-8...",
+      "toolName": "create_spark",
+      "toolCallId": "call_51306315",
+      "status": "success"
+    },
+    {
+      "at": 1772009949358,
+      "relativeMs": 15035,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "- **Linear interpolation formula**: $ y = y_0 + (y_1 - y_0) \\cdot x $, where $x$ ranges from 0 to 1, blending between s..."
+    }
+  ],
+  "spark": {
+    "calls": 1,
+    "failures": 0,
+    "totalDurationMs": 8787.2080078125
+  },
+  "lab": {
+    "calls": 0,
+    "failures": 0,
+    "createLabCalls": 0,
+    "archiveLabCalls": 0,
+    "runCalls": 0,
+    "globCalls": 0,
+    "hadActivation": false
+  },
+  "plan": {
+    "calls": 0,
+    "failures": 0,
+    "startPlanModeCalls": 0,
+    "getPlanContextCalls": 0,
+    "generatePlanDraftCalls": 0,
+    "acceptPlanDraftCalls": 0,
+    "requestPlanChangesCalls": 0,
+    "setPlanItemStatusCalls": 0,
+    "finalSnapshot": {
+      "exists": false
+    }
+  },
+  "assertionFailures": [],
+  "sparkArtifacts": [
+    {
+      "toolCallId": "call_51306315",
+      "kind": "spark_scene",
+      "sparkType": "scene",
+      "title": "Linear Interpolation Slider Demo",
+      "summary": "Visualize linear interpolation with a slider for hands-on learning."
+    }
+  ],
+  "sceneFiles": []
+}

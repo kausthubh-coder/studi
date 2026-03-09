@@ -38,7 +38,11 @@ export const LabSidebar = memo(function LabSidebar({
   onRefresh,
 }: LabSidebarProps) {
   const segments = useMemo(() => {
-    const parts = currentPath.split("/");
+    const normalized = currentPath
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
+    const parts = (normalized || "workspace").split("/").filter(Boolean);
     return parts.map((part, i) => ({
       label: part,
       path: parts.slice(0, i + 1).join("/"),

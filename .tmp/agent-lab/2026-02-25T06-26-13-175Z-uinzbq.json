@@ -1,0 +1,204 @@
+{
+  "runId": "2026-02-25T06-26-13-175Z-uinzbq",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --agentName studi-fast --userId dev-user --threadId m57bj50vmg4f4wxrppqjp01sdx81th17 --prompt Call generate_plan_draft once with brief: beginner linear algebra in 8 weeks, 5h/week. Then stop. --pollMs 250 --verbose",
+  "userId": "dev-user",
+  "threadId": "m57bj50vmg4f4wxrppqjp01sdx81th17",
+  "agentName": "studi-fast",
+  "prompt": "Call generate_plan_draft once with brief: beginner linear algebra in 8 weeks, 5h/week. Then stop.",
+  "promptHash": "2e642f0365e3f918",
+  "startedAt": 1772000773175,
+  "endedAt": 1772000839801,
+  "totalDurationMs": 66626,
+  "actionResultText": "",
+  "messageCount": 23,
+  "newMessageCount": 13,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "call_04957945",
+      "toolName": "generate_plan_draft",
+      "startedAt": 1772000773175,
+      "endedAt": 1772000782270.5745,
+      "durationMs": 9095.574462890625,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "draft_ready",
+      "outputSummary": "Draft ready with 6 milestones and 24 checklist items."
+    },
+    {
+      "toolCallId": "call_69253368",
+      "toolName": "generate_plan_draft",
+      "startedAt": 1772000773175,
+      "endedAt": 1772000792725.1108,
+      "durationMs": 19550.11083984375,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "draft_ready",
+      "outputSummary": "Draft ready with 6 milestones and 24 checklist items."
+    },
+    {
+      "toolCallId": "call_29130400",
+      "toolName": "generate_plan_draft",
+      "startedAt": 1772000773175,
+      "endedAt": 1772000802308.3196,
+      "durationMs": 29133.319580078125,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "draft_ready",
+      "outputSummary": "Draft ready with 6 milestones and 24 checklist items."
+    },
+    {
+      "toolCallId": "call_63388009",
+      "toolName": "generate_plan_draft",
+      "startedAt": 1772000773175,
+      "endedAt": 1772000816023.5928,
+      "durationMs": 42848.5927734375,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "draft_ready",
+      "outputSummary": "Draft ready with 6 milestones and 24 checklist items."
+    },
+    {
+      "toolCallId": "call_89160180",
+      "toolName": "generate_plan_draft",
+      "startedAt": 1772000773175,
+      "endedAt": 1772000826463.4238,
+      "durationMs": 53288.423828125,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "draft_ready",
+      "outputSummary": "Draft ready with 6 milestones and 24 checklist items."
+    },
+    {
+      "toolCallId": "call_49133454",
+      "toolName": "generate_plan_draft",
+      "startedAt": 1772000773175,
+      "endedAt": 1772000836886.8572,
+      "durationMs": 63711.857177734375,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "draft_ready",
+      "outputSummary": "Draft ready with 6 milestones and 24 checklist items."
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1772000771380.28,
+      "relativeMs": 0,
+      "order": 2,
+      "stepOrder": 0,
+      "messageId": "ks7ac6rejj1yaenhgwjhws9r6s81vb16",
+      "kind": "user",
+      "detail": "Call generate_plan_draft once with brief: beginner linear algebra in 8 weeks, 5h/week. Then stop."
+    },
+    {
+      "at": 1772000782270.5745,
+      "relativeMs": 9095.574462890625,
+      "order": 2,
+      "stepOrder": 2,
+      "messageId": "ks7c8n9k4950535ds0j7g5febs81t498",
+      "kind": "tool_result",
+      "detail": "Draft ready with 6 milestones and 24 checklist items.",
+      "toolName": "generate_plan_draft",
+      "toolCallId": "call_04957945",
+      "status": "success"
+    },
+    {
+      "at": 1772000792725.1108,
+      "relativeMs": 19550.11083984375,
+      "order": 2,
+      "stepOrder": 4,
+      "messageId": "ks73d6sz9r0ck9vvzmh57c6vc581t017",
+      "kind": "tool_result",
+      "detail": "Draft ready with 6 milestones and 24 checklist items.",
+      "toolName": "generate_plan_draft",
+      "toolCallId": "call_69253368",
+      "status": "success"
+    },
+    {
+      "at": 1772000802308.3196,
+      "relativeMs": 29133.319580078125,
+      "order": 2,
+      "stepOrder": 6,
+      "messageId": "ks7dgs3m019zmw8m48e2579arx81vj99",
+      "kind": "tool_result",
+      "detail": "Draft ready with 6 milestones and 24 checklist items.",
+      "toolName": "generate_plan_draft",
+      "toolCallId": "call_29130400",
+      "status": "success"
+    },
+    {
+      "at": 1772000816023.5928,
+      "relativeMs": 42848.5927734375,
+      "order": 2,
+      "stepOrder": 8,
+      "messageId": "ks740wt687znykgwsnpc9qg3ks81vns6",
+      "kind": "tool_result",
+      "detail": "Draft ready with 6 milestones and 24 checklist items.",
+      "toolName": "generate_plan_draft",
+      "toolCallId": "call_63388009",
+      "status": "success"
+    },
+    {
+      "at": 1772000826463.4238,
+      "relativeMs": 53288.423828125,
+      "order": 2,
+      "stepOrder": 10,
+      "messageId": "ks762vmmwtva1kh4whnztg6kp181vycy",
+      "kind": "tool_result",
+      "detail": "Draft ready with 6 milestones and 24 checklist items.",
+      "toolName": "generate_plan_draft",
+      "toolCallId": "call_89160180",
+      "status": "success"
+    },
+    {
+      "at": 1772000836886.8572,
+      "relativeMs": 63711.857177734375,
+      "order": 2,
+      "stepOrder": 12,
+      "messageId": "ks704eh4zjfx81h6rydrtack2181t3vz",
+      "kind": "tool_result",
+      "detail": "Draft ready with 6 milestones and 24 checklist items.",
+      "toolName": "generate_plan_draft",
+      "toolCallId": "call_49133454",
+      "status": "success"
+    }
+  ],
+  "spark": {
+    "calls": 0,
+    "failures": 0,
+    "totalDurationMs": 0
+  },
+  "lab": {
+    "calls": 0,
+    "failures": 0,
+    "createLabCalls": 0,
+    "archiveLabCalls": 0,
+    "runCalls": 0,
+    "globCalls": 0,
+    "hadActivation": false
+  },
+  "plan": {
+    "calls": 6,
+    "failures": 0,
+    "startPlanModeCalls": 0,
+    "getPlanContextCalls": 0,
+    "generatePlanDraftCalls": 6,
+    "acceptPlanDraftCalls": 0,
+    "requestPlanChangesCalls": 0,
+    "setPlanItemStatusCalls": 0,
+    "finalSnapshot": {
+      "exists": true,
+      "title": "Beginner Linear Algebra (8 Weeks)",
+      "phase": "draft_review",
+      "hasDraft": true
+    }
+  },
+  "assertionFailures": [],
+  "sparkArtifacts": [],
+  "sceneFiles": []
+}

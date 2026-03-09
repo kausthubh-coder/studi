@@ -1,0 +1,174 @@
+{
+  "runId": "2026-02-25T06-12-22-477Z-ex6aw0",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --prompt Call start_plan_mode now for this thread and confirm it is enabled. --pollMs 250 --debugRaw --verbose",
+  "userId": "dev-user",
+  "threadId": "m57dcv7xqbgccgebme1pp69jah81tdtr",
+  "agentName": "studi",
+  "prompt": "Call start_plan_mode now for this thread and confirm it is enabled.",
+  "promptHash": "5acea1380d5d9c7b",
+  "startedAt": 1771999942477,
+  "endedAt": 1771999950768,
+  "totalDurationMs": 8291,
+  "firstAssistantEventMs": 8291,
+  "actionResultText": "✅ **Plan mode is now enabled** for this thread!\n\nWe're in the **discovery phase** — this is where I learn a bit about you so I can build the right learning track.\n\nLet me ask just what I need:\n\n1. **What do you want to master?** (e.g., calculus, Python, machine learning, physics…)\n2. **What's your current level?** (beginner / some experience / intermediate / advanced)\n3. **What's your goal or timeline?** (e.g., \"ready for a job interview in 2 months\", \"understand it deeply over 3 months\")\n4. **How much time can you commit per week?** (e.g., 3 hours/week)\n\nTake your time — the more honest your answers, the better your track! 🎯",
+  "actionResultTextHash": "b666ad9ce2bb071c",
+  "messageCount": 4,
+  "newMessageCount": 4,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "toolu_bdrk_018bhSXbVCe39bLiXXHSKZei",
+      "toolName": "start_plan_mode",
+      "startedAt": 1771999942477,
+      "endedAt": 1771999942711.876,
+      "durationMs": 234.8759765625,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "ok",
+      "outputSummary": "Plan mode is now discovery."
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1771999940779.3633,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks70jqk7fabkq7qk41abey6chh81vzr3",
+      "kind": "user",
+      "detail": "Call start_plan_mode now for this thread and confirm it is enabled."
+    },
+    {
+      "at": 1771999942711.876,
+      "relativeMs": 234.8759765625,
+      "order": 0,
+      "stepOrder": 2,
+      "messageId": "ks7741zygr1rpr7vnpd7gk677x81tm5n",
+      "kind": "tool_result",
+      "detail": "Plan mode is now discovery.",
+      "toolName": "start_plan_mode",
+      "toolCallId": "toolu_bdrk_018bhSXbVCe39bLiXXHSKZei",
+      "status": "success"
+    },
+    {
+      "at": 1771999950768,
+      "relativeMs": 8291,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "✅ **Plan mode is now enabled** for this thread!\n\nWe're in the **discovery phase** — this is where I learn a bit about y..."
+    }
+  ],
+  "spark": {
+    "calls": 0,
+    "failures": 0,
+    "totalDurationMs": 0
+  },
+  "lab": {
+    "calls": 0,
+    "failures": 0,
+    "createLabCalls": 0,
+    "archiveLabCalls": 0,
+    "runCalls": 0,
+    "globCalls": 0,
+    "hadActivation": false
+  },
+  "plan": {
+    "calls": 1,
+    "failures": 0,
+    "startPlanModeCalls": 1,
+    "getPlanContextCalls": 0,
+    "generatePlanDraftCalls": 0,
+    "acceptPlanDraftCalls": 0,
+    "requestPlanChangesCalls": 0,
+    "setPlanItemStatusCalls": 0,
+    "finalSnapshot": {
+      "exists": true,
+      "phase": "discovery",
+      "title": "general learning track"
+    }
+  },
+  "assertionFailures": [],
+  "sparkArtifacts": [],
+  "sceneFiles": [],
+  "rawMessages": [
+    {
+      "_creationTime": 1771999940779.3633,
+      "_id": "ks70jqk7fabkq7qk41abey6chh81vzr3",
+      "message": {
+        "content": "Call start_plan_mode now for this thread and confirm it is enabled.",
+        "role": "user"
+      },
+      "order": 0,
+      "status": "success",
+      "stepOrder": 0,
+      "text": "Call start_plan_mode now for this thread and confirm it is enabled.",
+      "threadId": "m57dcv7xqbgccgebme1pp69jah81tdtr",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771999940779.3635,
+      "_id": "ks7ctjf0dsf5xtm78tc147fe0x81vv3b",
+      "message": {
+        "content": [],
+        "role": "assistant"
+      },
+      "order": 0,
+      "status": "pending",
+      "stepOrder": 1,
+      "threadId": "m57dcv7xqbgccgebme1pp69jah81tdtr",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771999942711.876,
+      "_id": "ks7741zygr1rpr7vnpd7gk677x81tm5n",
+      "agentName": "studi",
+      "message": {
+        "content": [
+          {
+            "output": {
+              "type": "json",
+              "value": {
+                "phase": "discovery",
+                "status": "ok",
+                "summary": "Plan mode is now discovery.",
+                "title": "general learning track"
+              }
+            },
+            "toolCallId": "toolu_bdrk_018bhSXbVCe39bLiXXHSKZei",
+            "toolName": "start_plan_mode",
+            "type": "tool-result"
+          }
+        ],
+        "role": "tool"
+      },
+      "order": 0,
+      "sources": [],
+      "status": "success",
+      "stepOrder": 2,
+      "threadId": "m57dcv7xqbgccgebme1pp69jah81tdtr",
+      "tool": true,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771999942711.8762,
+      "_id": "ks76rdkkear1kgps61pa45vags81v2bt",
+      "agentName": "studi",
+      "message": {
+        "content": [],
+        "role": "assistant"
+      },
+      "order": 0,
+      "status": "pending",
+      "stepOrder": 3,
+      "threadId": "m57dcv7xqbgccgebme1pp69jah81tdtr",
+      "tool": false,
+      "userId": "dev-user"
+    }
+  ]
+}

@@ -30,7 +30,11 @@ import {
   writeTool,
 } from "./labTools";
 import { planToolsAlways, planToolsWhenPresent } from "./planTools";
-import { createSparkToolForProfile } from "./sparks/tools";
+import {
+  createSparkToolForModels,
+  createSparkToolForProfile,
+  type SparkWorkerModels,
+} from "./sparks/tools";
 import { createWarningTool } from "./voiceTools";
 
 const internalApi = internal as unknown as {
@@ -183,6 +187,22 @@ export function buildStudiToolset(
   };
 }
 
+function buildStudiToolsetWithSparkModels(
+  sparkModels: SparkWorkerModels,
+  includePlanTools: boolean,
+) {
+  return {
+    create_spark: createSparkToolForModels(sparkModels),
+    get_code_spark_context: getCodeSparkContextTool,
+    create_lab: createLabTool,
+    archive_lab: archiveLabTool,
+    glob: globTool,
+    run: runTool,
+    ...planToolsAlways,
+    ...(includePlanTools ? planToolsWhenPresent : {}),
+  };
+}
+
 export function buildCodiToolset(includePlanTools: boolean) {
   return {
     list: listTool,
@@ -241,6 +261,53 @@ function createShruAgent(profile: ModelProfile): Agent {
   });
 }
 
+function createBenchmarkStudiAgent(params: {
+  name: string;
+  model: string;
+  sparkModel: string;
+}): Agent {
+  return new Agent(components.agent, {
+    name: params.name,
+    languageModel: openrouter.chat(params.model),
+    stopWhen: stepCountIs(6),
+    tools: buildStudiToolsetWithSparkModels(
+      {
+        sparkScene: params.sparkModel,
+        sparkDesmos: params.sparkModel,
+        sparkCode: params.sparkModel,
+        sparkQuiz: params.sparkModel,
+        sparkFlash: params.sparkModel,
+      },
+      true,
+    ),
+    instructions: studiAgentInstructions,
+    usageHandler,
+  });
+}
+
+export const studiBenchmarkAgents = {
+  seedMini: createBenchmarkStudiAgent({
+    name: "studi-bakeoff-seed-2-0-mini",
+    model: "bytedance-seed/seed-2.0-mini",
+    sparkModel: "bytedance-seed/seed-2.0-mini",
+  }),
+  geminiFlashLite: createBenchmarkStudiAgent({
+    name: "studi-bakeoff-gemini-3-1-flash-lite-preview",
+    model: "google/gemini-3.1-flash-lite-preview",
+    sparkModel: "google/gemini-3.1-flash-lite-preview",
+  }),
+  kimiK2Nitro: createBenchmarkStudiAgent({
+    name: "studi-bakeoff-kimi-k2-0905-nitro",
+    model: "moonshotai/kimi-k2-0905:nitro",
+    sparkModel: "moonshotai/kimi-k2-0905:nitro",
+  }),
+  kimiK2Base: createBenchmarkStudiAgent({
+    name: "studi-bakeoff-kimi-k2-0905",
+    model: "moonshotai/kimi-k2-0905",
+    sparkModel: "moonshotai/kimi-k2-0905",
+  }),
+};
+
 export const studiAgentsByProfile: Record<ModelProfile, Agent> = {
   balanced: createStudiAgent("balanced"),
   fast: createStudiAgent("fast"),
@@ -275,4 +342,8 @@ export const playgroundAgents: Agent[] = [
   studiAgentsByProfile.quality,
   codiAgentsByProfile.quality,
   shruAgentsByProfile.quality,
+  studiBenchmarkAgents.seedMini,
+  studiBenchmarkAgents.geminiFlashLite,
+  studiBenchmarkAgents.kimiK2Nitro,
+  studiBenchmarkAgents.kimiK2Base,
 ];

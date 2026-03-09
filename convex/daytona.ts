@@ -59,6 +59,12 @@ type DaytonaMatch = {
   content: string;
 };
 
+type SessionCommandStreams = {
+  stdout?: string;
+  stderr?: string;
+  output?: string;
+};
+
 class DaytonaRequestError extends Error {
   readonly status?: number;
   readonly endpoint?: string;
@@ -157,8 +163,14 @@ async function daytonaRequest<T>(params: {
   path: string;
   method?: RequestMethod;
   body?: unknown;
+  query?: Record<string, string | number | undefined>;
 }): Promise<T> {
-  const endpoint = `${getApiBaseUrl()}${params.path}`;
+  const apiBase = getApiBaseUrl();
+  const endpoint = makeToolboxUrl(
+    apiBase.endsWith("/") ? apiBase : `${apiBase}/`,
+    params.path,
+    params.query,
+  );
 
   let response: Response;
   try {
@@ -192,7 +204,16 @@ async function daytonaRequest<T>(params: {
     return undefined as T;
   }
 
-  return (await response.json()) as T;
+  const text = await response.text();
+  if (!text) {
+    return undefined as T;
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    return JSON.parse(text) as T;
+  }
+  return text as T;
 }
 
 function makeToolboxUrl(
@@ -217,8 +238,13 @@ export function normalizeWorkspacePath(input?: string): string {
     return WORKSPACE_ROOT;
   }
 
-  const slashPath = raw.replace(/\\/g, "/").replace(/^\/+/, "");
-  const segments = slashPath.split("/");
+  const slashPath = raw.replace(/\\/g, "/");
+  const isAbsolute = slashPath.startsWith("/");
+  const relativePath = slashPath.replace(/^\/+/, "");
+  if (!relativePath || relativePath === ".") {
+    return WORKSPACE_ROOT;
+  }
+  const segments = relativePath.split("/");
   const normalized: string[] = [];
   for (const segment of segments) {
     if (!segment || segment === ".") {
@@ -237,6 +263,18 @@ export function normalizeWorkspacePath(input?: string): string {
     return WORKSPACE_ROOT;
   }
 
+  if (isAbsolute) {
+    if (relative === WORKSPACE_ROOT) {
+      return WORKSPACE_ROOT;
+    }
+    if (relative.startsWith(`${WORKSPACE_ROOT}/`)) {
+      return relative;
+    }
+    throw new DaytonaRequestError("Path must stay inside workspace.", {
+      endpoint: "path-normalization",
+    });
+  }
+
   if (
     relative === WORKSPACE_ROOT ||
     relative.startsWith(`${WORKSPACE_ROOT}/`)
@@ -245,6 +283,119 @@ export function normalizeWorkspacePath(input?: string): string {
   }
 
   return `${WORKSPACE_ROOT}/${relative}`;
+}
+
+function buildWorkspacePathCandidates(path?: string): string[] {
+  const normalized = normalizeWorkspacePath(path);
+  if (normalized === WORKSPACE_ROOT) {
+    return [WORKSPACE_ROOT, "/workspace"];
+  }
+  return [normalized, `/${normalized}`];
+}
+
+function buildToolboxPathCandidates(path: string): string[] {
+  const normalized = path.replace(/^\/+/, "");
+  const candidates = [normalized];
+  if (!normalized.startsWith("toolbox/")) {
+    candidates.push(`toolbox/${normalized}`);
+  }
+  return Array.from(new Set(candidates));
+}
+
+function pickString(
+  record: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function pickNumber(
+  record: Record<string, unknown>,
+  keys: string[],
+): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string") {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
+function mergeCommandRecord(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  const command = asObject(record.command);
+  if (!command) {
+    return record;
+  }
+  return { ...record, ...command };
+}
+
+function extractStreams(value: unknown): SessionCommandStreams {
+  if (typeof value === "string") {
+    return {
+      stdout: value,
+      output: value,
+    };
+  }
+
+  const record = asObject(value);
+  if (!record) {
+    return {};
+  }
+
+  const merged = mergeCommandRecord(record);
+  const logs = asObject(merged.logs);
+
+  const stdout =
+    pickString(merged, ["stdout"]) ?? pickString(logs ?? {}, ["stdout"]);
+  const stderr =
+    pickString(merged, ["stderr"]) ?? pickString(logs ?? {}, ["stderr"]);
+
+  const output =
+    pickString(merged, ["output", "result"]) ??
+    pickString(logs ?? {}, ["output"]) ??
+    pickString(merged, ["logs"]) ??
+    (stdout || stderr
+      ? [stdout ?? "", stderr ?? ""].filter(Boolean).join("\n")
+      : undefined);
+
+  return {
+    stdout,
+    stderr,
+    output,
+  };
+}
+
+function extractCommandId(value: unknown): string | undefined {
+  const record = asObject(value);
+  if (!record) {
+    return undefined;
+  }
+  const merged = mergeCommandRecord(record);
+  return pickString(merged, ["cmdId", "commandId", "id"]);
+}
+
+function extractExitCode(value: unknown): number | undefined {
+  const record = asObject(value);
+  if (!record) {
+    return undefined;
+  }
+  const merged = mergeCommandRecord(record);
+  return pickNumber(merged, ["exitCode", "code"]);
 }
 
 function isBinary(bytes: Buffer): boolean {
@@ -333,41 +484,69 @@ async function toolboxJson<T>(params: {
   body?: unknown;
 }): Promise<T> {
   const baseUrl = await getToolboxBaseUrl(params.sandboxId);
-  const endpoint = makeToolboxUrl(baseUrl, params.path, params.query);
+  const pathCandidates = buildToolboxPathCandidates(params.path);
+  let lastError: DaytonaRequestError | undefined;
 
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      method: params.method ?? "GET",
-      headers: buildDaytonaHeaders(true),
-      body: params.body === undefined ? undefined : JSON.stringify(params.body),
-    });
-  } catch (error) {
-    throw new DaytonaRequestError(
-      `Network request to Daytona toolbox failed: ${error instanceof Error ? error.message : String(error)}`,
-      { endpoint },
-    );
+  for (const candidate of pathCandidates) {
+    const endpoint = makeToolboxUrl(baseUrl, candidate, params.query);
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: params.method ?? "GET",
+        headers: buildDaytonaHeaders(true),
+        body:
+          params.body === undefined ? undefined : JSON.stringify(params.body),
+      });
+    } catch (error) {
+      throw new DaytonaRequestError(
+        `Network request to Daytona toolbox failed: ${error instanceof Error ? error.message : String(error)}`,
+        { endpoint },
+      );
+    }
+
+    if (!response.ok) {
+      const failure = await parseFailureBody(response);
+      const requestError = new DaytonaRequestError(
+        failure.message ??
+          `Daytona toolbox request failed with status ${response.status}.`,
+        {
+          status: response.status,
+          endpoint,
+          requestId: failure.requestId,
+          bodyText: failure.bodyText,
+        },
+      );
+
+      if (response.status === 404) {
+        lastError = requestError;
+        continue;
+      }
+
+      throw requestError;
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const text = await response.text();
+    if (!text) {
+      return undefined as T;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      return JSON.parse(text) as T;
+    }
+    return text as T;
   }
 
-  if (!response.ok) {
-    const failure = await parseFailureBody(response);
-    throw new DaytonaRequestError(
-      failure.message ??
-        `Daytona toolbox request failed with status ${response.status}.`,
-      {
-        status: response.status,
-        endpoint,
-        requestId: failure.requestId,
-        bodyText: failure.bodyText,
-      },
-    );
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return (await response.json()) as T;
+  throw (
+    lastError ??
+    new DaytonaRequestError("Daytona toolbox request failed.", {
+      endpoint: `${baseUrl}${params.path}`,
+    })
+  );
 }
 
 async function toolboxDownloadFile(
@@ -375,39 +554,56 @@ async function toolboxDownloadFile(
   filePath: string,
 ): Promise<Buffer> {
   const baseUrl = await getToolboxBaseUrl(sandboxId);
-  const endpoint = makeToolboxUrl(baseUrl, "files/download", {
-    path: filePath,
-  });
+  const pathCandidates = buildToolboxPathCandidates("files/download");
+  let lastError: DaytonaRequestError | undefined;
 
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      method: "GET",
-      headers: buildDaytonaHeaders(false),
+  for (const candidate of pathCandidates) {
+    const endpoint = makeToolboxUrl(baseUrl, candidate, {
+      path: filePath,
     });
-  } catch (error) {
-    throw new DaytonaRequestError(
-      `Network request to Daytona toolbox failed: ${error instanceof Error ? error.message : String(error)}`,
-      { endpoint },
-    );
+
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "GET",
+        headers: buildDaytonaHeaders(false),
+      });
+    } catch (error) {
+      throw new DaytonaRequestError(
+        `Network request to Daytona toolbox failed: ${error instanceof Error ? error.message : String(error)}`,
+        { endpoint },
+      );
+    }
+
+    if (!response.ok) {
+      const failure = await parseFailureBody(response);
+      const requestError = new DaytonaRequestError(
+        failure.message ??
+          `Daytona toolbox request failed with status ${response.status}.`,
+        {
+          status: response.status,
+          endpoint,
+          requestId: failure.requestId,
+          bodyText: failure.bodyText,
+        },
+      );
+      if (response.status === 404) {
+        lastError = requestError;
+        continue;
+      }
+      throw requestError;
+    }
+
+    const data = await response.arrayBuffer();
+    return Buffer.from(data);
   }
 
-  if (!response.ok) {
-    const failure = await parseFailureBody(response);
-    throw new DaytonaRequestError(
-      failure.message ??
-        `Daytona toolbox request failed with status ${response.status}.`,
-      {
-        status: response.status,
-        endpoint,
-        requestId: failure.requestId,
-        bodyText: failure.bodyText,
-      },
-    );
-  }
-
-  const data = await response.arrayBuffer();
-  return Buffer.from(data);
+  throw (
+    lastError ??
+    new DaytonaRequestError("Daytona toolbox file download failed.", {
+      endpoint: `${baseUrl}files/download`,
+    })
+  );
 }
 
 async function toolboxUploadFile(
@@ -416,37 +612,56 @@ async function toolboxUploadFile(
   bytes: Buffer,
 ): Promise<void> {
   const baseUrl = await getToolboxBaseUrl(sandboxId);
-  const endpoint = makeToolboxUrl(baseUrl, "files/upload", { path: filePath });
-  const formData = new FormData();
-  formData.append("file", new Blob([new Uint8Array(bytes)]), "file");
+  const pathCandidates = buildToolboxPathCandidates("files/upload");
+  let lastError: DaytonaRequestError | undefined;
 
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      method: "POST",
-      headers: buildDaytonaHeaders(false),
-      body: formData,
-    });
-  } catch (error) {
-    throw new DaytonaRequestError(
-      `Network request to Daytona toolbox failed: ${error instanceof Error ? error.message : String(error)}`,
-      { endpoint },
-    );
+  for (const candidate of pathCandidates) {
+    const endpoint = makeToolboxUrl(baseUrl, candidate, { path: filePath });
+    const formData = new FormData();
+    formData.append("file", new Blob([new Uint8Array(bytes)]), "file");
+
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: buildDaytonaHeaders(false),
+        body: formData,
+      });
+    } catch (error) {
+      throw new DaytonaRequestError(
+        `Network request to Daytona toolbox failed: ${error instanceof Error ? error.message : String(error)}`,
+        { endpoint },
+      );
+    }
+
+    if (!response.ok) {
+      const failure = await parseFailureBody(response);
+      const requestError = new DaytonaRequestError(
+        failure.message ??
+          `Daytona toolbox request failed with status ${response.status}.`,
+        {
+          status: response.status,
+          endpoint,
+          requestId: failure.requestId,
+          bodyText: failure.bodyText,
+        },
+      );
+      if (response.status === 404) {
+        lastError = requestError;
+        continue;
+      }
+      throw requestError;
+    }
+
+    return;
   }
 
-  if (!response.ok) {
-    const failure = await parseFailureBody(response);
-    throw new DaytonaRequestError(
-      failure.message ??
-        `Daytona toolbox request failed with status ${response.status}.`,
-      {
-        status: response.status,
-        endpoint,
-        requestId: failure.requestId,
-        bodyText: failure.bodyText,
-      },
-    );
-  }
+  throw (
+    lastError ??
+    new DaytonaRequestError("Daytona toolbox file upload failed.", {
+      endpoint: `${baseUrl}files/upload`,
+    })
+  );
 }
 
 async function ensureParentFolders(
@@ -476,16 +691,27 @@ async function ensureParentFolders(
   }
 }
 
-export async function createSandbox(): Promise<{ sandboxId: string }> {
+export async function createSandbox(params?: {
+  language?: string;
+  labels?: Record<string, string | undefined>;
+  autoDeleteInterval?: number;
+}): Promise<{ sandboxId: string }> {
+  const normalizedLabels = Object.fromEntries(
+    Object.entries(params?.labels ?? {}).filter(
+      ([, value]) => typeof value === "string" && value.length > 0,
+    ),
+  );
+
   const created = await daytonaRequest<{ id: string }>({
     path: "/sandbox",
     method: "POST",
     body: {
-      language: "typescript",
-      autoDeleteInterval: -1,
+      language: params?.language ?? "typescript",
+      autoDeleteInterval: params?.autoDeleteInterval ?? -1,
       labels: {
         app: "studi",
         scope: "lab",
+        ...normalizedLabels,
       },
     },
   });
@@ -510,6 +736,13 @@ export async function stopSandbox(sandboxId: string): Promise<void> {
   await daytonaRequest({
     path: `/sandbox/${encodeURIComponent(sandboxId)}/stop`,
     method: "POST",
+  });
+}
+
+export async function deleteSandbox(sandboxId: string): Promise<void> {
+  await daytonaRequest({
+    path: `/sandbox/${encodeURIComponent(sandboxId)}`,
+    method: "DELETE",
   });
 }
 
@@ -549,27 +782,38 @@ export async function listFiles(params: {
   path: string;
   entries: DaytonaFileEntry[];
 }> {
-  const normalizedPath = normalizeWorkspacePath(params.path);
-  const files = await toolboxJson<
-    Array<{ name: string; isDir: boolean; size: number; modTime: string }>
-  >({
-    sandboxId: params.sandboxId,
-    path: "files",
-    query: { path: normalizedPath },
-  });
+  const pathCandidates = Array.from(new Set(buildWorkspacePathCandidates(params.path)));
 
-  const entries = files.map((entry) => ({
-    name: entry.name,
-    path: `${normalizedPath}/${entry.name}`,
-    isDir: entry.isDir,
-    size: entry.size,
-    modTime: entry.modTime,
-  }));
+  let lastError: unknown;
+  for (const candidate of pathCandidates) {
+    try {
+      const files = await toolboxJson<
+        Array<{ name: string; isDir: boolean; size: number; modTime: string }>
+      >({
+        sandboxId: params.sandboxId,
+        path: "files",
+        query: { path: candidate },
+      });
 
-  return {
-    path: normalizedPath,
-    entries,
-  };
+      const normalizedBasePath = candidate.replace(/^\/+/, "").replace(/\/+$/, "");
+      const entries = files.map((entry) => ({
+        name: entry.name,
+        path: `${normalizedBasePath}/${entry.name}`,
+        isDir: entry.isDir,
+        size: entry.size,
+        modTime: entry.modTime,
+      }));
+
+      return {
+        path: normalizedBasePath,
+        entries,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("Unable to list files in sandbox.");
 }
 
 export async function readFile(params: {
@@ -758,6 +1002,157 @@ export async function runCommand(params: {
   };
 }
 
+export async function createProcessSession(params: {
+  sandboxId: string;
+  sessionId: string;
+}): Promise<void> {
+  await toolboxJson<void>({
+    sandboxId: params.sandboxId,
+    path: "process/session",
+    method: "POST",
+    body: {
+      sessionId: params.sessionId,
+    },
+  });
+}
+
+export async function getProcessSession(params: {
+  sandboxId: string;
+  sessionId: string;
+}): Promise<Record<string, unknown>> {
+  const result = await toolboxJson<Record<string, unknown> | null>({
+    sandboxId: params.sandboxId,
+    path: `process/session/${encodeURIComponent(params.sessionId)}`,
+  });
+  return asObject(result) ?? {};
+}
+
+export async function deleteProcessSession(params: {
+  sandboxId: string;
+  sessionId: string;
+}): Promise<void> {
+  await toolboxJson<void>({
+    sandboxId: params.sandboxId,
+    path: `process/session/${encodeURIComponent(params.sessionId)}`,
+    method: "DELETE",
+  });
+}
+
+export async function executeSessionCommand(params: {
+  sandboxId: string;
+  sessionId: string;
+  command: string;
+  runAsync?: boolean;
+  suppressInputEcho?: boolean;
+}): Promise<{
+  commandId: string;
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+  output?: string;
+}> {
+  const payload = await toolboxJson<Record<string, unknown> | null>({
+    sandboxId: params.sandboxId,
+    path: `process/session/${encodeURIComponent(params.sessionId)}/exec`,
+    method: "POST",
+    body: {
+      command: params.command,
+      runAsync: params.runAsync ?? true,
+      suppressInputEcho: params.suppressInputEcho ?? false,
+    },
+  });
+
+  const commandId = extractCommandId(payload);
+  if (!commandId) {
+    throw new DaytonaRequestError(
+      "Session command started but command identifier is missing.",
+      {
+        endpoint: `toolbox:process/session/${params.sessionId}/exec`,
+      },
+    );
+  }
+
+  const streams = extractStreams(payload);
+  return {
+    commandId,
+    exitCode: extractExitCode(payload),
+    stdout: streams.stdout,
+    stderr: streams.stderr,
+    output: streams.output,
+  };
+}
+
+export async function getSessionCommand(params: {
+  sandboxId: string;
+  sessionId: string;
+  commandId: string;
+}): Promise<{
+  commandId?: string;
+  exitCode?: number;
+  running: boolean;
+}> {
+  const payload = await toolboxJson<Record<string, unknown> | null>({
+    sandboxId: params.sandboxId,
+    path: `process/session/${encodeURIComponent(
+      params.sessionId,
+    )}/command/${encodeURIComponent(params.commandId)}`,
+  });
+  const record = asObject(payload) ?? {};
+  const merged = mergeCommandRecord(record);
+  const state = pickString(merged, ["state", "status"])?.toLowerCase();
+  const exitCode = extractExitCode(merged);
+  const explicitRunning = merged.running;
+  const running =
+    typeof explicitRunning === "boolean"
+      ? explicitRunning
+      : exitCode === undefined &&
+        state !== "done" &&
+        state !== "completed" &&
+        state !== "finished" &&
+        state !== "failed" &&
+        state !== "error" &&
+        state !== "canceled" &&
+        state !== "cancelled";
+
+  return {
+    commandId: extractCommandId(merged),
+    exitCode,
+    running,
+  };
+}
+
+export async function getSessionCommandLogs(params: {
+  sandboxId: string;
+  sessionId: string;
+  commandId: string;
+}): Promise<SessionCommandStreams> {
+  const payload = await toolboxJson<unknown>({
+    sandboxId: params.sandboxId,
+    path: `process/session/${encodeURIComponent(
+      params.sessionId,
+    )}/command/${encodeURIComponent(params.commandId)}/logs`,
+  });
+  return extractStreams(payload);
+}
+
+export async function sendSessionCommandInput(params: {
+  sandboxId: string;
+  sessionId: string;
+  commandId: string;
+  data: string;
+}): Promise<void> {
+  await toolboxJson<void>({
+    sandboxId: params.sandboxId,
+    path: `process/session/${encodeURIComponent(
+      params.sessionId,
+    )}/command/${encodeURIComponent(params.commandId)}/input`,
+    method: "POST",
+    body: {
+      data: params.data,
+    },
+  });
+}
+
 type PreviewLinkResponse = {
   url: string;
   token?: string;
@@ -767,9 +1162,23 @@ export async function getPreviewLink(params: {
   sandboxId: string;
   port: number;
 }): Promise<PreviewLinkResponse> {
-  return await daytonaRequest<PreviewLinkResponse>({
-    path: `/sandbox/${encodeURIComponent(params.sandboxId)}/preview-link/${params.port}`,
-  });
+  const candidates = [
+    `/sandbox/${encodeURIComponent(params.sandboxId)}/ports/${params.port}/preview-url`,
+    `/workspace/${encodeURIComponent(params.sandboxId)}/ports/${params.port}/preview-url`,
+  ];
+
+  let lastError: unknown;
+  for (const path of candidates) {
+    try {
+      return await daytonaRequest<PreviewLinkResponse>({
+        path,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("Unable to create preview URL.");
 }
 
 export async function getSignedPreviewLink(params: {
@@ -777,21 +1186,24 @@ export async function getSignedPreviewLink(params: {
   port: number;
   expiresInSeconds?: number;
 }): Promise<PreviewLinkResponse> {
-  const candidates: Array<{ path: string; method?: RequestMethod; body?: unknown }> = [
+  const candidates: Array<{
+    path: string;
+    method?: RequestMethod;
+    body?: unknown;
+    query?: Record<string, string | number | undefined>;
+  }> = [
     {
-      path: `/sandbox/${encodeURIComponent(params.sandboxId)}/preview-link/${params.port}/signed`,
-      method: "POST",
-      body: { expiresInSeconds: params.expiresInSeconds ?? 3600 },
+      path: `/sandbox/${encodeURIComponent(params.sandboxId)}/ports/${params.port}/signed-preview-url`,
+      method: "GET",
+      query: { expiresInSeconds: params.expiresInSeconds ?? 3600 },
     },
     {
-      path: `/sandbox/${encodeURIComponent(params.sandboxId)}/preview-link/${params.port}/signed-url`,
-      method: "POST",
-      body: { expiresInSeconds: params.expiresInSeconds ?? 3600 },
+      path: `/sandbox/${encodeURIComponent(params.sandboxId)}/ports/${params.port}/preview-url`,
+      method: "GET",
     },
     {
-      path: `/sandbox/${encodeURIComponent(params.sandboxId)}/preview/${params.port}/signed`,
-      method: "POST",
-      body: { expiresInSeconds: params.expiresInSeconds ?? 3600 },
+      path: `/workspace/${encodeURIComponent(params.sandboxId)}/ports/${params.port}/preview-url`,
+      method: "GET",
     },
   ];
 
@@ -802,6 +1214,7 @@ export async function getSignedPreviewLink(params: {
         path: candidate.path,
         method: candidate.method,
         body: candidate.body,
+        query: candidate.query,
       });
     } catch (error) {
       lastError = error;

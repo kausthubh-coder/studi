@@ -1,0 +1,242 @@
+{
+  "suiteName": "lab-smoke-suite",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/lab-smoke.json --userId dev-user",
+  "generatedAt": 1771978514438,
+  "totalRuns": 1,
+  "runs": [
+    {
+      "runId": "2026-02-25T00-14-50-912Z-9aai5c",
+      "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/lab-smoke.json --userId dev-user",
+      "userId": "dev-user",
+      "threadId": "m570ft9m7p66s3ww55egm2ejk981vsex",
+      "agentName": "studi",
+      "prompt": "I want to learn React. Start lab mode, explain the goal, then run a quick sandbox check command and inspect files.",
+      "promptHash": "94731486a0b1254a",
+      "modelLabel": "default",
+      "startedAt": 1771978490913,
+      "endedAt": 1771978514432,
+      "totalDurationMs": 23519,
+      "firstAssistantEventMs": 23519,
+      "actionResultText": "The sandbox is returning silent responses — it may need a moment to fully boot. Here's what I'd like to do next to get us unblocked:\n\n---\n\n### ✅ Next Step — Pick your starting point:\n\nWhile the sandbox warms up, tell me which you'd prefer:\n\n> **A)** 🚀 I scaffold a React app with Vite right now and we build a counter component together (great for hands-on starters)\n>\n> **B)** 📖 Walk me through React concepts first with interactive visuals, then we code (great for conceptual learners)\n\nAlso — **do you have any React experience at all**, or is this completely from scratch? That'll help me pace things perfectly for you! 🎯",
+      "actionResultTextHash": "4b0c70dca2247518",
+      "messageCount": 12,
+      "newMessageCount": 12,
+      "usage": {
+        "promptTokens": 0,
+        "completionTokens": 0,
+        "totalTokens": 0
+      },
+      "tools": [
+        {
+          "toolCallId": "toolu_bdrk_01E4bhRzPGUDqaPXUWk6WGUk",
+          "toolName": "create_lab",
+          "startedAt": 1771978490913,
+          "endedAt": 1771978493217.087,
+          "durationMs": 2304.0869140625,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "active",
+          "outputSummary": "Lab is active. I will now use sandbox tools directly and report exact command/file results."
+        },
+        {
+          "toolCallId": "toolu_01E73L1ify5azYVBUJBq62j6",
+          "toolName": "run",
+          "startedAt": 1771978490913,
+          "endedAt": 1771978496275.8574,
+          "durationMs": 5362.857421875,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        },
+        {
+          "toolCallId": "toolu_01JLkW8wLVSqTNP2r4dFScJU",
+          "toolName": "glob",
+          "startedAt": 1771978490913,
+          "endedAt": 1771978496275.8574,
+          "durationMs": 5362.857421875,
+          "durationEstimated": true,
+          "status": "error",
+          "outputStatus": "failed",
+          "outputSummary": "glob failed: Cannot read properties of null (reading 'length')",
+          "errorCategory": "unknown",
+          "retriable": false,
+          "error": "Cannot read properties of null (reading 'length')"
+        },
+        {
+          "toolCallId": "toolu_bdrk_01SFpy4xAT5FMLYZZRaZTtfi",
+          "toolName": "run",
+          "startedAt": 1771978490913,
+          "endedAt": 1771978498042.8818,
+          "durationMs": 7129.8818359375,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        },
+        {
+          "toolCallId": "toolu_bdrk_019BVhhi51ukSgR5YFryrLBY",
+          "toolName": "run",
+          "startedAt": 1771978490913,
+          "endedAt": 1771978501330.7888,
+          "durationMs": 10417.788818359375,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        },
+        {
+          "toolCallId": "toolu_bdrk_01Phv3UYFwFfqsKC5XXMdaMo",
+          "toolName": "run",
+          "startedAt": 1771978490913,
+          "endedAt": 1771978507380.5881,
+          "durationMs": 16467.588134765625,
+          "durationEstimated": true,
+          "status": "success",
+          "outputStatus": "success",
+          "outputSummary": "Command finished with exit code -1."
+        }
+      ],
+      "timeline": [
+        {
+          "at": 1771978490695.7493,
+          "relativeMs": 0,
+          "order": 0,
+          "stepOrder": 0,
+          "messageId": "ks7egj87jn9k3xdpyd79t8pjeh81v6ve",
+          "kind": "user",
+          "detail": "I want to learn React. Start lab mode, explain the goal, then run a quick sandbox check command and inspect files."
+        },
+        {
+          "at": 1771978493217.087,
+          "relativeMs": 2304.0869140625,
+          "order": 0,
+          "stepOrder": 2,
+          "messageId": "ks7crk9hymbd54et72b6yd0zhx81t2kc",
+          "kind": "tool_result",
+          "detail": "Lab is active. I will now use sandbox tools directly and report exact command/file results.",
+          "toolName": "create_lab",
+          "toolCallId": "toolu_bdrk_01E4bhRzPGUDqaPXUWk6WGUk",
+          "status": "success"
+        },
+        {
+          "at": 1771978496275.8574,
+          "relativeMs": 5362.857421875,
+          "order": 0,
+          "stepOrder": 4,
+          "messageId": "ks73qatbvdrpxx75hnh23n864h81tb0s",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_01E73L1ify5azYVBUJBq62j6",
+          "status": "success"
+        },
+        {
+          "at": 1771978496275.8574,
+          "relativeMs": 5362.857421875,
+          "order": 0,
+          "stepOrder": 4,
+          "messageId": "ks73qatbvdrpxx75hnh23n864h81tb0s",
+          "kind": "tool_result",
+          "detail": "Cannot read properties of null (reading 'length')",
+          "toolName": "glob",
+          "toolCallId": "toolu_01JLkW8wLVSqTNP2r4dFScJU",
+          "status": "error"
+        },
+        {
+          "at": 1771978498042.8818,
+          "relativeMs": 7129.8818359375,
+          "order": 0,
+          "stepOrder": 6,
+          "messageId": "ks7b3anjt5tnb15ep0a25wc8rn81tnyb",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_bdrk_01SFpy4xAT5FMLYZZRaZTtfi",
+          "status": "success"
+        },
+        {
+          "at": 1771978501330.7888,
+          "relativeMs": 10417.788818359375,
+          "order": 0,
+          "stepOrder": 8,
+          "messageId": "ks7ek1knjbchtdq76hhz3s2r8s81vv48",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_bdrk_019BVhhi51ukSgR5YFryrLBY",
+          "status": "success"
+        },
+        {
+          "at": 1771978507380.5881,
+          "relativeMs": 16467.588134765625,
+          "order": 0,
+          "stepOrder": 10,
+          "messageId": "ks712m56fsw45r0y79r89jq61d81tzs8",
+          "kind": "tool_result",
+          "detail": "Command finished with exit code -1.",
+          "toolName": "run",
+          "toolCallId": "toolu_bdrk_01Phv3UYFwFfqsKC5XXMdaMo",
+          "status": "success"
+        },
+        {
+          "at": 1771978514432,
+          "relativeMs": 23519,
+          "messageId": "action-result",
+          "kind": "assistant_text",
+          "detail": "The sandbox is returning silent responses — it may need a moment to fully boot. Here's what I'd like to do next to get..."
+        }
+      ],
+      "spark": {
+        "calls": 0,
+        "failures": 0,
+        "totalDurationMs": 0
+      },
+      "lab": {
+        "calls": 6,
+        "failures": 1,
+        "createLabCalls": 1,
+        "archiveLabCalls": 0,
+        "runCalls": 4,
+        "globCalls": 1,
+        "hadActivation": true
+      },
+      "assertionFailures": [
+        "Tool 'glob' failed (toolu_01JLkW8wLVSqTNP2r4dFScJU): Cannot read properties of null (reading 'length')"
+      ],
+      "sparkArtifacts": [],
+      "sceneFiles": []
+    }
+  ],
+  "caseSummaries": [
+    {
+      "runId": "2026-02-25T00-14-50-912Z-9aai5c",
+      "userId": "dev-user",
+      "threadId": "m570ft9m7p66s3ww55egm2ejk981vsex",
+      "promptHash": "94731486a0b1254a",
+      "modelLabel": "default",
+      "totalDurationMs": 23519,
+      "firstAssistantEventMs": 23519,
+      "totalTokens": 0,
+      "sparkFailures": 0,
+      "labFailures": 1,
+      "assertionFailures": 1,
+      "responseHash": "4b0c70dca2247518"
+    }
+  ],
+  "comparisons": [
+    {
+      "promptHash": "94731486a0b1254a",
+      "runs": 1,
+      "durationMs": {
+        "min": 23519,
+        "max": 23519,
+        "avg": 23519
+      },
+      "sparkFailures": 0,
+      "labFailures": 1,
+      "assertionFailures": 1,
+      "distinctResponseHashes": 1
+    }
+  ]
+}

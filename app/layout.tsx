@@ -3,6 +3,7 @@ import { DM_Serif_Display, Plus_Jakarta_Sans, Source_Serif_4 } from "next/font/g
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
+import "@xterm/xterm/css/xterm.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 

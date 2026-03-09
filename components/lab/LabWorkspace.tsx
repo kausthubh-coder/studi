@@ -11,9 +11,10 @@ import {
   type ComponentType,
 } from "react";
 import { api } from "@/convex/_generated/api";
-import { LabSidebar } from "./LabSidebar";
+import { extractPreviewPortCandidates } from "@/lib/lab/preview";
 import { LabEditorHeader } from "./LabEditorHeader";
-import { LabTerminal } from "./LabTerminal";
+import { LabPtyTerminal } from "./LabPtyTerminal";
+import { LabSidebar } from "./LabSidebar";
 
 type MonacoEditorProps = {
   height?: string | number;
@@ -48,15 +49,90 @@ type FileEntry = {
   modTime: string;
 };
 
+type LabTab = "terminal" | "preview";
+
 type PersistedState = {
   currentPath?: string;
   selectedFilePath?: string;
-  commandInput?: string;
-  previewPort?: number;
+  activeTab?: LabTab;
+  activePreviewPort?: number;
+  terminalSessionId?: string;
 };
 
 function getStorageKey(threadId: string): string {
   return `studi.lab.workspace.${threadId}`;
+}
+
+const SYSTEM_ROOT_PREFIXES = [
+  "/bin",
+  "/boot",
+  "/dev",
+  "/etc",
+  "/home",
+  "/lib",
+  "/lib64",
+  "/media",
+  "/mnt",
+  "/opt",
+  "/proc",
+  "/root",
+  "/run",
+  "/sbin",
+  "/srv",
+  "/sys",
+  "/tmp",
+  "/usr",
+  "/var",
+];
+
+function toWorkspacePath(value?: string | null): string | null {
+  const raw = (value ?? "").trim();
+  if (!raw || raw === "." || raw === "/") {
+    return "workspace";
+  }
+
+  const normalized = raw.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!normalized) {
+    return "workspace";
+  }
+
+  if (normalized === "/workspace") {
+    return "workspace";
+  }
+  if (normalized.startsWith("/workspace/")) {
+    return normalized.slice(1);
+  }
+
+  if (normalized.startsWith("/")) {
+    return null;
+  }
+
+  const relative = normalized.replace(/^\.\/+/, "");
+  if (!relative || relative === ".") {
+    return "workspace";
+  }
+  if (relative === "workspace" || relative.startsWith("workspace/")) {
+    return relative;
+  }
+  if (relative.includes("..")) {
+    return null;
+  }
+  return `workspace/${relative}`;
+}
+
+function shouldResetPersistedPath(value?: string | null): boolean {
+  const raw = (value ?? "").trim();
+  if (!raw) {
+    return false;
+  }
+  if (raw === "/" || raw === "\\") {
+    return true;
+  }
+  const normalized = raw.replace(/\\/g, "/");
+  if (SYSTEM_ROOT_PREFIXES.some((prefix) => normalized === prefix)) {
+    return true;
+  }
+  return SYSTEM_ROOT_PREFIXES.some((prefix) => normalized.startsWith(`${prefix}/`));
 }
 
 function pickLanguage(path: string): string {
@@ -69,41 +145,57 @@ function pickLanguage(path: string): string {
   if (lower.endsWith(".md")) return "markdown";
   if (lower.endsWith(".py")) return "python";
   if (lower.endsWith(".sh")) return "shell";
+  if (lower.endsWith(".rs")) return "rust";
   return "plaintext";
+}
+
+function withCacheBust(path: string, nonce: number) {
+  const joiner = path.includes("?") ? "&" : "?";
+  return `${path}${joiner}ts=${nonce}`;
 }
 
 export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const listFilesAction = useAction(api.labIde.listLabFiles);
   const readFileAction = useAction(api.labIde.readLabFile);
   const writeFileAction = useAction(api.labIde.writeLabFile);
-  const runCommandAction = useAction(api.labIde.runLabCommand);
-  const getPreviewLinkAction = useAction(api.labIde.getLabPreviewLink);
-  const getTerminalLinkAction = useAction(api.labIde.getLabTerminalLink);
+  const getPreviewDescriptorAction = useAction(
+    api.labIde.getLabPreviewProxyDescriptor,
+  );
 
   const [currentPath, setCurrentPath] = useState("workspace");
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [editorValue, setEditorValue] = useState("");
+  const [baselineValue, setBaselineValue] = useState("");
   const [isBinary, setIsBinary] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isSavingFile, setIsSavingFile] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [commandInput, setCommandInput] = useState("pwd && ls");
-  const [isRunningCommand, setIsRunningCommand] = useState(false);
-  const [terminalOutput, setTerminalOutput] = useState<string>("");
-  const [lastExitCode, setLastExitCode] = useState<number | null>(null);
-  const [previewPortInput, setPreviewPortInput] = useState("3000");
+  const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
+  const [workspaceMissing, setWorkspaceMissing] = useState(false);
+  const [activeTab, setActiveTab] = useState<LabTab>("terminal");
+  const [terminalSessionId, setTerminalSessionId] = useState<string | null>(
+    null,
+  );
+  const [detectedPreviewPorts, setDetectedPreviewPorts] = useState<number[]>([]);
+  const [dismissedPreviewPorts, setDismissedPreviewPorts] = useState<number[]>(
+    [],
+  );
+  const [pendingPreviewPort, setPendingPreviewPort] = useState<number | null>(
+    null,
+  );
+  const [activePreviewPort, setActivePreviewPort] = useState<number | null>(null);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [isOpeningPreview, setIsOpeningPreview] = useState(false);
-  const [isOpeningWebTerminal, setIsOpeningWebTerminal] = useState(false);
-
+  const [previewNonce, setPreviewNonce] = useState(0);
   const initialHydratedRef = useRef(false);
   const initialSelectedFileRef = useRef<string | null>(null);
-  const [baselineValue, setBaselineValue] = useState("");
+
   const isDirty = selectedFilePath !== null && editorValue !== baselineValue;
 
-  // Hydrate persisted state
   useEffect(() => {
     if (initialHydratedRef.current) return;
     initialHydratedRef.current = true;
@@ -113,43 +205,86 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
 
     try {
       const parsed = JSON.parse(raw) as PersistedState;
-      if (parsed.currentPath) setCurrentPath(parsed.currentPath);
+      const persistedPath = shouldResetPersistedPath(parsed.currentPath)
+        ? "workspace"
+        : toWorkspacePath(parsed.currentPath);
+      setCurrentPath(persistedPath ?? "workspace");
+
       if (parsed.selectedFilePath) {
-        setSelectedFilePath(parsed.selectedFilePath);
-        initialSelectedFileRef.current = parsed.selectedFilePath;
+        const selectedPath = toWorkspacePath(parsed.selectedFilePath);
+        if (selectedPath) {
+          setSelectedFilePath(selectedPath);
+          initialSelectedFileRef.current = selectedPath;
+        }
       }
-      if (parsed.commandInput) setCommandInput(parsed.commandInput);
-      if (typeof parsed.previewPort === "number") {
-        setPreviewPortInput(String(parsed.previewPort));
+
+      if (parsed.activeTab === "terminal" || parsed.activeTab === "preview") {
+        setActiveTab(parsed.activeTab);
+      }
+      if (typeof parsed.activePreviewPort === "number") {
+        setActivePreviewPort(parsed.activePreviewPort);
+      }
+      if (parsed.terminalSessionId) {
+        setTerminalSessionId(parsed.terminalSessionId);
       }
     } catch {
       /* ignore */
     }
   }, [threadId]);
 
-  // Persist state
   useEffect(() => {
     const payload: PersistedState = {
       currentPath,
       selectedFilePath: selectedFilePath ?? undefined,
-      commandInput,
-      previewPort: Number.parseInt(previewPortInput, 10) || 3000,
+      activeTab,
+      activePreviewPort: activePreviewPort ?? undefined,
+      terminalSessionId: terminalSessionId ?? undefined,
     };
     window.localStorage.setItem(
       getStorageKey(threadId),
       JSON.stringify(payload),
     );
-  }, [threadId, currentPath, selectedFilePath, commandInput, previewPortInput]);
+  }, [activePreviewPort, activeTab, currentPath, selectedFilePath, terminalSessionId, threadId]);
 
   const refreshEntries = useCallback(
     async (pathOverride?: string) => {
-      const targetPath = pathOverride ?? currentPath;
+      const resolvedPath = toWorkspacePath(pathOverride ?? currentPath);
+      if (!resolvedPath) {
+        setWorkspaceError("Only workspace paths are supported.");
+        setCurrentPath("workspace");
+        setEntries([]);
+        setWorkspaceMissing(false);
+        return;
+      }
+
       setIsLoadingFiles(true);
       setWorkspaceError(null);
+      setWorkspaceMissing(false);
+
       try {
-        const response = await listFilesAction({ threadId, path: targetPath });
+        const response = await listFilesAction({
+          threadId,
+          path: resolvedPath,
+        });
+
         if (response.status === "failed") {
-          setWorkspaceError(response.summary);
+          const hint = response.error.hint ? ` ${response.error.hint}` : "";
+          const endpoint = response.error.endpoint
+            ? ` [${response.error.endpoint}]`
+            : "";
+          setWorkspaceError(`${response.summary}${hint}${endpoint}`);
+          return;
+        }
+
+        if (response.workspaceMissing) {
+          setCurrentPath("workspace");
+          setEntries([]);
+          setSelectedFilePath(null);
+          setEditorValue("");
+          setBaselineValue("");
+          setIsBinary(false);
+          setIsTruncated(false);
+          setWorkspaceMissing(true);
           return;
         }
 
@@ -158,7 +293,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           return a.name.localeCompare(b.name);
         });
 
-        setCurrentPath(response.path);
+        setCurrentPath(toWorkspacePath(response.path) ?? "workspace");
         setEntries(sorted);
       } finally {
         setIsLoadingFiles(false);
@@ -169,17 +304,24 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
 
   const openFile = useCallback(
     async (path: string) => {
+      const safePath = toWorkspacePath(path);
+      if (!safePath) {
+        setWorkspaceError("Only workspace files can be opened.");
+        return;
+      }
+
       setIsLoadingFile(true);
       setWorkspaceError(null);
       try {
         const response = await readFileAction({
           threadId,
-          path,
+          path: safePath,
           offset: 1,
           limit: 50_000,
         });
         if (response.status === "failed") {
-          setWorkspaceError(response.summary);
+          const hint = response.error.hint ? ` ${response.error.hint}` : "";
+          setWorkspaceError(`${response.summary}${hint}`);
           return;
         }
         setSelectedFilePath(response.path);
@@ -205,33 +347,48 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     void openFile(initialPath);
   }, [openFile]);
 
-  const runCommand = useCallback(async () => {
-    const command = commandInput.trim();
-    if (!command) return;
+  const discardEditorState = useCallback(() => {
+    setSelectedFilePath(null);
+    setEditorValue("");
+    setBaselineValue("");
+    setIsBinary(false);
+    setIsTruncated(false);
+  }, []);
 
-    setIsRunningCommand(true);
-    setWorkspaceError(null);
-    try {
-      const response = await runCommandAction({
-        threadId,
-        command,
-        cwd: currentPath,
-        timeoutSeconds: 120,
-      });
+  const confirmDiscardUnsavedChanges = useCallback(() => {
+    if (!isDirty) return true;
+    return window.confirm("You have unsaved changes. Discard them?");
+  }, [isDirty]);
 
-      if (response.status === "failed") {
-        setTerminalOutput(`${response.summary}\n${response.error.message}`);
-        setLastExitCode(null);
+  const handleNavigate = useCallback(
+    (path: string) => {
+      const safePath = toWorkspacePath(path);
+      if (!safePath) {
+        setWorkspaceError("Navigation is limited to workspace.");
         return;
       }
+      if (!confirmDiscardUnsavedChanges()) return;
+      if (isDirty) {
+        discardEditorState();
+      }
+      void refreshEntries(safePath);
+    },
+    [confirmDiscardUnsavedChanges, discardEditorState, isDirty, refreshEntries],
+  );
 
-      setLastExitCode(response.exitCode ?? 0);
-      setTerminalOutput(response.output || "(no output)");
-      await refreshEntries(currentPath);
-    } finally {
-      setIsRunningCommand(false);
-    }
-  }, [commandInput, currentPath, refreshEntries, runCommandAction, threadId]);
+  const handleOpenFile = useCallback(
+    (path: string) => {
+      const safePath = toWorkspacePath(path);
+      if (!safePath) {
+        setWorkspaceError("Only workspace files can be opened.");
+        return;
+      }
+      if (safePath === selectedFilePath) return;
+      if (!confirmDiscardUnsavedChanges()) return;
+      void openFile(safePath);
+    },
+    [confirmDiscardUnsavedChanges, openFile, selectedFilePath],
+  );
 
   const saveFile = useCallback(async () => {
     if (!selectedFilePath || isBinary || isTruncated) return;
@@ -245,7 +402,8 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
         content: editorValue,
       });
       if (response.status === "failed") {
-        setWorkspaceError(response.summary);
+        const hint = response.error.hint ? ` ${response.error.hint}` : "";
+        setWorkspaceError(`${response.summary}${hint}`);
         return;
       }
       setBaselineValue(editorValue);
@@ -264,11 +422,10 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     writeFileAction,
   ]);
 
-  // Ctrl+S / Cmd+S keyboard shortcut
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
+    const handler = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "s") {
+        event.preventDefault();
         void saveFile();
       }
     };
@@ -276,97 +433,82 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [saveFile]);
 
-  const discardEditorState = useCallback(() => {
-    setSelectedFilePath(null);
-    setEditorValue("");
-    setBaselineValue("");
-    setIsBinary(false);
-    setIsTruncated(false);
-  }, []);
+  const openPreviewForPort = useCallback(
+    async (port: number) => {
+      setIsOpeningPreview(true);
+      setPreviewError(null);
+      setWorkspaceNotice(null);
 
-  const confirmDiscardUnsavedChanges = useCallback(() => {
-    if (!isDirty) return true;
-    return window.confirm("You have unsaved changes. Discard them?");
-  }, [isDirty]);
+      try {
+        const response = await getPreviewDescriptorAction({
+          threadId,
+          port,
+        });
 
-  const handleNavigate = useCallback(
-    (path: string) => {
-      if (!confirmDiscardUnsavedChanges()) return;
-      if (isDirty) {
-        discardEditorState();
+        if (response.status === "failed") {
+          const hint = response.error.hint ? ` ${response.error.hint}` : "";
+          setPreviewError(`${response.summary}${hint}`);
+          return;
+        }
+
+        setActivePreviewPort(port);
+        setPendingPreviewPort((current) => (current === port ? null : current));
+        setPreviewPath(response.proxyPath);
+        setPreviewNonce(Date.now());
+        setActiveTab("preview");
+      } finally {
+        setIsOpeningPreview(false);
       }
-      void refreshEntries(path);
     },
-    [confirmDiscardUnsavedChanges, discardEditorState, isDirty, refreshEntries],
+    [getPreviewDescriptorAction, threadId],
   );
 
-  const handleOpenFile = useCallback(
-    (path: string) => {
-      if (path === selectedFilePath) return;
-      if (!confirmDiscardUnsavedChanges()) return;
-      void openFile(path);
-    },
-    [confirmDiscardUnsavedChanges, openFile, selectedFilePath],
-  );
-
-  const handleRefresh = useCallback(() => {
-    void refreshEntries();
-  }, [refreshEntries]);
-
-  const handleSave = useCallback(() => {
-    void saveFile();
-  }, [saveFile]);
-
-  const handleRunCommand = useCallback(() => {
-    void runCommand();
-  }, [runCommand]);
-
-  const openWebTerminal = useCallback(async () => {
-    setIsOpeningWebTerminal(true);
-    setWorkspaceError(null);
-    try {
-      const response = await getTerminalLinkAction({
-        threadId,
-        expiresInSeconds: 3600,
-      });
-
-      if (response.status === "failed") {
-        setWorkspaceError(response.summary);
-        return;
-      }
-
-      window.open(response.url, "_blank", "noopener,noreferrer");
-    } finally {
-      setIsOpeningWebTerminal(false);
-    }
-  }, [getTerminalLinkAction, threadId]);
-
-  const openPreview = useCallback(async () => {
-    const parsedPort = Number.parseInt(previewPortInput.trim(), 10);
-    if (!Number.isFinite(parsedPort) || parsedPort < 3000 || parsedPort > 9999) {
-      setWorkspaceError("Preview port must be between 3000 and 9999.");
+  const handleTerminalOutput = useCallback((chunk: string) => {
+    const ports = extractPreviewPortCandidates(chunk);
+    if (ports.length === 0) {
       return;
     }
 
-    setIsOpeningPreview(true);
-    setWorkspaceError(null);
-    try {
-      const response = await getPreviewLinkAction({
-        threadId,
-        port: parsedPort,
-        expiresInSeconds: 3600,
-      });
+    setDetectedPreviewPorts((previous) =>
+      Array.from(new Set([...previous, ...ports])).sort((a, b) => a - b),
+    );
 
-      if (response.status === "failed") {
-        setWorkspaceError(response.summary);
-        return;
+    setPendingPreviewPort((previous) => {
+      if (previous !== null) {
+        return previous;
       }
+      const next = ports.find((port) => !dismissedPreviewPorts.includes(port));
+      return next ?? null;
+    });
+  }, [dismissedPreviewPorts]);
 
-      window.open(response.url, "_blank", "noopener,noreferrer");
-    } finally {
-      setIsOpeningPreview(false);
+  useEffect(() => {
+    setDetectedPreviewPorts([]);
+    setDismissedPreviewPorts([]);
+    setPendingPreviewPort(null);
+    setActivePreviewPort(null);
+    setPreviewPath(null);
+    setPreviewError(null);
+    setPreviewNonce(0);
+    setTerminalSessionId(null);
+  }, [threadId]);
+
+  const dismissPreviewPrompt = useCallback(() => {
+    if (pendingPreviewPort === null) {
+      return;
     }
-  }, [getPreviewLinkAction, previewPortInput, threadId]);
+    setDismissedPreviewPorts((previous) =>
+      Array.from(new Set([...previous, pendingPreviewPort])),
+    );
+    setPendingPreviewPort(null);
+  }, [pendingPreviewPort]);
+
+  const previewSrc = useMemo(() => {
+    if (!previewPath) {
+      return null;
+    }
+    return withCacheBust(previewPath, previewNonce);
+  }, [previewNonce, previewPath]);
 
   const editorLanguage = useMemo(
     () => (selectedFilePath ? pickLanguage(selectedFilePath) : "plaintext"),
@@ -382,7 +524,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
         isLoadingFiles={isLoadingFiles}
         onNavigate={handleNavigate}
         onOpenFile={handleOpenFile}
-        onRefresh={handleRefresh}
+        onRefresh={() => void refreshEntries()}
       />
 
       <div className="lab-main">
@@ -392,11 +534,31 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           isSaving={isSavingFile}
           isBinary={isBinary}
           isTruncated={isTruncated}
-          onSave={handleSave}
+          onSave={() => void saveFile()}
         />
 
         <div style={{ flex: 1, minHeight: 0 }}>
-          {!selectedFilePath ? (
+          {workspaceMissing ? (
+            <div className="lab-workspace-missing">
+              <p className="lab-workspace-missing-title">
+                Workspace directory not found
+              </p>
+              <p className="lab-workspace-missing-copy">
+                This lab is restricted to `workspace`. Refresh after the lab
+                creates the folder.
+              </p>
+              <div className="lab-workspace-missing-actions">
+                <button
+                  type="button"
+                  className="lab-workspace-missing-btn"
+                  onClick={() => void refreshEntries("workspace")}
+                  disabled={isLoadingFiles}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          ) : !selectedFilePath ? (
             <div className="flex h-full items-center justify-center text-xs text-fg-faint">
               Select a file to open it.
             </div>
@@ -413,9 +575,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
               height="100%"
               language={editorLanguage}
               value={editorValue}
-              onChange={(value: string | undefined) =>
-                setEditorValue(value ?? "")
-              }
+              onChange={(value: string | undefined) => setEditorValue(value ?? "")}
               theme="vs-dark"
               options={{
                 minimap: { enabled: false },
@@ -430,51 +590,121 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           )}
         </div>
 
-        <div className="lab-preview-toolbar">
-          <label className="lab-preview-label" htmlFor="lab-preview-port">
-            Preview port
-          </label>
-          <input
-            id="lab-preview-port"
-            className="lab-preview-input"
-            value={previewPortInput}
-            onChange={(e) => setPreviewPortInput(e.target.value)}
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="3000"
-          />
+        {pendingPreviewPort !== null ? (
+          <div className="lab-info-bar">
+            Detected an app on port {pendingPreviewPort}. Open preview?
+            <button
+              type="button"
+              className="lab-preview-inline-btn"
+              onClick={() => void openPreviewForPort(pendingPreviewPort)}
+              disabled={isOpeningPreview}
+            >
+              {isOpeningPreview ? "Opening..." : "Open Preview"}
+            </button>
+            <button
+              type="button"
+              className="lab-preview-inline-btn"
+              onClick={dismissPreviewPrompt}
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
+
+        <div className="lab-bottom-tabs">
           <button
             type="button"
-            className="lab-preview-btn"
-            disabled={isOpeningPreview}
-            onClick={() => void openPreview()}
+            className="lab-bottom-tab"
+            data-active={activeTab === "terminal"}
+            onClick={() => setActiveTab("terminal")}
           >
-            {isOpeningPreview ? "Opening…" : "Open Preview"}
+            Terminal
+          </button>
+          <button
+            type="button"
+            className="lab-bottom-tab"
+            data-active={activeTab === "preview"}
+            onClick={() => setActiveTab("preview")}
+          >
+            Preview
           </button>
         </div>
 
-        <LabTerminal
-          cwd={currentPath}
-          commandInput={commandInput}
-          onCommandInputChange={setCommandInput}
-          onRunCommand={handleRunCommand}
-          isRunning={isRunningCommand}
-          terminalOutput={terminalOutput}
-          lastExitCode={lastExitCode}
-          onOpenWebTerminal={openWebTerminal}
-          isOpeningWebTerminal={isOpeningWebTerminal}
-        />
+        <div className="lab-bottom-panel">
+          {activeTab === "terminal" ? (
+            <LabPtyTerminal
+              threadId={threadId}
+              sessionId={terminalSessionId}
+              onSessionIdChange={setTerminalSessionId}
+              onOutputChunk={handleTerminalOutput}
+            />
+          ) : null}
 
-        {isTruncated && selectedFilePath && !isBinary && (
+          {activeTab === "preview" ? (
+            <div className="lab-preview-panel">
+              <div className="lab-preview-controls">
+                <span className="lab-preview-label">
+                  {activePreviewPort
+                    ? `Previewing port ${activePreviewPort}`
+                    : detectedPreviewPorts.length > 0
+                      ? `Detected ports: ${detectedPreviewPorts.join(", ")}`
+                      : "No preview port selected"}
+                </span>
+                <button
+                  type="button"
+                  className="lab-preview-btn"
+                  disabled={!activePreviewPort || isOpeningPreview}
+                  onClick={() => {
+                    if (activePreviewPort !== null) {
+                      void openPreviewForPort(activePreviewPort);
+                    }
+                  }}
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {previewSrc ? (
+                <>
+                  <div className="lab-preview-frame-wrap">
+                    <iframe
+                      key={previewSrc}
+                      title="lab-preview"
+                      className="lab-preview-frame"
+                      src={previewSrc}
+                    />
+                  </div>
+                  <div className="lab-preview-fallback-row">
+                    <a
+                      className="lab-preview-fallback-link"
+                      href={previewSrc}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open in new tab
+                    </a>
+                  </div>
+                </>
+              ) : (
+                <div className="lab-preview-empty">
+                  Start a web server in the terminal. When Daytona detects a
+                  previewable port, you will get a prompt to open it here.
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {isTruncated && selectedFilePath && !isBinary ? (
           <div className="lab-warning-bar">
             Large file preview is truncated. Saving is disabled to protect file
             integrity.
           </div>
-        )}
+        ) : null}
 
-        {workspaceError && (
-          <div className="lab-error-bar">{workspaceError}</div>
-        )}
+        {workspaceNotice ? <div className="lab-info-bar">{workspaceNotice}</div> : null}
+        {previewError ? <div className="lab-error-bar">{previewError}</div> : null}
+        {workspaceError ? <div className="lab-error-bar">{workspaceError}</div> : null}
       </div>
     </section>
   );

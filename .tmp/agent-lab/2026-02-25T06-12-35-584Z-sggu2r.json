@@ -1,0 +1,102 @@
+{
+  "runId": "2026-02-25T06-12-35-584Z-sggu2r",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --userId dev-user --threadId m57dcv7xqbgccgebme1pp69jah81tdtr --prompt Generate a first draft plan now using generate_plan_draft. Goal: learn calculus from basics in 6 weeks, 5 hours/week. --pollMs 250 --debugRaw --verbose",
+  "userId": "dev-user",
+  "threadId": "m57dcv7xqbgccgebme1pp69jah81tdtr",
+  "agentName": "studi",
+  "prompt": "Generate a first draft plan now using generate_plan_draft. Goal: learn calculus from basics in 6 weeks, 5 hours/week.",
+  "promptHash": "a8468c1c998a0d19",
+  "startedAt": 1771999955584,
+  "endedAt": 1771999962793,
+  "totalDurationMs": 7209,
+  "firstAssistantEventMs": 7209,
+  "actionResultText": "I don't have a `generate_plan_draft` tool available to me — my current toolset includes:\n\n- `create_spark` – interactive learning artifacts\n- `get_code_spark_context` – inspect code spark attempts\n- `create_lab` – coding sandbox lab\n- `archive_lab` – close a lab\n- `glob` – find files in a lab\n- `run` – run shell commands in a lab\n- `start_plan_mode` – enable plan mode for a thread\n\n---\n\nHere's what I **can** do right now:\n\n✅ **Plan mode is active** (confirmed from the previous step).\n\n📋 Based on your goal — *learn calculus from basics in 6 weeks at 5 hours/week* — I can **outline a structured track for you in text** right here, and we can start working through it session by session in this thread.\n\nWould you like me to:\n1. **Write out a full 6-week calculus track** broken into weekly topics and milestones?\n2. **Start Week 1 right now** with an interactive lesson on limits and foundations?\n\nJust say the word! 🚀",
+  "actionResultTextHash": "ec146933686eba99",
+  "messageCount": 6,
+  "newMessageCount": 2,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [],
+  "timeline": [
+    {
+      "at": 1771999953616.201,
+      "relativeMs": 0,
+      "order": 1,
+      "stepOrder": 0,
+      "messageId": "ks70w59jfhsxhfpw1c833xmm2s81vytc",
+      "kind": "user",
+      "detail": "Generate a first draft plan now using generate_plan_draft. Goal: learn calculus from basics in 6 weeks, 5 hours/week."
+    },
+    {
+      "at": 1771999962793,
+      "relativeMs": 7209,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "I don't have a `generate_plan_draft` tool available to me — my current toolset includes:\n\n- `create_spark` – interactiv..."
+    }
+  ],
+  "spark": {
+    "calls": 0,
+    "failures": 0,
+    "totalDurationMs": 0
+  },
+  "lab": {
+    "calls": 0,
+    "failures": 0,
+    "createLabCalls": 0,
+    "archiveLabCalls": 0,
+    "runCalls": 0,
+    "globCalls": 0,
+    "hadActivation": false
+  },
+  "plan": {
+    "calls": 0,
+    "failures": 0,
+    "startPlanModeCalls": 0,
+    "getPlanContextCalls": 0,
+    "generatePlanDraftCalls": 0,
+    "acceptPlanDraftCalls": 0,
+    "requestPlanChangesCalls": 0,
+    "setPlanItemStatusCalls": 0,
+    "finalSnapshot": {
+      "exists": false
+    }
+  },
+  "assertionFailures": [],
+  "sparkArtifacts": [],
+  "sceneFiles": [],
+  "rawMessages": [
+    {
+      "_creationTime": 1771999953616.201,
+      "_id": "ks70w59jfhsxhfpw1c833xmm2s81vytc",
+      "message": {
+        "content": "Generate a first draft plan now using generate_plan_draft. Goal: learn calculus from basics in 6 weeks, 5 hours/week.",
+        "role": "user"
+      },
+      "order": 1,
+      "status": "success",
+      "stepOrder": 0,
+      "text": "Generate a first draft plan now using generate_plan_draft. Goal: learn calculus from basics in 6 weeks, 5 hours/week.",
+      "threadId": "m57dcv7xqbgccgebme1pp69jah81tdtr",
+      "tool": false,
+      "userId": "dev-user"
+    },
+    {
+      "_creationTime": 1771999953616.2012,
+      "_id": "ks758yw6ksnbf4qvv2exx59ajn81v8e1",
+      "message": {
+        "content": [],
+        "role": "assistant"
+      },
+      "order": 1,
+      "status": "pending",
+      "stepOrder": 1,
+      "threadId": "m57dcv7xqbgccgebme1pp69jah81tdtr",
+      "tool": false,
+      "userId": "dev-user"
+    }
+  ]
+}

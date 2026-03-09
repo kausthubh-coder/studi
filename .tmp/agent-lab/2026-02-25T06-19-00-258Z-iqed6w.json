@@ -1,0 +1,97 @@
+{
+  "runId": "2026-02-25T06-19-00-258Z-iqed6w",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts run --agentName studi-fast --userId dev-user --prompt Call start_plan_mode now for this thread and reply ready. --pollMs 250",
+  "userId": "dev-user",
+  "threadId": "m5753w37n0xwmyz2kjhdsqcwdx81t41x",
+  "agentName": "studi-fast",
+  "prompt": "Call start_plan_mode now for this thread and reply ready.",
+  "promptHash": "991c72fb7dad75ed",
+  "startedAt": 1772000340258,
+  "endedAt": 1772000355665,
+  "totalDurationMs": 15407,
+  "firstAssistantEventMs": 15407,
+  "actionResultText": "Ready. Plan mode started for \"General Learning Track.\" Let's build your learning plan.\n\nWhat’s your main learning goal for this track? (e.g., \"Master Python programming\" or \"Understand calculus concepts\")",
+  "actionResultTextHash": "95e550f88b949d85",
+  "messageCount": 4,
+  "newMessageCount": 4,
+  "usage": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "totalTokens": 0
+  },
+  "tools": [
+    {
+      "toolCallId": "call_03817854",
+      "toolName": "start_plan_mode",
+      "startedAt": 1772000340258,
+      "endedAt": 1772000346782.2432,
+      "durationMs": 6524.2431640625,
+      "durationEstimated": true,
+      "status": "success",
+      "outputStatus": "ok",
+      "outputSummary": "Plan mode is now discovery."
+    }
+  ],
+  "timeline": [
+    {
+      "at": 1772000338548.4404,
+      "relativeMs": 0,
+      "order": 0,
+      "stepOrder": 0,
+      "messageId": "ks750wd39f2kftns8bdv6vg1w181vhn6",
+      "kind": "user",
+      "detail": "Call start_plan_mode now for this thread and reply ready."
+    },
+    {
+      "at": 1772000346782.2432,
+      "relativeMs": 6524.2431640625,
+      "order": 0,
+      "stepOrder": 2,
+      "messageId": "ks7fm0vnb7bw5nyf8yr6yybcz181v9kd",
+      "kind": "tool_result",
+      "detail": "Plan mode is now discovery.",
+      "toolName": "start_plan_mode",
+      "toolCallId": "call_03817854",
+      "status": "success"
+    },
+    {
+      "at": 1772000355665,
+      "relativeMs": 15407,
+      "messageId": "action-result",
+      "kind": "assistant_text",
+      "detail": "Ready. Plan mode started for \"General Learning Track.\" Let's build your learning plan.\n\nWhat’s your main learning goal..."
+    }
+  ],
+  "spark": {
+    "calls": 0,
+    "failures": 0,
+    "totalDurationMs": 0
+  },
+  "lab": {
+    "calls": 0,
+    "failures": 0,
+    "createLabCalls": 0,
+    "archiveLabCalls": 0,
+    "runCalls": 0,
+    "globCalls": 0,
+    "hadActivation": false
+  },
+  "plan": {
+    "calls": 1,
+    "failures": 0,
+    "startPlanModeCalls": 1,
+    "getPlanContextCalls": 0,
+    "generatePlanDraftCalls": 0,
+    "acceptPlanDraftCalls": 0,
+    "requestPlanChangesCalls": 0,
+    "setPlanItemStatusCalls": 0,
+    "finalSnapshot": {
+      "exists": true,
+      "phase": "discovery",
+      "title": "General Learning Track"
+    }
+  },
+  "assertionFailures": [],
+  "sparkArtifacts": [],
+  "sceneFiles": []
+}

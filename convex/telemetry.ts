@@ -102,6 +102,45 @@ const monthlyUsageSummaryReturnsValidator = v.object({
   lastCallAt: v.optional(v.number()),
 });
 
+const threadUsageBreakdownReturnsValidator = v.object({
+  totals: v.object({
+    calls: v.number(),
+    totalTokens: v.number(),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+    reasoningTokens: v.number(),
+    cachedInputTokens: v.number(),
+    estimatedCostUsd: v.number(),
+  }),
+  byModel: v.array(
+    v.object({
+      model: v.string(),
+      provider: v.string(),
+      calls: v.number(),
+      totalTokens: v.number(),
+      inputTokens: v.number(),
+      outputTokens: v.number(),
+      reasoningTokens: v.number(),
+      cachedInputTokens: v.number(),
+      estimatedCostUsd: v.number(),
+      lastCallAt: v.optional(v.number()),
+    }),
+  ),
+  byAgent: v.array(
+    v.object({
+      agentName: v.string(),
+      calls: v.number(),
+      totalTokens: v.number(),
+      inputTokens: v.number(),
+      outputTokens: v.number(),
+      reasoningTokens: v.number(),
+      cachedInputTokens: v.number(),
+      estimatedCostUsd: v.number(),
+      lastCallAt: v.optional(v.number()),
+    }),
+  ),
+});
+
 function readNumericCandidate(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return typeof value === "number" && Number.isFinite(value)
@@ -156,27 +195,7 @@ async function buildThreadObservabilitySummary(
   ctx: QueryCtx,
   args: { userId: string; threadId: string; requireThreadRecord?: boolean },
 ) {
-  let ownerUserId = args.userId;
-  if (args.requireThreadRecord !== false) {
-    const ownedThread = await ctx.db
-      .query("userThreads")
-      .withIndex("by_userId_and_threadId", (q) =>
-        q.eq("userId", args.userId).eq("threadId", args.threadId),
-      )
-      .unique();
-
-    const thread =
-      ownedThread ??
-      (await ctx.db
-        .query("userThreads")
-        .withIndex("by_threadId", (q) => q.eq("threadId", args.threadId))
-        .unique());
-
-    if (!thread) {
-      throw new Error("Thread not found");
-    }
-    ownerUserId = thread.userId;
-  }
+  const ownerUserId = await resolveThreadOwnerUserId(ctx, args);
 
   const usageRows = await ctx.db
     .query("rawUsage")
@@ -249,6 +268,170 @@ async function buildThreadObservabilitySummary(
       voiceFailures,
       lastFailureAt,
     },
+  };
+}
+
+async function resolveThreadOwnerUserId(
+  ctx: QueryCtx,
+  args: { userId: string; threadId: string; requireThreadRecord?: boolean },
+) {
+  if (args.requireThreadRecord === false) {
+    return args.userId;
+  }
+
+  const ownedThread = await ctx.db
+    .query("userThreads")
+    .withIndex("by_userId_and_threadId", (q) =>
+      q.eq("userId", args.userId).eq("threadId", args.threadId),
+    )
+    .unique();
+
+  const thread =
+    ownedThread ??
+    (await ctx.db
+      .query("userThreads")
+      .withIndex("by_threadId", (q) => q.eq("threadId", args.threadId))
+      .unique());
+
+  if (!thread) {
+    throw new Error("Thread not found");
+  }
+
+  return thread.userId;
+}
+
+async function buildThreadUsageBreakdown(
+  ctx: QueryCtx,
+  args: { userId: string; threadId: string; requireThreadRecord?: boolean },
+) {
+  const ownerUserId = await resolveThreadOwnerUserId(ctx, args);
+  const usageRows = await ctx.db
+    .query("rawUsage")
+    .withIndex("by_userId_and_threadId_and_createdAt", (q) =>
+      q.eq("userId", ownerUserId).eq("threadId", args.threadId),
+    )
+    .collect();
+
+  const byModel = new Map<
+    string,
+    {
+      model: string;
+      provider: string;
+      calls: number;
+      totalTokens: number;
+      inputTokens: number;
+      outputTokens: number;
+      reasoningTokens: number;
+      cachedInputTokens: number;
+      estimatedCostUsd: number;
+      lastCallAt?: number;
+    }
+  >();
+  const byAgent = new Map<
+    string,
+    {
+      agentName: string;
+      calls: number;
+      totalTokens: number;
+      inputTokens: number;
+      outputTokens: number;
+      reasoningTokens: number;
+      cachedInputTokens: number;
+      estimatedCostUsd: number;
+      lastCallAt?: number;
+    }
+  >();
+
+  let calls = 0;
+  let totalTokens = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let reasoningTokens = 0;
+  let cachedInputTokens = 0;
+  let estimatedCostUsd = 0;
+
+  for (const row of usageRows) {
+    const rowTotalTokens = row.usage.totalTokens ?? 0;
+    const rowInputTokens = row.usage.inputTokens ?? 0;
+    const rowOutputTokens = row.usage.outputTokens ?? 0;
+    const rowReasoningTokens = row.usage.reasoningTokens ?? 0;
+    const rowCachedInputTokens = row.usage.cachedInputTokens ?? 0;
+    const rowEstimatedCostUsd = extractEstimatedCostUsd(row.providerMetadata);
+    const agentName = row.agentName ?? "unknown";
+
+    calls += 1;
+    totalTokens += rowTotalTokens;
+    inputTokens += rowInputTokens;
+    outputTokens += rowOutputTokens;
+    reasoningTokens += rowReasoningTokens;
+    cachedInputTokens += rowCachedInputTokens;
+    estimatedCostUsd += rowEstimatedCostUsd;
+
+    const modelKey = `${row.provider}::${row.model}`;
+    const modelBucket = byModel.get(modelKey) ?? {
+      model: row.model,
+      provider: row.provider,
+      calls: 0,
+      totalTokens: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 0,
+      estimatedCostUsd: 0,
+      lastCallAt: undefined,
+    };
+    modelBucket.calls += 1;
+    modelBucket.totalTokens += rowTotalTokens;
+    modelBucket.inputTokens += rowInputTokens;
+    modelBucket.outputTokens += rowOutputTokens;
+    modelBucket.reasoningTokens += rowReasoningTokens;
+    modelBucket.cachedInputTokens += rowCachedInputTokens;
+    modelBucket.estimatedCostUsd += rowEstimatedCostUsd;
+    if (!modelBucket.lastCallAt || row.createdAt > modelBucket.lastCallAt) {
+      modelBucket.lastCallAt = row.createdAt;
+    }
+    byModel.set(modelKey, modelBucket);
+
+    const agentBucket = byAgent.get(agentName) ?? {
+      agentName,
+      calls: 0,
+      totalTokens: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 0,
+      estimatedCostUsd: 0,
+      lastCallAt: undefined,
+    };
+    agentBucket.calls += 1;
+    agentBucket.totalTokens += rowTotalTokens;
+    agentBucket.inputTokens += rowInputTokens;
+    agentBucket.outputTokens += rowOutputTokens;
+    agentBucket.reasoningTokens += rowReasoningTokens;
+    agentBucket.cachedInputTokens += rowCachedInputTokens;
+    agentBucket.estimatedCostUsd += rowEstimatedCostUsd;
+    if (!agentBucket.lastCallAt || row.createdAt > agentBucket.lastCallAt) {
+      agentBucket.lastCallAt = row.createdAt;
+    }
+    byAgent.set(agentName, agentBucket);
+  }
+
+  return {
+    totals: {
+      calls,
+      totalTokens,
+      inputTokens,
+      outputTokens,
+      reasoningTokens,
+      cachedInputTokens,
+      estimatedCostUsd,
+    },
+    byModel: Array.from(byModel.values()).sort(
+      (a, b) => b.estimatedCostUsd - a.estimatedCostUsd,
+    ),
+    byAgent: Array.from(byAgent.values()).sort(
+      (a, b) => b.estimatedCostUsd - a.estimatedCostUsd,
+    ),
   };
 }
 
@@ -339,6 +522,20 @@ export const getThreadObservabilitySummaryInternal = internalQuery({
     return await buildThreadObservabilitySummary(ctx, {
       ...args,
       requireThreadRecord: false,
+    });
+  },
+});
+
+export const getThreadUsageBreakdownInternal = internalQuery({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+  },
+  returns: threadUsageBreakdownReturnsValidator,
+  handler: async (ctx, args) => {
+    return await buildThreadUsageBreakdown(ctx, {
+      ...args,
+      requireThreadRecord: true,
     });
   },
 });

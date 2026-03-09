@@ -1,0 +1,222 @@
+{
+  "suiteName": "plan-smoke-suite",
+  "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/plan-smoke.json --userId dev-user --pollMs 250",
+  "generatedAt": 1771997944090,
+  "totalRuns": 2,
+  "runs": [
+    {
+      "runId": "2026-02-25T05-38-45-079Z-dqpa4k",
+      "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/plan-smoke.json --userId dev-user --pollMs 250",
+      "userId": "dev-user",
+      "threadId": "m575zt2w8msvx3rmv2nhbj275x81vbn2",
+      "agentName": "studi",
+      "prompt": "Use the start_plan_mode tool now. We are creating a long-term track in this thread for probability learning.",
+      "promptHash": "96cf109b4c019582",
+      "modelLabel": "default",
+      "startedAt": 1771997925079,
+      "endedAt": 1771997935002,
+      "totalDurationMs": 9923,
+      "firstAssistantEventMs": 9923,
+      "actionResultText": "I don't have a `start_plan_mode` tool available to me. My available tools are:\n\n- **create_spark** – interactive learning artifacts (quiz, scene, flash card, Desmos graph, code playground)\n- **get_code_spark_context** – read learner's code edits/outputs\n- **create_lab** – coding sandbox environment\n- **archive_lab** – close a lab\n- **glob** – find files in a lab\n- **run** – run shell commands in a lab\n\n---\n\nBut no worries — I can absolutely help you build a **structured probability learning track** right here! Let me lay out a plan we can follow together in this thread.\n\n---\n\n## 🎲 Probability Learning Track\n\nHere's a suggested progression from intuition → formalism:\n\n| Stage | Topic | Tools We'll Use |\n|-------|-------|----------------|\n| **1** | Basic Probability & Sample Spaces | Scene, Quiz |\n| **2** | Counting (Permutations & Combinations) | Flash Cards, Desmos |\n| **3** | Conditional Probability & Independence | Scene, Quiz |\n| **4** | Bayes' Theorem | Scene, Flash Cards |\n| **5** | Random Variables & Distributions | Desmos, Quiz |\n| **6** | Expected Value & Variance | Desmos, Code Playground |\n| **7** | Common Distributions (Binomial, Normal, Poisson) | Desmos, Scene |\n| **8** | Law of Large Numbers & Central Limit Theorem | Scene, Code Playground |\n\n---\n\n### To get started, tell me:\n1. **Where are you now?** (Total beginner, some exposure, or refreshing?)\n2. **What's your goal?** (Exam prep, data science, general curiosity, etc.)\n3. **Preferred pace?** (One concept per session, or deeper dives?)\n\nOnce I know, we'll kick off **Stage 1** with an interactive visualization! 🚀",
+      "actionResultTextHash": "02893bae7dd2ef1c",
+      "messageCount": 2,
+      "newMessageCount": 2,
+      "usage": {
+        "promptTokens": 0,
+        "completionTokens": 0,
+        "totalTokens": 0
+      },
+      "tools": [],
+      "timeline": [
+        {
+          "at": 1771997923412.0815,
+          "relativeMs": 0,
+          "order": 0,
+          "stepOrder": 0,
+          "messageId": "ks76dhsnthhqx30wrweb1v6qyd81tr99",
+          "kind": "user",
+          "detail": "Use the start_plan_mode tool now. We are creating a long-term track in this thread for probability learning."
+        },
+        {
+          "at": 1771997935002,
+          "relativeMs": 9923,
+          "messageId": "action-result",
+          "kind": "assistant_text",
+          "detail": "I don't have a `start_plan_mode` tool available to me. My available tools are:\n\n- **create_spark** – interactive learni..."
+        }
+      ],
+      "spark": {
+        "calls": 0,
+        "failures": 0,
+        "totalDurationMs": 0
+      },
+      "lab": {
+        "calls": 0,
+        "failures": 0,
+        "createLabCalls": 0,
+        "archiveLabCalls": 0,
+        "runCalls": 0,
+        "globCalls": 0,
+        "hadActivation": false
+      },
+      "plan": {
+        "calls": 0,
+        "failures": 0,
+        "startPlanModeCalls": 0,
+        "getPlanContextCalls": 0,
+        "generatePlanDraftCalls": 0,
+        "acceptPlanDraftCalls": 0,
+        "requestPlanChangesCalls": 0,
+        "setPlanItemStatusCalls": 0,
+        "finalSnapshot": {
+          "exists": false
+        }
+      },
+      "assertionFailures": [
+        "Expected plan tool 'start_plan_mode' was not called.",
+        "Expected plan to exist by end of run.",
+        "Expected plan phase 'discovery', got 'missing'."
+      ],
+      "sparkArtifacts": [],
+      "sceneFiles": []
+    },
+    {
+      "runId": "2026-02-25T05-38-55-003Z-9lhn7q",
+      "command": "C:\\Users\\kaust\\.bun\\bin\\bun.exe C:\\Users\\kaust\\Documents\\coding\\studi\\agentic-testing\\agent-lab.ts suite --file agentic-testing/suites/plan-smoke.json --userId dev-user --pollMs 250",
+      "userId": "dev-user",
+      "threadId": "m575zt2w8msvx3rmv2nhbj275x81vbn2",
+      "agentName": "studi",
+      "prompt": "Now generate the first plan draft for this thread by calling generate_plan_draft with a concise brief based on our goal.",
+      "promptHash": "66c3e6d44fb47511",
+      "modelLabel": "default",
+      "startedAt": 1771997935003,
+      "endedAt": 1771997944088,
+      "totalDurationMs": 9085,
+      "firstAssistantEventMs": 9085,
+      "actionResultText": "I don't have a `generate_plan_draft` tool available to me either. My toolset is limited to:\n\n| Tool | Purpose |\n|---|---|\n| `create_spark` | Interactive learning artifacts |\n| `get_code_spark_context` | Read learner's code edits/outputs |\n| `create_lab` | Coding sandbox |\n| `archive_lab` | Close a lab |\n| `glob` | Find files in a lab |\n| `run` | Run shell commands |\n\n---\n\nBut I can draft the plan **right here** in a clear, structured format we can follow across sessions in this thread:\n\n---\n\n## 📋 Probability Learning Track — Draft Plan\n\n**Goal:** Build deep, intuition-first understanding of probability from fundamentals to advanced distributions.\n\n### Phase 1 — Foundations\n- Sample spaces, events, and outcomes\n- Basic probability rules (addition, complement)\n- 🎯 *Spark:* Interactive sample space visualizer\n\n### Phase 2 — Counting & Combinatorics\n- Permutations and combinations\n- Multiplication principle\n- 🎯 *Spark:* Quiz + Flash Cards\n\n### Phase 3 — Conditional Probability & Independence\n- Definition and intuition\n- Multiplication rule\n- 🎯 *Spark:* Venn diagram scene\n\n### Phase 4 — Bayes' Theorem\n- Updating beliefs with evidence\n- Real-world examples\n- 🎯 *Spark:* Interactive Bayes scene\n\n### Phase 5 — Random Variables & Distributions\n- Discrete vs. continuous\n- PMF, PDF, CDF\n- 🎯 *Spark:* Desmos graph\n\n### Phase 6 — Key Distributions\n- Binomial, Normal, Poisson\n- 🎯 *Spark:* Desmos + Scene\n\n### Phase 7 — Expected Value & Variance\n- Definitions and formulas\n- 🎯 *Spark:* Code Playground simulation\n\n### Phase 8 — Limit Theorems\n- Law of Large Numbers\n- Central Limit Theorem\n- 🎯 *Spark:* Simulation scene\n\n---\n\n**Ready to dive into Phase 1?** Just say the word and we'll start with an interactive visualization of sample spaces! 🎲",
+      "actionResultTextHash": "802b45d98717a1f4",
+      "messageCount": 4,
+      "newMessageCount": 2,
+      "usage": {
+        "promptTokens": 0,
+        "completionTokens": 0,
+        "totalTokens": 0
+      },
+      "tools": [],
+      "timeline": [
+        {
+          "at": 1771997933010.0115,
+          "relativeMs": 0,
+          "order": 1,
+          "stepOrder": 0,
+          "messageId": "ks7caqnpx9yb15nndkek33e62581twf5",
+          "kind": "user",
+          "detail": "Now generate the first plan draft for this thread by calling generate_plan_draft with a concise brief based on our goal."
+        },
+        {
+          "at": 1771997944088,
+          "relativeMs": 9085,
+          "messageId": "action-result",
+          "kind": "assistant_text",
+          "detail": "I don't have a `generate_plan_draft` tool available to me either. My toolset is limited to:\n\n| Tool | Purpose |\n|---|--..."
+        }
+      ],
+      "spark": {
+        "calls": 0,
+        "failures": 0,
+        "totalDurationMs": 0
+      },
+      "lab": {
+        "calls": 0,
+        "failures": 0,
+        "createLabCalls": 0,
+        "archiveLabCalls": 0,
+        "runCalls": 0,
+        "globCalls": 0,
+        "hadActivation": false
+      },
+      "plan": {
+        "calls": 0,
+        "failures": 0,
+        "startPlanModeCalls": 0,
+        "getPlanContextCalls": 0,
+        "generatePlanDraftCalls": 0,
+        "acceptPlanDraftCalls": 0,
+        "requestPlanChangesCalls": 0,
+        "setPlanItemStatusCalls": 0,
+        "finalSnapshot": {
+          "exists": false
+        }
+      },
+      "assertionFailures": [
+        "Expected plan tool 'generate_plan_draft' was not called.",
+        "Expected plan to exist by end of run.",
+        "Expected plan phase 'draft_review', got 'missing'."
+      ],
+      "sparkArtifacts": [],
+      "sceneFiles": []
+    }
+  ],
+  "caseSummaries": [
+    {
+      "runId": "2026-02-25T05-38-45-079Z-dqpa4k",
+      "userId": "dev-user",
+      "threadId": "m575zt2w8msvx3rmv2nhbj275x81vbn2",
+      "promptHash": "96cf109b4c019582",
+      "modelLabel": "default",
+      "totalDurationMs": 9923,
+      "firstAssistantEventMs": 9923,
+      "totalTokens": 0,
+      "sparkFailures": 0,
+      "labFailures": 0,
+      "planFailures": 0,
+      "assertionFailures": 3,
+      "responseHash": "02893bae7dd2ef1c"
+    },
+    {
+      "runId": "2026-02-25T05-38-55-003Z-9lhn7q",
+      "userId": "dev-user",
+      "threadId": "m575zt2w8msvx3rmv2nhbj275x81vbn2",
+      "promptHash": "66c3e6d44fb47511",
+      "modelLabel": "default",
+      "totalDurationMs": 9085,
+      "firstAssistantEventMs": 9085,
+      "totalTokens": 0,
+      "sparkFailures": 0,
+      "labFailures": 0,
+      "planFailures": 0,
+      "assertionFailures": 3,
+      "responseHash": "802b45d98717a1f4"
+    }
+  ],
+  "comparisons": [
+    {
+      "promptHash": "96cf109b4c019582",
+      "runs": 1,
+      "durationMs": {
+        "min": 9923,
+        "max": 9923,
+        "avg": 9923
+      },
+      "sparkFailures": 0,
+      "labFailures": 0,
+      "planFailures": 0,
+      "assertionFailures": 3,
+      "distinctResponseHashes": 1
+    },
+    {
+      "promptHash": "66c3e6d44fb47511",
+      "runs": 1,
+      "durationMs": {
+        "min": 9085,
+        "max": 9085,
+        "avg": 9085
+      },
+      "sparkFailures": 0,
+      "labFailures": 0,
+      "planFailures": 0,
+      "assertionFailures": 3,
+      "distinctResponseHashes": 1
+    }
+  ]
+}

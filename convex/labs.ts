@@ -4,6 +4,10 @@ import { internalMutation, internalQuery, query } from "./_generated/server";
 const labMetadataValidator = v.object({
   topic: v.optional(v.string()),
   objective: v.optional(v.string()),
+  language: v.optional(v.string()),
+  framework: v.optional(v.string()),
+  template: v.optional(v.string()),
+  runtimeProfileId: v.optional(v.string()),
 });
 
 const labSessionValidator = v.object({
@@ -23,6 +27,10 @@ const labSessionValidator = v.object({
 type LabMetadata = {
   topic?: string;
   objective?: string;
+  language?: string;
+  framework?: string;
+  template?: string;
+  runtimeProfileId?: string;
 };
 
 function mergeMetadata(
@@ -32,6 +40,10 @@ function mergeMetadata(
   return {
     topic: incoming?.topic ?? existing.topic,
     objective: incoming?.objective ?? existing.objective,
+    language: incoming?.language ?? existing.language,
+    framework: incoming?.framework ?? existing.framework,
+    template: incoming?.template ?? existing.template,
+    runtimeProfileId: incoming?.runtimeProfileId ?? existing.runtimeProfileId,
   };
 }
 
@@ -125,6 +137,10 @@ export const upsertLabSessionInternal = internalMutation({
       metadata: {
         topic: args.metadata?.topic,
         objective: args.metadata?.objective,
+        language: args.metadata?.language,
+        framework: args.metadata?.framework,
+        template: args.metadata?.template,
+        runtimeProfileId: args.metadata?.runtimeProfileId,
       },
       createdAt: now,
       updatedAt: now,
