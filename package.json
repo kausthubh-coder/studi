@@ -30,6 +30,7 @@
     "@clerk/clerk-react": "^5.60.0",
     "@clerk/nextjs": "^6.37.3",
     "@convex-dev/agent": "^0.3.2",
+    "@convex-dev/rate-limiter": "^0.3.2",
     "@daytonaio/sdk": "^0.149.0",
     "@monaco-editor/react": "^4.7.0",
     "@openrouter/ai-sdk-provider": "1.2.0",

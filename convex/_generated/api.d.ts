@@ -28,6 +28,7 @@ import type * as voiceActions from "../voiceActions.js";
 import type * as voiceTools from "../voiceTools.js";
 import type * as waitlist from "../waitlist.js";
 import type * as waitlistActions from "../waitlistActions.js";
+import type * as waitlistPublic from "../waitlistPublic.js";
 
 import type {
   ApiFromModules,
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   voiceTools: typeof voiceTools;
   waitlist: typeof waitlist;
   waitlistActions: typeof waitlistActions;
+  waitlistPublic: typeof waitlistPublic;
 }>;
 
 /**

@@ -81,6 +81,19 @@ class DaytonaRequestError extends Error {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isStateChangeInProgressError(error: unknown): boolean {
+  if (!(error instanceof DaytonaRequestError)) {
+    return false;
+  }
+
+  const message = `${error.message}\n${error.bodyText ?? ""}`.toLowerCase();
+  return message.includes("state change in progress");
+}
+
 function getApiBaseUrl(): string {
   return process.env.DAYTONA_API_URL ?? "https://app.daytona.io/api";
 }
@@ -708,6 +721,7 @@ export async function createSandbox(params?: {
     body: {
       language: params?.language ?? "typescript",
       autoDeleteInterval: params?.autoDeleteInterval ?? -1,
+      user: process.env.DAYTONA_SANDBOX_USER?.trim() || "root",
       labels: {
         app: "studi",
         scope: "lab",
@@ -753,6 +767,38 @@ export async function recoverSandbox(sandboxId: string): Promise<void> {
   });
 }
 
+async function waitForSandboxStarted(sandboxId: string): Promise<void> {
+  const deadline = Date.now() + 60_000;
+
+  while (Date.now() < deadline) {
+    const sandbox = await getSandbox(sandboxId);
+    if (sandbox.state === "started") {
+      console.info("[daytona] sandbox started", {
+        sandboxId,
+      });
+      return;
+    }
+
+    if (sandbox.state === "error") {
+      throw new DaytonaRequestError(
+        `Sandbox ${sandboxId} entered error state while starting.`,
+        {
+          endpoint: `/sandbox/${encodeURIComponent(sandboxId)}`,
+        },
+      );
+    }
+
+    await sleep(250);
+  }
+
+  throw new DaytonaRequestError(
+    `Sandbox ${sandboxId} did not reach started state within 60 seconds.`,
+    {
+      endpoint: `/sandbox/${encodeURIComponent(sandboxId)}`,
+    },
+  );
+}
+
 export async function markSandboxActivity(sandboxId: string): Promise<void> {
   try {
     await daytonaRequest({
@@ -764,12 +810,39 @@ export async function markSandboxActivity(sandboxId: string): Promise<void> {
 
 export async function ensureSandboxStarted(sandboxId: string): Promise<void> {
   const sandbox = await getSandbox(sandboxId);
+  console.info("[daytona] ensureSandboxStarted", {
+    sandboxId,
+    state: sandbox.state,
+    recoverable: sandbox.recoverable,
+  });
   if (sandbox.state === "error" && sandbox.recoverable) {
-    await recoverSandbox(sandboxId);
+    try {
+      await recoverSandbox(sandboxId);
+    } catch (error) {
+      if (!isStateChangeInProgressError(error)) {
+        throw error;
+      }
+      console.warn("[daytona] sandbox recover already in progress", {
+        sandboxId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    await waitForSandboxStarted(sandboxId);
   }
 
   if (sandbox.state !== "started") {
-    await startSandbox(sandboxId);
+    try {
+      await startSandbox(sandboxId);
+    } catch (error) {
+      if (!isStateChangeInProgressError(error)) {
+        throw error;
+      }
+      console.warn("[daytona] sandbox start already in progress", {
+        sandboxId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    await waitForSandboxStarted(sandboxId);
   }
 
   await markSandboxActivity(sandboxId);
@@ -1326,6 +1399,19 @@ export function classifyDaytonaError(error: unknown): DaytonaToolError {
     }
 
     if (status === 400 || status === 422) {
+      if (isStateChangeInProgressError(error)) {
+        return {
+          category: "sandbox_state",
+          message: error.message,
+          retriable: true,
+          httpStatus: status,
+          endpoint: error.endpoint,
+          requestId: error.requestId,
+          hint: "Sandbox is still transitioning state. Retry after it finishes starting or recovering.",
+          raw: error.bodyText,
+        };
+      }
+
       return {
         category: "invalid_request",
         message: error.message,
@@ -1350,6 +1436,29 @@ export function classifyDaytonaError(error: unknown): DaytonaToolError {
 
   if (error instanceof Error) {
     const normalized = error.message.toLowerCase();
+    if (
+      normalized.includes("/usr/bin/zsh") &&
+      normalized.includes("no such file or directory")
+    ) {
+      return {
+        category: "sandbox_state",
+        message: error.message,
+        retriable: false,
+        hint:
+          "The sandbox user's login shell is set to /usr/bin/zsh, but that binary is missing. Recreate the sandbox with a valid shell or set DAYTONA_SANDBOX_USER for new labs.",
+      };
+    }
+
+    if (normalized.includes("did not reach started state within")) {
+      return {
+        category: "sandbox_state",
+        message: error.message,
+        retriable: true,
+        hint:
+          "Sandbox startup is still in progress or stalled. Retry after it finishes starting.",
+      };
+    }
+
     if (normalized.includes("network") || normalized.includes("fetch")) {
       return {
         category: "network",

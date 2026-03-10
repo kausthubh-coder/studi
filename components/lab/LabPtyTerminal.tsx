@@ -22,12 +22,35 @@ type LabPtyTerminalProps = {
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
 
+type ActionFailure = {
+  status: "failed";
+  summary: string;
+  error: {
+    hint?: string;
+    requestId?: string;
+    endpoint?: string;
+  };
+};
+
 function parseSsePayload<T>(raw: string): T | null {
   try {
     return JSON.parse(raw) as T;
   } catch {
     return null;
   }
+}
+
+function buildFailureMessage(response: ActionFailure): string {
+  const details = [
+    response.summary,
+    response.error.hint,
+    response.error.endpoint ? `Endpoint: ${response.error.endpoint}` : undefined,
+    response.error.requestId
+      ? `Request ID: ${response.error.requestId}`
+      : undefined,
+  ].filter(Boolean);
+
+  return details.join(" ");
 }
 
 export function LabPtyTerminal({
@@ -47,6 +70,9 @@ export function LabPtyTerminal({
     useState<ConnectionState>("connecting");
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [bootstrapStage, setBootstrapStage] = useState(
+    "Ensuring PTY session.",
+  );
 
   const sendInput = useCallback(
     (data: string) => {
@@ -58,7 +84,7 @@ export function LabPtyTerminal({
       inputQueueRef.current = inputQueueRef.current
         .catch(() => undefined)
         .then(async () => {
-          await fetch("/api/lab/pty/input", {
+          const response = await fetch("/api/lab/pty/input", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -69,6 +95,18 @@ export function LabPtyTerminal({
               data,
             }),
           });
+
+          if (!response.ok) {
+            const payload = (await response.json().catch(() => null)) as
+              | { error?: string }
+              | null;
+            console.warn("[lab-pty-terminal] input failed", {
+              threadId,
+              sessionId: currentSessionId,
+              status: response.status,
+              error: payload?.error ?? "Unable to send PTY input.",
+            });
+          }
         });
     },
     [sessionId, threadId],
@@ -77,7 +115,7 @@ export function LabPtyTerminal({
   const resizeRemote = useCallback(
     (cols: number, rows: number) => {
       const currentSessionId = sessionId?.trim();
-      if (!currentSessionId) {
+      if (!currentSessionId || connectionState !== "connected") {
         return;
       }
 
@@ -92,9 +130,34 @@ export function LabPtyTerminal({
           cols,
           rows,
         }),
-      }).catch(() => undefined);
+      })
+        .then(async (response) => {
+          if (response.ok) {
+            return;
+          }
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          console.warn("[lab-pty-terminal] resize failed", {
+            threadId,
+            sessionId: currentSessionId,
+            cols,
+            rows,
+            status: response.status,
+            error: payload?.error ?? "Unable to resize PTY.",
+          });
+        })
+        .catch((error) => {
+          console.warn("[lab-pty-terminal] resize request failed", {
+            threadId,
+            sessionId: currentSessionId,
+            cols,
+            rows,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
     },
-    [sessionId, threadId],
+    [connectionState, sessionId, threadId],
   );
 
   const fitTerminal = useCallback(() => {
@@ -113,6 +176,8 @@ export function LabPtyTerminal({
       eventSourceRef.current?.close();
       setConnectionState("connecting");
       setTerminalError(null);
+      setBootstrapStage("Opening PTY stream.");
+      let receivedStructuredError = false;
 
       const source = new EventSource(
         `/api/lab/pty/stream?threadId=${encodeURIComponent(
@@ -123,6 +188,7 @@ export function LabPtyTerminal({
 
       source.addEventListener("ready", () => {
         setConnectionState("connected");
+        setBootstrapStage("Connected to PTY session.");
       });
 
       source.addEventListener("data", (event) => {
@@ -140,6 +206,7 @@ export function LabPtyTerminal({
           error?: string;
         }>((event as MessageEvent).data);
         setConnectionState("disconnected");
+        setBootstrapStage("PTY session exited.");
         if (payload?.error) {
           setTerminalError(payload.error);
         }
@@ -147,14 +214,29 @@ export function LabPtyTerminal({
 
       source.addEventListener("error", (event) => {
         const payload = parseSsePayload<string>((event as MessageEvent).data);
+        receivedStructuredError = true;
         setConnectionState("disconnected");
+        setBootstrapStage("PTY stream disconnected.");
         setTerminalError(payload ?? "Terminal stream disconnected.");
+        console.warn("[lab-pty-terminal] stream error event", {
+          threadId,
+          sessionId: nextSessionId,
+          error: payload ?? "Terminal stream disconnected.",
+        });
         source.close();
       });
 
       source.onerror = () => {
         setConnectionState("disconnected");
-        setTerminalError("Terminal stream disconnected.");
+        setBootstrapStage("PTY stream disconnected.");
+        if (!receivedStructuredError) {
+          setTerminalError("Terminal stream disconnected.");
+        }
+        console.warn("[lab-pty-terminal] event source disconnected", {
+          threadId,
+          sessionId: nextSessionId,
+          structuredError: receivedStructuredError,
+        });
         source.close();
       };
     },
@@ -170,6 +252,7 @@ export function LabPtyTerminal({
     setIsBootstrapping(true);
     setConnectionState("connecting");
     setTerminalError(null);
+    setBootstrapStage("Ensuring PTY session.");
 
     try {
       fitAddonRef.current?.fit();
@@ -181,13 +264,20 @@ export function LabPtyTerminal({
       });
 
       if (response.status === "failed") {
-        throw new Error(response.summary);
+        throw new Error(buildFailureMessage(response as ActionFailure));
       }
 
       onSessionIdChange(response.sessionId);
+      setBootstrapStage("Connecting PTY stream.");
       connectStream(response.sessionId);
     } catch (error) {
+      console.warn("[lab-pty-terminal] bootstrap failed", {
+        threadId,
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       setConnectionState("disconnected");
+      setBootstrapStage("PTY bootstrap failed.");
       setTerminalError(
         error instanceof Error ? error.message : "Unable to connect terminal.",
       );
@@ -314,6 +404,8 @@ export function LabPtyTerminal({
           </button>
         </div>
       </div>
+
+      <div className="lab-terminal-stage">{bootstrapStage}</div>
 
       {terminalError ? (
         <div className="lab-terminal-error">

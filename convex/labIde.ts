@@ -10,6 +10,7 @@ import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import {
   classifyDaytonaError,
+  createSandbox,
   createProcessSession,
   deleteProcessSession,
   editFile,
@@ -30,7 +31,10 @@ import {
   truncateOutput,
   writeFile,
 } from "./daytona";
-import { ensurePtySession } from "../lib/daytona/server";
+import {
+  ensurePtySession,
+  migrateWorkspaceToReplacementSandbox,
+} from "../lib/daytona/server";
 import { isPreviewablePort } from "../lib/lab/preview";
 
 const daytonaErrorValidator = v.object({
@@ -86,7 +90,17 @@ async function getActiveSession(
   },
   userId: string,
   threadId: string,
-): Promise<{ sandboxId: string }> {
+): Promise<{
+  sandboxId: string;
+  metadata?: {
+    topic?: string;
+    objective?: string;
+    language?: string;
+    framework?: string;
+    template?: string;
+    runtimeProfileId?: string;
+  };
+}> {
   await ctx.runQuery(internal.chat.assertThreadOwner, {
     userId,
     threadId,
@@ -112,6 +126,62 @@ async function getActiveSession(
 
   return {
     sandboxId: session.sandboxId,
+    metadata: session.metadata,
+  };
+}
+
+function isBrokenPtyShellError(error: unknown) {
+  return String(error)
+    .toLowerCase()
+    .includes("fork/exec /usr/bin/zsh: no such file or directory");
+}
+
+async function replaceBrokenPtySandbox(
+  ctx: {
+    runMutation: MutationRunner;
+  },
+  params: {
+    userId: string;
+    threadId: string;
+    sandboxId: string;
+    metadata?: {
+      topic?: string;
+      objective?: string;
+      language?: string;
+      framework?: string;
+      template?: string;
+      runtimeProfileId?: string;
+    };
+  },
+) {
+  const created = await createSandbox({
+    language: params.metadata?.language,
+    labels: {
+      runtime_language: params.metadata?.language,
+      runtime_framework: params.metadata?.framework,
+      runtime_profile: params.metadata?.runtimeProfileId,
+      runtime_template: params.metadata?.template,
+      repaired_from_sandbox: params.sandboxId,
+      repair_reason: "missing_pty_shell",
+    },
+  });
+
+  const migrated = await migrateWorkspaceToReplacementSandbox({
+    fromSandboxId: params.sandboxId,
+    toSandboxId: created.sandboxId,
+  });
+
+  await ctx.runMutation(internal.labs.upsertLabSessionInternal, {
+    userId: params.userId,
+    threadId: params.threadId,
+    sandboxId: created.sandboxId,
+    metadata: params.metadata,
+    unarchive: true,
+  });
+
+  return {
+    sandboxId: created.sandboxId,
+    migrated,
   };
 }
 
@@ -485,7 +555,9 @@ export const ensureLabPtySession = action({
     const userId = await requireUserId(ctx);
 
     try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
+      const activeSession = await getActiveSession(ctx, userId, args.threadId);
+      let { sandboxId } = activeSession;
+      const { metadata } = activeSession;
       const sessionId = args.sessionId?.trim() || "studi-main";
       const cols =
         typeof args.cols === "number" && Number.isFinite(args.cols)
@@ -496,12 +568,49 @@ export const ensureLabPtySession = action({
           ? Math.max(10, Math.floor(args.rows))
           : DEFAULT_PTY_ROWS;
 
-      const ensured = await ensurePtySession({
-        sandboxId,
-        sessionId,
-        cols,
-        rows,
-      });
+      let ensured;
+      try {
+        ensured = await ensurePtySession({
+          sandboxId,
+          sessionId,
+          cols,
+          rows,
+        });
+      } catch (error) {
+        if (!isBrokenPtyShellError(error)) {
+          throw error;
+        }
+
+        console.warn("[labIde] replacing broken PTY sandbox", {
+          threadId: args.threadId,
+          sandboxId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        const replacement = await replaceBrokenPtySandbox(ctx, {
+          userId,
+          threadId: args.threadId,
+          sandboxId,
+          metadata,
+        });
+
+        sandboxId = replacement.sandboxId;
+        ensured = await ensurePtySession({
+          sandboxId,
+          sessionId,
+          cols,
+          rows,
+        });
+
+        return {
+          status: "success" as const,
+          summary: `Recreated the lab sandbox on a valid shell user and migrated ${replacement.migrated.files} files. PTY terminal session ready.`,
+          sessionId: ensured.sessionId,
+          created: true,
+          cols: ensured.cols,
+          rows: ensured.rows,
+        };
+      }
 
       return {
         status: "success" as const,
@@ -514,6 +623,13 @@ export const ensureLabPtySession = action({
         rows: ensured.rows,
       };
     } catch (error) {
+      console.error("[labIde] ensureLabPtySession failed", {
+        threadId: args.threadId,
+        requestedSessionId: args.sessionId,
+        cols: args.cols,
+        rows: args.rows,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return {
         status: "failed" as const,
         summary: formatErrorSummary("ensure PTY session", error),
