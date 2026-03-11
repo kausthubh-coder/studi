@@ -643,10 +643,6 @@ export function LandingPage() {
                   </motion.div>
                 ))}
               </div>
-
-              <motion.p variants={fadeUp} className="mt-6 text-xs text-[#9b8c7e] font-ui italic">
-                * Testimonials from early beta users. Replace with real quotes when available.
-              </motion.p>
             </motion.div>
           </section>
 
