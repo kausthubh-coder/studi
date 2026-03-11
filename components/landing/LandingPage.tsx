@@ -108,58 +108,61 @@ export function LandingPage() {
       <main className="relative z-10 pt-24 md:pt-28">
 
         {/* ── HERO ── */}
-        <section className="px-4 md:px-6 max-w-7xl mx-auto py-12 md:py-20 flex flex-col items-center text-center">
+        <section className="px-4 md:px-6 max-w-7xl mx-auto py-12 md:py-20">
           <motion.div
             initial="hidden"
             animate="visible"
             variants={{ visible: { transition: { staggerChildren: 0.12 } } }}
-            className="max-w-4xl mx-auto w-full"
+            className="flex flex-col lg:flex-row lg:items-center lg:gap-12 xl:gap-16 gap-10 w-full"
           >
-            {/* Eyebrow */}
-            <motion.div variants={fadeUp} className="mb-5 inline-flex items-center gap-2 bg-[#e05a3a]/10 border-2 border-[#e05a3a]/30 rounded-full px-4 py-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#e05a3a] animate-pulse" />
-              <span className="font-bold text-sm text-[#e05a3a] uppercase tracking-wider">Now in early access</span>
-            </motion.div>
+            {/* Left: text + form */}
+            <div className="flex flex-col items-center lg:items-start text-center lg:text-left lg:w-[46%]">
+              {/* Eyebrow */}
+              <motion.div variants={fadeUp} className="mb-5 inline-flex items-center gap-2 bg-[#e05a3a]/10 border-2 border-[#e05a3a]/30 rounded-full px-4 py-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#e05a3a] animate-pulse" />
+                <span className="font-bold text-sm text-[#e05a3a] uppercase tracking-wider">Now in early access</span>
+              </motion.div>
 
-            <motion.h1
-              variants={fadeUp}
-              className="font-brand text-5xl sm:text-6xl md:text-[80px] md:leading-[1.05] tracking-tight text-[#1c1208] mb-6 drop-shadow-sm"
-            >
-              The AI tutor that makes you feel like you figured it out{" "}
-              <span className="relative inline-block">
-                yourself.
-                <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 300 12" fill="none" aria-hidden>
-                  <path d="M2 9 Q75 2 150 7 T298 4" stroke="#e05a3a" strokeWidth="3" strokeLinecap="round" fill="none" />
-                </svg>
-              </span>
-            </motion.h1>
+              <motion.h1
+                variants={fadeUp}
+                className="font-brand text-5xl sm:text-6xl lg:text-5xl xl:text-6xl leading-tight lg:leading-[1.05] tracking-tight text-[#1c1208] mb-6 drop-shadow-sm"
+              >
+                The AI tutor that makes you feel like you figured it out{" "}
+                <span className="relative inline-block">
+                  yourself.
+                  <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 300 12" fill="none" aria-hidden>
+                    <path d="M2 9 Q75 2 150 7 T298 4" stroke="#e05a3a" strokeWidth="3" strokeLinecap="round" fill="none" />
+                  </svg>
+                </span>
+              </motion.h1>
 
-            <motion.p variants={fadeUp} className="text-lg md:text-xl text-[#6b5a47] font-body max-w-2xl mx-auto mb-8 leading-relaxed">
-              Studi asks questions, builds interactive tools mid-conversation, and gives you real coding challenges — guiding you to discover answers rather than just receive them.
-            </motion.p>
+              <motion.p variants={fadeUp} className="text-lg md:text-xl text-[#6b5a47] font-body max-w-2xl mx-auto lg:mx-0 mb-8 leading-relaxed">
+                Studi asks questions, builds interactive tools mid-conversation, and gives you real coding challenges — guiding you to discover answers rather than just receive them.
+              </motion.p>
 
-            {/* Waitlist form */}
-            <motion.div variants={fadeUp} id="get-early-access" className="w-full max-w-lg mx-auto mb-4">
-              <SignedOut>
-                <WaitlistForm variant="coral" />
-              </SignedOut>
-              <SignedIn>
-                <Link
-                  href="/chat"
-                  className="inline-block w-full max-w-sm font-bold px-8 py-4 rounded-xl border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-all shadow-[4px_4px_0px_#1c1208] text-lg text-center"
-                >
-                  Enter Your Lab →
-                </Link>
-              </SignedIn>
-            </motion.div>
+              {/* Waitlist form */}
+              <motion.div variants={fadeUp} id="get-early-access" className="w-full max-w-lg mx-auto lg:mx-0 mb-4">
+                <SignedOut>
+                  <WaitlistForm variant="coral" />
+                </SignedOut>
+                <SignedIn>
+                  <Link
+                    href="/chat"
+                    className="inline-block w-full max-w-sm font-bold px-8 py-4 rounded-xl border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-all shadow-[4px_4px_0px_#1c1208] text-lg text-center"
+                  >
+                    Enter Your Lab →
+                  </Link>
+                </SignedIn>
+              </motion.div>
 
-            {/* Waitlist counter */}
-            <motion.p variants={fadeUp} className="text-sm font-bold text-[#9b8c7e] mb-12 font-ui">
-              Join <span className="text-[#1c1208]">340+</span> students on the waitlist
-            </motion.p>
+              {/* Waitlist counter */}
+              <motion.p variants={fadeUp} className="text-sm font-bold text-[#9b8c7e] font-ui">
+                Join <span className="text-[#1c1208]">340+</span> students on the waitlist
+              </motion.p>
+            </div>
 
-            {/* Hero demo: Socratic chat mockup */}
-            <motion.div variants={fadeUp} className="relative mx-auto w-full max-w-4xl">
+            {/* Right: Hero demo chat mockup */}
+            <motion.div variants={fadeUp} className="relative lg:w-[54%] w-full max-w-2xl mx-auto lg:mx-0">
               <div className="absolute inset-0 bg-[#3a9e8a] rounded-[2rem] md:rounded-[2.5rem] transform -rotate-1 hidden sm:block" />
               <div className="relative bg-[#fff8f0] rounded-[1.5rem] md:rounded-[2.5rem] border-4 border-[#1c1208] shadow-[8px_8px_0px_#1c1208] md:shadow-[12px_12px_0px_#1c1208] overflow-hidden flex flex-col">
                 {/* Window bar */}
