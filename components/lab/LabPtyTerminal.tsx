@@ -1,8 +1,11 @@
 "use client";
 
-import { useAction } from "convex/react";
 import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
+import { Terminal as XTerm } from "@xterm/xterm";
+import type {
+  SandboxClient,
+  Terminal as SandboxTerminal,
+} from "@codesandbox/sdk/browser";
 import { AlertCircle, Loader2, RotateCcw, SquareTerminal } from "lucide-react";
 import {
   useCallback,
@@ -11,280 +14,132 @@ import {
   useRef,
   useState,
 } from "react";
-import { api } from "@/convex/_generated/api";
-
-type LabPtyTerminalProps = {
-  threadId: string;
-  sessionId: string | null;
-  onSessionIdChange: (sessionId: string) => void;
-  onOutputChunk: (chunk: string) => void;
-};
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
 
-type ActionFailure = {
-  status: "failed";
-  summary: string;
-  error: {
-    hint?: string;
-    requestId?: string;
-    endpoint?: string;
-  };
+type LabPtyTerminalProps = {
+  sandbox: SandboxClient | null;
+  connectionState: ConnectionState;
+  connectionError: string | null;
+  onReconnect: () => Promise<void>;
+  onOutputChunk: (chunk: string) => void;
 };
 
-function parseSsePayload<T>(raw: string): T | null {
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+function getTerminalSize(term: XTerm | null) {
+  return {
+    cols: term?.cols ?? 120,
+    rows: term?.rows ?? 32,
+  };
 }
 
-function buildFailureMessage(response: ActionFailure): string {
-  const details = [
-    response.summary,
-    response.error.hint,
-    response.error.endpoint ? `Endpoint: ${response.error.endpoint}` : undefined,
-    response.error.requestId
-      ? `Request ID: ${response.error.requestId}`
-      : undefined,
-  ].filter(Boolean);
+async function disposeRemoteTerminal(terminal: SandboxTerminal | null) {
+  if (!terminal) {
+    return;
+  }
 
-  return details.join(" ");
+  await terminal.kill().catch(() => undefined);
 }
 
 export function LabPtyTerminal({
-  threadId,
-  sessionId,
-  onSessionIdChange,
+  sandbox,
+  connectionState,
+  connectionError,
+  onReconnect,
   onOutputChunk,
 }: LabPtyTerminalProps) {
-  const ensurePtySession = useAction(api.labIde.ensureLabPtySession);
   const containerRef = useRef<HTMLDivElement>(null);
-  const termRef = useRef<Terminal | null>(null);
+  const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const remoteTerminalRef = useRef<SandboxTerminal | null>(null);
   const resizeTimerRef = useRef<number | null>(null);
-  const inputQueueRef = useRef(Promise.resolve());
-  const [connectionState, setConnectionState] =
-    useState<ConnectionState>("connecting");
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [bootstrapStage, setBootstrapStage] = useState(
-    "Ensuring PTY session.",
+    "Connecting to CodeSandbox.",
   );
 
   const sendInput = useCallback(
     (data: string) => {
-      const currentSessionId = sessionId?.trim();
-      if (!currentSessionId) {
+      const remoteTerminal = remoteTerminalRef.current;
+      if (!remoteTerminal) {
         return;
       }
 
-      inputQueueRef.current = inputQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          const response = await fetch("/api/lab/pty/input", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              threadId,
-              sessionId: currentSessionId,
-              data,
-            }),
-          });
-
-          if (!response.ok) {
-            const payload = (await response.json().catch(() => null)) as
-              | { error?: string }
-              | null;
-            console.warn("[lab-pty-terminal] input failed", {
-              threadId,
-              sessionId: currentSessionId,
-              status: response.status,
-              error: payload?.error ?? "Unable to send PTY input.",
-            });
-          }
-        });
-    },
-    [sessionId, threadId],
-  );
-
-  const resizeRemote = useCallback(
-    (cols: number, rows: number) => {
-      const currentSessionId = sessionId?.trim();
-      if (!currentSessionId || connectionState !== "connected") {
-        return;
-      }
-
-      void fetch("/api/lab/pty/resize", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          threadId,
-          sessionId: currentSessionId,
-          cols,
-          rows,
-        }),
-      })
-        .then(async (response) => {
-          if (response.ok) {
-            return;
-          }
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          console.warn("[lab-pty-terminal] resize failed", {
-            threadId,
-            sessionId: currentSessionId,
-            cols,
-            rows,
-            status: response.status,
-            error: payload?.error ?? "Unable to resize PTY.",
-          });
-        })
+      void remoteTerminal
+        .write(data, getTerminalSize(termRef.current))
         .catch((error) => {
-          console.warn("[lab-pty-terminal] resize request failed", {
-            threadId,
-            sessionId: currentSessionId,
-            cols,
-            rows,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          setTerminalError(
+            error instanceof Error
+              ? error.message
+              : "Unable to send terminal input.",
+          );
         });
     },
-    [connectionState, sessionId, threadId],
+    [],
   );
 
-  const fitTerminal = useCallback(() => {
+  const syncTerminalSize = useCallback(() => {
     const term = termRef.current;
     const fitAddon = fitAddonRef.current;
+    const remoteTerminal = remoteTerminalRef.current;
     if (!term || !fitAddon) {
       return;
     }
 
     fitAddon.fit();
-    resizeRemote(term.cols, term.rows);
-  }, [resizeRemote]);
+    if (!remoteTerminal) {
+      return;
+    }
 
-  const connectStream = useCallback(
-    (nextSessionId: string) => {
-      eventSourceRef.current?.close();
-      setConnectionState("connecting");
-      setTerminalError(null);
-      setBootstrapStage("Opening PTY stream.");
-      let receivedStructuredError = false;
-
-      const source = new EventSource(
-        `/api/lab/pty/stream?threadId=${encodeURIComponent(
-          threadId,
-        )}&sessionId=${encodeURIComponent(nextSessionId)}`,
-      );
-      eventSourceRef.current = source;
-
-      source.addEventListener("ready", () => {
-        setConnectionState("connected");
-        setBootstrapStage("Connected to PTY session.");
-      });
-
-      source.addEventListener("data", (event) => {
-        const payload = parseSsePayload<string>((event as MessageEvent).data);
-        if (typeof payload !== "string") {
-          return;
-        }
-        termRef.current?.write(payload);
-        onOutputChunk(payload);
-      });
-
-      source.addEventListener("exit", (event) => {
-        const payload = parseSsePayload<{
-          exitCode?: number;
-          error?: string;
-        }>((event as MessageEvent).data);
-        setConnectionState("disconnected");
-        setBootstrapStage("PTY session exited.");
-        if (payload?.error) {
-          setTerminalError(payload.error);
-        }
-      });
-
-      source.addEventListener("error", (event) => {
-        const payload = parseSsePayload<string>((event as MessageEvent).data);
-        receivedStructuredError = true;
-        setConnectionState("disconnected");
-        setBootstrapStage("PTY stream disconnected.");
-        setTerminalError(payload ?? "Terminal stream disconnected.");
-        console.warn("[lab-pty-terminal] stream error event", {
-          threadId,
-          sessionId: nextSessionId,
-          error: payload ?? "Terminal stream disconnected.",
-        });
-        source.close();
-      });
-
-      source.onerror = () => {
-        setConnectionState("disconnected");
-        setBootstrapStage("PTY stream disconnected.");
-        if (!receivedStructuredError) {
-          setTerminalError("Terminal stream disconnected.");
-        }
-        console.warn("[lab-pty-terminal] event source disconnected", {
-          threadId,
-          sessionId: nextSessionId,
-          structuredError: receivedStructuredError,
-        });
-        source.close();
-      };
-    },
-    [onOutputChunk, threadId],
-  );
+    void remoteTerminal
+      .write("", getTerminalSize(term))
+      .catch(() => undefined);
+  }, []);
 
   const bootstrap = useCallback(async () => {
+    const sandboxClient = sandbox;
     const term = termRef.current;
-    if (!term) {
+    if (!sandboxClient || !term) {
       return;
     }
 
     setIsBootstrapping(true);
-    setConnectionState("connecting");
     setTerminalError(null);
-    setBootstrapStage("Ensuring PTY session.");
+    setBootstrapStage("Creating shell.");
+
+    const previousRemote = remoteTerminalRef.current;
+    remoteTerminalRef.current = null;
+    await disposeRemoteTerminal(previousRemote);
+    term.clear();
 
     try {
-      fitAddonRef.current?.fit();
-      const response = await ensurePtySession({
-        threadId,
-        sessionId: sessionId ?? undefined,
-        cols: term.cols,
-        rows: term.rows,
+      const remoteTerminal = await sandboxClient.terminals.create("bash", {
+        cwd: sandboxClient.workspacePath,
+        name: "Studi",
+        dimensions: getTerminalSize(term),
       });
-
-      if (response.status === "failed") {
-        throw new Error(buildFailureMessage(response as ActionFailure));
+      remoteTerminalRef.current = remoteTerminal;
+      const initialOutput = await remoteTerminal.open(getTerminalSize(term));
+      if (initialOutput) {
+        term.write(initialOutput);
+        onOutputChunk(initialOutput);
       }
 
-      onSessionIdChange(response.sessionId);
-      setBootstrapStage("Connecting PTY stream.");
-      connectStream(response.sessionId);
-    } catch (error) {
-      console.warn("[lab-pty-terminal] bootstrap failed", {
-        threadId,
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
+      remoteTerminal.onOutput((chunk) => {
+        term.write(chunk);
+        onOutputChunk(chunk);
       });
-      setConnectionState("disconnected");
-      setBootstrapStage("PTY bootstrap failed.");
+
+      setBootstrapStage("Terminal connected.");
+    } catch (error) {
+      setBootstrapStage("Terminal bootstrap failed.");
       setTerminalError(
-        error instanceof Error ? error.message : "Unable to connect terminal.",
+        error instanceof Error ? error.message : "Unable to open terminal.",
       );
     } finally {
       setIsBootstrapping(false);
     }
-  }, [connectStream, ensurePtySession, onSessionIdChange, sessionId, threadId]);
+  }, [onOutputChunk, sandbox]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -292,7 +147,7 @@ export function LabPtyTerminal({
       return;
     }
 
-    const term = new Terminal({
+    const term = new XTerm({
       allowProposedApi: false,
       cursorBlink: true,
       fontFamily:
@@ -338,12 +193,11 @@ export function LabPtyTerminal({
         window.clearTimeout(resizeTimerRef.current);
       }
       resizeTimerRef.current = window.setTimeout(() => {
-        fitTerminal();
+        syncTerminalSize();
       }, 100);
     });
     resizeObserver.observe(container);
-    fitTerminal();
-    void bootstrap();
+    syncTerminalSize();
 
     return () => {
       disposeInput.dispose();
@@ -351,34 +205,46 @@ export function LabPtyTerminal({
       if (resizeTimerRef.current !== null) {
         window.clearTimeout(resizeTimerRef.current);
       }
-      eventSourceRef.current?.close();
+      const currentRemoteTerminal = remoteTerminalRef.current;
+      remoteTerminalRef.current = null;
+      void disposeRemoteTerminal(currentRemoteTerminal);
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [bootstrap, fitTerminal, sendInput]);
+  }, [sendInput, syncTerminalSize]);
 
   useEffect(() => {
-    if (connectionState === "connected") {
-      fitTerminal();
+    if (!sandbox) {
+      setIsBootstrapping(false);
+      return;
     }
-  }, [connectionState, fitTerminal]);
+
+    void bootstrap();
+  }, [bootstrap, sandbox]);
 
   const statusLabel = useMemo(() => {
-    if (isBootstrapping) {
+    if (isBootstrapping || connectionState === "connecting") {
       return "Connecting";
     }
-    if (connectionState === "connected") {
+    if (connectionState === "connected" && !terminalError) {
       return "Connected";
     }
     return "Disconnected";
-  }, [connectionState, isBootstrapping]);
+  }, [connectionState, isBootstrapping, terminalError]);
+
+  const effectiveError = terminalError ?? connectionError;
 
   return (
     <div className="lab-terminal">
       <div className="lab-terminal-toolbar">
-        <div className="lab-terminal-status" data-state={connectionState}>
-          {isBootstrapping ? (
+        <div
+          className="lab-terminal-status"
+          data-state={
+            statusLabel === "Connected" ? "connected" : connectionState
+          }
+        >
+          {statusLabel === "Connecting" ? (
             <Loader2 size={12} className="animate-spin" strokeWidth={2.3} />
           ) : (
             <SquareTerminal size={12} strokeWidth={2.2} />
@@ -389,7 +255,7 @@ export function LabPtyTerminal({
           <button
             type="button"
             className="lab-terminal-toolbar-btn"
-            onClick={() => void bootstrap()}
+            onClick={() => void onReconnect()}
           >
             <RotateCcw size={12} strokeWidth={2.2} />
             Reconnect
@@ -397,7 +263,7 @@ export function LabPtyTerminal({
           <button
             type="button"
             className="lab-terminal-toolbar-btn"
-            disabled={connectionState !== "connected"}
+            disabled={!remoteTerminalRef.current}
             onClick={() => sendInput("\u0003")}
           >
             Ctrl+C
@@ -407,10 +273,10 @@ export function LabPtyTerminal({
 
       <div className="lab-terminal-stage">{bootstrapStage}</div>
 
-      {terminalError ? (
+      {effectiveError ? (
         <div className="lab-terminal-error">
           <AlertCircle size={14} strokeWidth={2.2} />
-          <span>{terminalError}</span>
+          <span>{effectiveError}</span>
         </div>
       ) : null}
 
@@ -418,3 +284,4 @@ export function LabPtyTerminal({
     </div>
   );
 }
+

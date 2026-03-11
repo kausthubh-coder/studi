@@ -15,9 +15,14 @@ import {
   shruAgent,
   studiAgent,
 } from "./agent";
-import { classifyDaytonaError, deleteSandbox } from "./daytona";
+import {
+  classifyLabRuntimeError,
+} from "../lib/lab-runtime/shared";
 
 const internalApi = internal as unknown as {
+  labRuntime: {
+    execute: FunctionReference<"action", "internal">;
+  };
   plans: {
     getPlanSummaryForThreadInternal: FunctionReference<"query", "internal">;
   };
@@ -144,11 +149,18 @@ export const deleteThread: ReturnType<typeof action> = action({
 
     if (labSession) {
       try {
-        await deleteSandbox(labSession.sandboxId);
+        await ctx.runAction(internalApi.labRuntime.execute, {
+          operation: "deleteSandboxAndConfirm",
+          payload: {
+            sandboxId: labSession.sandboxId,
+          },
+        });
       } catch (error) {
-        const detail = classifyDaytonaError(error);
+        const detail = classifyLabRuntimeError(error);
         if (detail.category !== "not_found") {
-          labCleanupWarning = detail.message;
+          throw new Error(
+            `Failed to delete lab sandbox before deleting thread: ${detail.message}`,
+          );
         }
       }
 

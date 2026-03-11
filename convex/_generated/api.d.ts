@@ -11,9 +11,10 @@
 import type * as agent from "../agent.js";
 import type * as chat from "../chat.js";
 import type * as chatActions from "../chatActions.js";
-import type * as daytona from "../daytona.js";
 import type * as http from "../http.js";
+import type * as labAdmin from "../labAdmin.js";
 import type * as labIde from "../labIde.js";
+import type * as labRuntime from "../labRuntime.js";
 import type * as labTools from "../labTools.js";
 import type * as labs from "../labs.js";
 import type * as planActions from "../planActions.js";
@@ -40,9 +41,10 @@ declare const fullApi: ApiFromModules<{
   agent: typeof agent;
   chat: typeof chat;
   chatActions: typeof chatActions;
-  daytona: typeof daytona;
   http: typeof http;
+  labAdmin: typeof labAdmin;
   labIde: typeof labIde;
+  labRuntime: typeof labRuntime;
   labTools: typeof labTools;
   labs: typeof labs;
   planActions: typeof planActions;

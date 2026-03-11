@@ -42,12 +42,19 @@ export const LabSidebar = memo(function LabSidebar({
       .replace(/\\/g, "/")
       .replace(/^\/+/, "")
       .replace(/\/+$/, "");
-    const parts = (normalized || "workspace").split("/").filter(Boolean);
-    return parts.map((part, i) => ({
-      label: part,
-      path: parts.slice(0, i + 1).join("/"),
-      isCurrent: i === parts.length - 1,
-    }));
+    const parts = normalized ? normalized.split("/").filter(Boolean) : [];
+    return [
+      {
+        label: "root",
+        path: ".",
+        isCurrent: parts.length === 0,
+      },
+      ...parts.map((part, i) => ({
+        label: part,
+        path: parts.slice(0, i + 1).join("/"),
+        isCurrent: i === parts.length - 1,
+      })),
+    ];
   }, [currentPath]);
 
   return (

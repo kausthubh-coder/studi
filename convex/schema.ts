@@ -65,6 +65,8 @@ export default defineSchema({
       framework: v.optional(v.string()),
       template: v.optional(v.string()),
       runtimeProfileId: v.optional(v.string()),
+      workspacePath: v.optional(v.string()),
+      templateKey: v.optional(v.string()),
     }),
     createdAt: v.number(),
     updatedAt: v.number(),
