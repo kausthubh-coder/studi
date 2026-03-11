@@ -11,10 +11,10 @@ import {
   type ComponentType,
 } from "react";
 import { api } from "@/convex/_generated/api";
-import { extractPreviewPortCandidates } from "@/lib/lab/preview";
 import { LabEditorHeader } from "./LabEditorHeader";
 import { LabPtyTerminal } from "./LabPtyTerminal";
 import { LabSidebar } from "./LabSidebar";
+import { useLabSandboxClient } from "./useLabSandboxClient";
 
 type MonacoEditorProps = {
   height?: string | number;
@@ -56,83 +56,32 @@ type PersistedState = {
   selectedFilePath?: string;
   activeTab?: LabTab;
   activePreviewPort?: number;
-  terminalSessionId?: string;
 };
 
 function getStorageKey(threadId: string): string {
   return `studi.lab.workspace.${threadId}`;
 }
 
-const SYSTEM_ROOT_PREFIXES = [
-  "/bin",
-  "/boot",
-  "/dev",
-  "/etc",
-  "/home",
-  "/lib",
-  "/lib64",
-  "/media",
-  "/mnt",
-  "/opt",
-  "/proc",
-  "/root",
-  "/run",
-  "/sbin",
-  "/srv",
-  "/sys",
-  "/tmp",
-  "/usr",
-  "/var",
-];
-
-function toWorkspacePath(value?: string | null): string | null {
+function normalizeLabPath(value?: string | null): string | null {
   const raw = (value ?? "").trim();
   if (!raw || raw === "." || raw === "/") {
-    return "workspace";
+    return ".";
   }
 
-  const normalized = raw.replace(/\\/g, "/").replace(/\/+$/, "");
-  if (!normalized) {
-    return "workspace";
+  const normalized = raw
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/\/+$/, "");
+
+  if (!normalized || normalized === ".") {
+    return ".";
   }
 
-  if (normalized === "/workspace") {
-    return "workspace";
-  }
-  if (normalized.startsWith("/workspace/")) {
-    return normalized.slice(1);
-  }
-
-  if (normalized.startsWith("/")) {
+  if (normalized.startsWith("/") || normalized.split("/").includes("..")) {
     return null;
   }
 
-  const relative = normalized.replace(/^\.\/+/, "");
-  if (!relative || relative === ".") {
-    return "workspace";
-  }
-  if (relative === "workspace" || relative.startsWith("workspace/")) {
-    return relative;
-  }
-  if (relative.includes("..")) {
-    return null;
-  }
-  return `workspace/${relative}`;
-}
-
-function shouldResetPersistedPath(value?: string | null): boolean {
-  const raw = (value ?? "").trim();
-  if (!raw) {
-    return false;
-  }
-  if (raw === "/" || raw === "\\") {
-    return true;
-  }
-  const normalized = raw.replace(/\\/g, "/");
-  if (SYSTEM_ROOT_PREFIXES.some((prefix) => normalized === prefix)) {
-    return true;
-  }
-  return SYSTEM_ROOT_PREFIXES.some((prefix) => normalized.startsWith(`${prefix}/`));
+  return normalized;
 }
 
 function pickLanguage(path: string): string {
@@ -158,11 +107,15 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const listFilesAction = useAction(api.labIde.listLabFiles);
   const readFileAction = useAction(api.labIde.readLabFile);
   const writeFileAction = useAction(api.labIde.writeLabFile);
-  const getPreviewDescriptorAction = useAction(
-    api.labIde.getLabPreviewProxyDescriptor,
-  );
+  const {
+    sandbox,
+    connectionState,
+    error: connectionError,
+    availablePorts,
+    reconnect,
+  } = useLabSandboxClient(threadId);
 
-  const [currentPath, setCurrentPath] = useState("workspace");
+  const [currentPath, setCurrentPath] = useState(".");
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [editorValue, setEditorValue] = useState("");
@@ -173,13 +126,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isSavingFile, setIsSavingFile] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
-  const [workspaceMissing, setWorkspaceMissing] = useState(false);
   const [activeTab, setActiveTab] = useState<LabTab>("terminal");
-  const [terminalSessionId, setTerminalSessionId] = useState<string | null>(
-    null,
-  );
-  const [detectedPreviewPorts, setDetectedPreviewPorts] = useState<number[]>([]);
   const [dismissedPreviewPorts, setDismissedPreviewPorts] = useState<number[]>(
     [],
   );
@@ -187,9 +134,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     null,
   );
   const [activePreviewPort, setActivePreviewPort] = useState<number | null>(null);
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [isOpeningPreview, setIsOpeningPreview] = useState(false);
   const [previewNonce, setPreviewNonce] = useState(0);
   const initialHydratedRef = useRef(false);
   const initialSelectedFileRef = useRef<string | null>(null);
@@ -197,21 +142,22 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const isDirty = selectedFilePath !== null && editorValue !== baselineValue;
 
   useEffect(() => {
-    if (initialHydratedRef.current) return;
+    if (initialHydratedRef.current) {
+      return;
+    }
     initialHydratedRef.current = true;
 
     const raw = window.localStorage.getItem(getStorageKey(threadId));
-    if (!raw) return;
+    if (!raw) {
+      return;
+    }
 
     try {
       const parsed = JSON.parse(raw) as PersistedState;
-      const persistedPath = shouldResetPersistedPath(parsed.currentPath)
-        ? "workspace"
-        : toWorkspacePath(parsed.currentPath);
-      setCurrentPath(persistedPath ?? "workspace");
+      setCurrentPath(normalizeLabPath(parsed.currentPath) ?? ".");
 
       if (parsed.selectedFilePath) {
-        const selectedPath = toWorkspacePath(parsed.selectedFilePath);
+        const selectedPath = normalizeLabPath(parsed.selectedFilePath);
         if (selectedPath) {
           setSelectedFilePath(selectedPath);
           initialSelectedFileRef.current = selectedPath;
@@ -224,11 +170,8 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
       if (typeof parsed.activePreviewPort === "number") {
         setActivePreviewPort(parsed.activePreviewPort);
       }
-      if (parsed.terminalSessionId) {
-        setTerminalSessionId(parsed.terminalSessionId);
-      }
     } catch {
-      /* ignore */
+      /* ignore persisted state */
     }
   }, [threadId]);
 
@@ -238,28 +181,22 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
       selectedFilePath: selectedFilePath ?? undefined,
       activeTab,
       activePreviewPort: activePreviewPort ?? undefined,
-      terminalSessionId: terminalSessionId ?? undefined,
     };
-    window.localStorage.setItem(
-      getStorageKey(threadId),
-      JSON.stringify(payload),
-    );
-  }, [activePreviewPort, activeTab, currentPath, selectedFilePath, terminalSessionId, threadId]);
+    window.localStorage.setItem(getStorageKey(threadId), JSON.stringify(payload));
+  }, [activePreviewPort, activeTab, currentPath, selectedFilePath, threadId]);
 
   const refreshEntries = useCallback(
     async (pathOverride?: string) => {
-      const resolvedPath = toWorkspacePath(pathOverride ?? currentPath);
+      const resolvedPath = normalizeLabPath(pathOverride ?? currentPath);
       if (!resolvedPath) {
-        setWorkspaceError("Only workspace paths are supported.");
-        setCurrentPath("workspace");
+        setWorkspaceError("Only lab workspace paths are supported.");
+        setCurrentPath(".");
         setEntries([]);
-        setWorkspaceMissing(false);
         return;
       }
 
       setIsLoadingFiles(true);
       setWorkspaceError(null);
-      setWorkspaceMissing(false);
 
       try {
         const response = await listFilesAction({
@@ -276,24 +213,12 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           return;
         }
 
-        if (response.workspaceMissing) {
-          setCurrentPath("workspace");
-          setEntries([]);
-          setSelectedFilePath(null);
-          setEditorValue("");
-          setBaselineValue("");
-          setIsBinary(false);
-          setIsTruncated(false);
-          setWorkspaceMissing(true);
-          return;
-        }
-
         const sorted = [...response.entries].sort((a, b) => {
           if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
           return a.name.localeCompare(b.name);
         });
 
-        setCurrentPath(toWorkspacePath(response.path) ?? "workspace");
+        setCurrentPath(normalizeLabPath(response.path) ?? ".");
         setEntries(sorted);
       } finally {
         setIsLoadingFiles(false);
@@ -304,9 +229,9 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
 
   const openFile = useCallback(
     async (path: string) => {
-      const safePath = toWorkspacePath(path);
+      const safePath = normalizeLabPath(path);
       if (!safePath) {
-        setWorkspaceError("Only workspace files can be opened.");
+        setWorkspaceError("Only lab workspace files can be opened.");
         return;
       }
 
@@ -342,7 +267,9 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
 
   useEffect(() => {
     const initialPath = initialSelectedFileRef.current;
-    if (!initialPath) return;
+    if (!initialPath) {
+      return;
+    }
     initialSelectedFileRef.current = null;
     void openFile(initialPath);
   }, [openFile]);
@@ -362,9 +289,9 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
 
   const handleNavigate = useCallback(
     (path: string) => {
-      const safePath = toWorkspacePath(path);
+      const safePath = normalizeLabPath(path);
       if (!safePath) {
-        setWorkspaceError("Navigation is limited to workspace.");
+        setWorkspaceError("Navigation is limited to the lab workspace.");
         return;
       }
       if (!confirmDiscardUnsavedChanges()) return;
@@ -378,9 +305,9 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
 
   const handleOpenFile = useCallback(
     (path: string) => {
-      const safePath = toWorkspacePath(path);
+      const safePath = normalizeLabPath(path);
       if (!safePath) {
-        setWorkspaceError("Only workspace files can be opened.");
+        setWorkspaceError("Only lab workspace files can be opened.");
         return;
       }
       if (safePath === selectedFilePath) return;
@@ -433,65 +360,47 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [saveFile]);
 
-  const openPreviewForPort = useCallback(
-    async (port: number) => {
-      setIsOpeningPreview(true);
-      setPreviewError(null);
-      setWorkspaceNotice(null);
-
-      try {
-        const response = await getPreviewDescriptorAction({
-          threadId,
-          port,
-        });
-
-        if (response.status === "failed") {
-          const hint = response.error.hint ? ` ${response.error.hint}` : "";
-          setPreviewError(`${response.summary}${hint}`);
-          return;
-        }
-
-        setActivePreviewPort(port);
-        setPendingPreviewPort((current) => (current === port ? null : current));
-        setPreviewPath(response.proxyPath);
-        setPreviewNonce(Date.now());
-        setActiveTab("preview");
-      } finally {
-        setIsOpeningPreview(false);
-      }
-    },
-    [getPreviewDescriptorAction, threadId],
-  );
-
-  const handleTerminalOutput = useCallback((chunk: string) => {
-    const ports = extractPreviewPortCandidates(chunk);
-    if (ports.length === 0) {
-      return;
-    }
-
-    setDetectedPreviewPorts((previous) =>
-      Array.from(new Set([...previous, ...ports])).sort((a, b) => a - b),
-    );
-
-    setPendingPreviewPort((previous) => {
-      if (previous !== null) {
-        return previous;
-      }
-      const next = ports.find((port) => !dismissedPreviewPorts.includes(port));
-      return next ?? null;
-    });
-  }, [dismissedPreviewPorts]);
-
   useEffect(() => {
-    setDetectedPreviewPorts([]);
     setDismissedPreviewPorts([]);
     setPendingPreviewPort(null);
     setActivePreviewPort(null);
-    setPreviewPath(null);
     setPreviewError(null);
     setPreviewNonce(0);
-    setTerminalSessionId(null);
   }, [threadId]);
+
+  useEffect(() => {
+    if (
+      activePreviewPort !== null &&
+      !availablePorts.includes(activePreviewPort)
+    ) {
+      setActivePreviewPort(null);
+      setActiveTab("terminal");
+    }
+  }, [activePreviewPort, availablePorts]);
+
+  useEffect(() => {
+    const nextPending = availablePorts.find(
+      (port) =>
+        port !== activePreviewPort && !dismissedPreviewPorts.includes(port),
+    );
+    setPendingPreviewPort(nextPending ?? null);
+  }, [activePreviewPort, availablePorts, dismissedPreviewPorts]);
+
+  const openPreviewForPort = useCallback(
+    (port: number) => {
+      if (!sandbox) {
+        setPreviewError("Preview is unavailable until the sandbox reconnects.");
+        return;
+      }
+
+      setPreviewError(null);
+      setActivePreviewPort(port);
+      setPendingPreviewPort((current) => (current === port ? null : current));
+      setPreviewNonce(Date.now());
+      setActiveTab("preview");
+    },
+    [sandbox],
+  );
 
   const dismissPreviewPrompt = useCallback(() => {
     if (pendingPreviewPort === null) {
@@ -504,11 +413,11 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   }, [pendingPreviewPort]);
 
   const previewSrc = useMemo(() => {
-    if (!previewPath) {
+    if (!sandbox || activePreviewPort === null) {
       return null;
     }
-    return withCacheBust(previewPath, previewNonce);
-  }, [previewNonce, previewPath]);
+    return withCacheBust(sandbox.hosts.getUrl(activePreviewPort), previewNonce);
+  }, [activePreviewPort, previewNonce, sandbox]);
 
   const editorLanguage = useMemo(
     () => (selectedFilePath ? pickLanguage(selectedFilePath) : "plaintext"),
@@ -538,27 +447,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
         />
 
         <div style={{ flex: 1, minHeight: 0 }}>
-          {workspaceMissing ? (
-            <div className="lab-workspace-missing">
-              <p className="lab-workspace-missing-title">
-                Workspace directory not found
-              </p>
-              <p className="lab-workspace-missing-copy">
-                This lab is restricted to `workspace`. Refresh after the lab
-                creates the folder.
-              </p>
-              <div className="lab-workspace-missing-actions">
-                <button
-                  type="button"
-                  className="lab-workspace-missing-btn"
-                  onClick={() => void refreshEntries("workspace")}
-                  disabled={isLoadingFiles}
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
-          ) : !selectedFilePath ? (
+          {!selectedFilePath ? (
             <div className="flex h-full items-center justify-center text-xs text-fg-faint">
               Select a file to open it.
             </div>
@@ -596,10 +485,9 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
             <button
               type="button"
               className="lab-preview-inline-btn"
-              onClick={() => void openPreviewForPort(pendingPreviewPort)}
-              disabled={isOpeningPreview}
+              onClick={() => openPreviewForPort(pendingPreviewPort)}
             >
-              {isOpeningPreview ? "Opening..." : "Open Preview"}
+              Open Preview
             </button>
             <button
               type="button"
@@ -631,34 +519,41 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
         </div>
 
         <div className="lab-bottom-panel">
-          {activeTab === "terminal" ? (
+          <div
+            style={{
+              display: activeTab === "terminal" ? "block" : "none",
+              height: "100%",
+            }}
+          >
             <LabPtyTerminal
-              threadId={threadId}
-              sessionId={terminalSessionId}
-              onSessionIdChange={setTerminalSessionId}
-              onOutputChunk={handleTerminalOutput}
+              sandbox={sandbox}
+              connectionState={connectionState}
+              connectionError={connectionError}
+              onReconnect={reconnect}
+              onOutputChunk={() => undefined}
             />
-          ) : null}
+          </div>
 
-          {activeTab === "preview" ? (
+          <div
+            style={{
+              display: activeTab === "preview" ? "block" : "none",
+              height: "100%",
+            }}
+          >
             <div className="lab-preview-panel">
               <div className="lab-preview-controls">
                 <span className="lab-preview-label">
                   {activePreviewPort
                     ? `Previewing port ${activePreviewPort}`
-                    : detectedPreviewPorts.length > 0
-                      ? `Detected ports: ${detectedPreviewPorts.join(", ")}`
+                    : availablePorts.length > 0
+                      ? `Detected ports: ${availablePorts.join(", ")}`
                       : "No preview port selected"}
                 </span>
                 <button
                   type="button"
                   className="lab-preview-btn"
-                  disabled={!activePreviewPort || isOpeningPreview}
-                  onClick={() => {
-                    if (activePreviewPort !== null) {
-                      void openPreviewForPort(activePreviewPort);
-                    }
-                  }}
+                  disabled={!activePreviewPort}
+                  onClick={() => setPreviewNonce(Date.now())}
                 >
                   Refresh
                 </button>
@@ -687,12 +582,12 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
                 </>
               ) : (
                 <div className="lab-preview-empty">
-                  Start a web server in the terminal. When Daytona detects a
-                  previewable port, you will get a prompt to open it here.
+                  Start a web server in the terminal. When CodeSandbox exposes a
+                  previewable port, you can open it here directly.
                 </div>
               )}
             </div>
-          ) : null}
+          </div>
         </div>
 
         {isTruncated && selectedFilePath && !isBinary ? (
@@ -702,10 +597,10 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
           </div>
         ) : null}
 
-        {workspaceNotice ? <div className="lab-info-bar">{workspaceNotice}</div> : null}
         {previewError ? <div className="lab-error-bar">{previewError}</div> : null}
         {workspaceError ? <div className="lab-error-bar">{workspaceError}</div> : null}
       </div>
     </section>
   );
 }
+

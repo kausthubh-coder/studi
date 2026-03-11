@@ -9,30 +9,12 @@ import type {
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import {
-  classifyDaytonaError,
-  createProcessSession,
-  deleteProcessSession,
-  editFile,
-  ensureSandboxStarted,
-  executeSessionCommand,
+  classifyLabRuntimeError,
   formatErrorSummary,
-  getProcessSession,
-  getSessionCommand,
-  getSessionCommandLogs,
-  globFiles,
-  grepFiles,
-  listFiles,
-  readFile,
-  runCommand,
-  sendSessionCommandInput,
-  getSignedPreviewLink,
   truncateOutput,
-  writeFile,
-} from "./daytona";
-import { ensurePtySession } from "../lib/daytona/server";
-import { isPreviewablePort } from "../lib/lab/preview";
+} from "../lib/lab-runtime/shared";
 
-const daytonaErrorValidator = v.object({
+const labRuntimeErrorValidator = v.object({
   category: v.string(),
   message: v.string(),
   retriable: v.boolean(),
@@ -41,16 +23,43 @@ const daytonaErrorValidator = v.object({
   requestId: v.optional(v.string()),
   hint: v.optional(v.string()),
   raw: v.optional(v.string()),
+  exitCode: v.optional(v.number()),
 });
 
 const failureValidator = v.object({
   status: v.literal("failed"),
   summary: v.string(),
-  error: daytonaErrorValidator,
+  error: labRuntimeErrorValidator,
 });
 
-const DEFAULT_PTY_COLS = 120;
-const DEFAULT_PTY_ROWS = 32;
+const serializedHostTokenValidator = v.object({
+  sandboxId: v.string(),
+  token: v.string(),
+  tokenId: v.string(),
+  expiresAtMs: v.union(v.number(), v.null()),
+  lastUsedAtMs: v.union(v.number(), v.null()),
+});
+
+const serializedSandboxSessionValidator = v.object({
+  sandboxId: v.string(),
+  pitcherToken: v.string(),
+  pitcherURL: v.string(),
+  workspacePath: v.string(),
+  userWorkspacePath: v.string(),
+  pitcherManagerVersion: v.string(),
+  pitcherVersion: v.string(),
+  latestPitcherVersion: v.string(),
+  cluster: v.string(),
+  bootupType: v.union(
+    v.literal("RUNNING"),
+    v.literal("CLEAN"),
+    v.literal("RESUME"),
+    v.literal("FORK"),
+  ),
+  isPint: v.boolean(),
+  sessionId: v.optional(v.string()),
+  hostToken: v.optional(serializedHostTokenValidator),
+});
 
 type QueryRunner = <
   Query extends FunctionReference<"query", "public" | "internal">,
@@ -66,11 +75,38 @@ type MutationRunner = <
   ...args: OptionalRestArgs<Mutation>
 ) => Promise<FunctionReturnType<Mutation>>;
 
+type ActionRunner = <
+  Action extends FunctionReference<"action", "public" | "internal">,
+>(
+  action: Action,
+  ...args: OptionalRestArgs<Action>
+) => Promise<FunctionReturnType<Action>>;
+
+const internalApi = internal as unknown as {
+  billing: {
+    assertCanCreateLabInternal: FunctionReference<"mutation", "internal">;
+    assertCanRunExpensiveLabCommandInternal: FunctionReference<
+      "mutation",
+      "internal"
+    >;
+  };
+  chat: {
+    assertThreadOwner: FunctionReference<"query", "internal">;
+  };
+  labRuntime: {
+    execute: FunctionReference<"action", "internal">;
+  };
+  labs: {
+    getLabSessionByThreadForUserInternal: FunctionReference<"query", "internal">;
+    touchLabSessionInternal: FunctionReference<"mutation", "internal">;
+  };
+};
+
 async function requireUserId(ctx: {
   auth: {
     getUserIdentity: () => Promise<{ subject: string } | null>;
   };
-}): Promise<string> {
+}) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
     throw new Error("Unauthorized");
@@ -82,108 +118,52 @@ async function getActiveSession(
   ctx: {
     runQuery: QueryRunner;
     runMutation: MutationRunner;
+    runAction: ActionRunner;
   },
   userId: string,
   threadId: string,
-): Promise<{
-  sandboxId: string;
-  metadata?: {
-    topic?: string;
-    objective?: string;
-    language?: string;
-    framework?: string;
-    template?: string;
-    runtimeProfileId?: string;
-  };
-}> {
-  await ctx.runQuery(internal.chat.assertThreadOwner, {
+) {
+  await ctx.runQuery(internalApi.chat.assertThreadOwner, {
     userId,
     threadId,
   });
 
   const session = await ctx.runQuery(
-    internal.labs.getLabSessionByThreadForUserInternal,
+    internalApi.labs.getLabSessionByThreadForUserInternal,
     {
       userId,
       threadId,
     },
   );
 
-  if (!session) {
+  if (!session || session.archivedAt) {
     throw new Error("No active lab session for this thread.");
   }
 
-  await ctx.runMutation(internal.billing.assertCanCreateLabInternal, {
+  await ctx.runMutation(internalApi.billing.assertCanCreateLabInternal, {
     userId,
   });
 
-  await ensureSandboxStarted(session.sandboxId);
-  await ctx.runMutation(internal.labs.touchLabSessionInternal, {
+  const workspacePath = session.metadata?.workspacePath?.trim();
+  if (!workspacePath) {
+    throw new Error("Lab session is missing workspace metadata.");
+  }
+
+  await ctx.runAction(internalApi.labRuntime.execute, {
+    operation: "resumeSandbox",
+    payload: {
+      sandboxId: session.sandboxId,
+    },
+  });
+  await ctx.runMutation(internalApi.labs.touchLabSessionInternal, {
     userId,
     threadId,
   });
 
   return {
     sandboxId: session.sandboxId,
-    metadata: session.metadata,
+    workspacePath,
   };
-}
-
-async function ensureProcessSession(
-  sandboxId: string,
-  requestedSessionId?: string,
-): Promise<{
-  sessionId: string;
-  created: boolean;
-}> {
-  const normalizedRequested = requestedSessionId?.trim();
-  if (normalizedRequested) {
-    try {
-      await getProcessSession({
-        sandboxId,
-        sessionId: normalizedRequested,
-      });
-      return {
-        sessionId: normalizedRequested,
-        created: false,
-      };
-    } catch (error) {
-      const detail = classifyDaytonaError(error);
-      if (detail.category !== "not_found") {
-        throw error;
-      }
-    }
-  }
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const nextId =
-      attempt === 0 && normalizedRequested
-        ? normalizedRequested
-        : `studi-${crypto.randomUUID()}`;
-    try {
-      await createProcessSession({
-        sandboxId,
-        sessionId: nextId,
-      });
-      return {
-        sessionId: nextId,
-        created: true,
-      };
-    } catch (error) {
-      const detail = classifyDaytonaError(error);
-      if (detail.category === "conflict") {
-        return {
-          sessionId: nextId,
-          created: false,
-        };
-      }
-      if (detail.category !== "invalid_request" || attempt > 0) {
-        throw error;
-      }
-    }
-  }
-
-  throw new Error("Unable to establish process session.");
 }
 
 export const listLabFiles = action({
@@ -211,18 +191,20 @@ export const listLabFiles = action({
   ),
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    const requestedPath = args.path?.trim();
-    const isWorkspaceRootRequest =
-      !requestedPath ||
-      requestedPath === "." ||
-      requestedPath === "workspace" ||
-      requestedPath === "/workspace";
 
     try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const result = await listFiles({
-        sandboxId,
-        path: args.path,
+      const { sandboxId, workspacePath } = await getActiveSession(
+        ctx,
+        userId,
+        args.threadId,
+      );
+      const result = await ctx.runAction(internalApi.labRuntime.execute, {
+        operation: "listFiles",
+        payload: {
+          sandboxId,
+          workspacePath,
+          path: args.path,
+        },
       });
 
       return {
@@ -233,21 +215,10 @@ export const listLabFiles = action({
         entries: result.entries,
       };
     } catch (error) {
-      const detail = classifyDaytonaError(error);
-      if (isWorkspaceRootRequest && detail.category === "not_found") {
-        return {
-          status: "success" as const,
-          summary:
-            "Workspace directory is missing. Create a project folder to get started.",
-          path: "workspace",
-          workspaceMissing: true,
-          entries: [],
-        };
-      }
       return {
         status: "failed" as const,
         summary: formatErrorSummary("list files", error),
-        error: detail,
+        error: classifyLabRuntimeError(error),
       };
     }
   },
@@ -275,13 +246,21 @@ export const readLabFile = action({
     const userId = await requireUserId(ctx);
 
     try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const result = await readFile({
-        sandboxId,
-        path: args.path,
-        offset: args.offset,
-        limit: args.limit,
-        format: "raw",
+      const { sandboxId, workspacePath } = await getActiveSession(
+        ctx,
+        userId,
+        args.threadId,
+      );
+      const result = await ctx.runAction(internalApi.labRuntime.execute, {
+        operation: "readFile",
+        payload: {
+          sandboxId,
+          workspacePath,
+          path: args.path,
+          offset: args.offset,
+          limit: args.limit,
+          format: "raw",
+        },
       });
 
       return {
@@ -296,7 +275,7 @@ export const readLabFile = action({
       return {
         status: "failed" as const,
         summary: formatErrorSummary("read file", error),
-        error: classifyDaytonaError(error),
+        error: classifyLabRuntimeError(error),
       };
     }
   },
@@ -321,11 +300,19 @@ export const writeLabFile = action({
     const userId = await requireUserId(ctx);
 
     try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const result = await writeFile({
-        sandboxId,
-        path: args.path,
-        content: args.content,
+      const { sandboxId, workspacePath } = await getActiveSession(
+        ctx,
+        userId,
+        args.threadId,
+      );
+      const result = await ctx.runAction(internalApi.labRuntime.execute, {
+        operation: "writeFile",
+        payload: {
+          sandboxId,
+          workspacePath,
+          path: args.path,
+          content: args.content,
+        },
       });
 
       return {
@@ -338,7 +325,7 @@ export const writeLabFile = action({
       return {
         status: "failed" as const,
         summary: formatErrorSummary("write file", error),
-        error: classifyDaytonaError(error),
+        error: classifyLabRuntimeError(error),
       };
     }
   },
@@ -365,13 +352,21 @@ export const editLabFile = action({
     const userId = await requireUserId(ctx);
 
     try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const result = await editFile({
-        sandboxId,
-        path: args.path,
-        oldText: args.oldText,
-        newText: args.newText,
-        replaceAll: args.replaceAll,
+      const { sandboxId, workspacePath } = await getActiveSession(
+        ctx,
+        userId,
+        args.threadId,
+      );
+      const result = await ctx.runAction(internalApi.labRuntime.execute, {
+        operation: "editFile",
+        payload: {
+          sandboxId,
+          workspacePath,
+          path: args.path,
+          oldText: args.oldText,
+          newText: args.newText,
+          replaceAll: args.replaceAll,
+        },
       });
 
       return {
@@ -384,7 +379,7 @@ export const editLabFile = action({
       return {
         status: "failed" as const,
         summary: formatErrorSummary("edit file", error),
-        error: classifyDaytonaError(error),
+        error: classifyLabRuntimeError(error),
       };
     }
   },
@@ -412,16 +407,27 @@ export const runLabCommand = action({
     const userId = await requireUserId(ctx);
 
     try {
-      await ctx.runMutation(internal.billing.assertCanRunExpensiveLabCommandInternal, {
-        userId,
-      });
+      await ctx.runMutation(
+        internalApi.billing.assertCanRunExpensiveLabCommandInternal,
+        {
+          userId,
+        },
+      );
 
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const result = await runCommand({
-        sandboxId,
-        command: args.command,
-        cwd: args.cwd,
-        timeoutSeconds: args.timeoutSeconds,
+      const { sandboxId, workspacePath } = await getActiveSession(
+        ctx,
+        userId,
+        args.threadId,
+      );
+      const result = await ctx.runAction(internalApi.labRuntime.execute, {
+        operation: "runCommand",
+        payload: {
+          sandboxId,
+          workspacePath,
+          command: args.command,
+          cwd: args.cwd,
+          timeoutSeconds: args.timeoutSeconds,
+        },
       });
 
       return {
@@ -436,347 +442,7 @@ export const runLabCommand = action({
       return {
         status: "failed" as const,
         summary: formatErrorSummary("run command", error),
-        error: classifyDaytonaError(error),
-      };
-    }
-  },
-});
-
-export const ensureLabTerminalSession = action({
-  args: {
-    threadId: v.string(),
-    sessionId: v.optional(v.string()),
-  },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      summary: v.string(),
-      sessionId: v.string(),
-      created: v.boolean(),
-    }),
-    failureValidator,
-  ),
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
-    try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const ensured = await ensureProcessSession(sandboxId, args.sessionId);
-
-      return {
-        status: "success" as const,
-        summary: ensured.created
-          ? "Created terminal session."
-          : "Reused existing terminal session.",
-        sessionId: ensured.sessionId,
-        created: ensured.created,
-      };
-    } catch (error) {
-      return {
-        status: "failed" as const,
-        summary: formatErrorSummary("ensure terminal session", error),
-        error: classifyDaytonaError(error),
-      };
-    }
-  },
-});
-
-export const ensureLabPtySession = action({
-  args: {
-    threadId: v.string(),
-    sessionId: v.optional(v.string()),
-    cols: v.optional(v.number()),
-    rows: v.optional(v.number()),
-  },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      summary: v.string(),
-      sessionId: v.string(),
-      created: v.boolean(),
-      cols: v.number(),
-      rows: v.number(),
-    }),
-    failureValidator,
-  ),
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
-    try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const sessionId = args.sessionId?.trim() || "studi-main";
-      const cols =
-        typeof args.cols === "number" && Number.isFinite(args.cols)
-          ? Math.max(40, Math.floor(args.cols))
-          : DEFAULT_PTY_COLS;
-      const rows =
-        typeof args.rows === "number" && Number.isFinite(args.rows)
-          ? Math.max(10, Math.floor(args.rows))
-          : DEFAULT_PTY_ROWS;
-
-      const ensured = await ensurePtySession({
-        sandboxId,
-        sessionId,
-        cols,
-        rows,
-      });
-
-      return {
-        status: "success" as const,
-        summary: ensured.created
-          ? "Created PTY terminal session."
-          : "Reused PTY terminal session.",
-        sessionId: ensured.sessionId,
-        created: ensured.created,
-        cols: ensured.cols,
-        rows: ensured.rows,
-      };
-    } catch (error) {
-      console.error("[labIde] ensureLabPtySession failed", {
-        threadId: args.threadId,
-        requestedSessionId: args.sessionId,
-        cols: args.cols,
-        rows: args.rows,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return {
-        status: "failed" as const,
-        summary: formatErrorSummary("ensure PTY session", error),
-        error: classifyDaytonaError(error),
-      };
-    }
-  },
-});
-
-export const runLabTerminalCommand = action({
-  args: {
-    threadId: v.string(),
-    sessionId: v.string(),
-    command: v.string(),
-  },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      summary: v.string(),
-      sessionId: v.string(),
-      commandId: v.string(),
-      running: v.boolean(),
-      exitCode: v.optional(v.number()),
-      output: v.string(),
-      stdout: v.optional(v.string()),
-      stderr: v.optional(v.string()),
-    }),
-    failureValidator,
-  ),
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
-    try {
-      await ctx.runMutation(internal.billing.assertCanRunExpensiveLabCommandInternal, {
-        userId,
-      });
-
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const session = await ensureProcessSession(sandboxId, args.sessionId);
-
-      const result = await executeSessionCommand({
-        sandboxId,
-        sessionId: session.sessionId,
-        command: args.command,
-        runAsync: true,
-      });
-
-      const running = result.exitCode === undefined;
-      const summary = running
-        ? "Command started in terminal session."
-        : `Command finished with exit code ${result.exitCode}.`;
-
-      return {
-        status: "success" as const,
-        summary,
-        sessionId: session.sessionId,
-        commandId: result.commandId,
-        running,
-        exitCode: result.exitCode,
-        output: truncateOutput(result.output ?? ""),
-        stdout: result.stdout ? truncateOutput(result.stdout) : undefined,
-        stderr: result.stderr ? truncateOutput(result.stderr) : undefined,
-      };
-    } catch (error) {
-      return {
-        status: "failed" as const,
-        summary: formatErrorSummary("run terminal command", error),
-        error: classifyDaytonaError(error),
-      };
-    }
-  },
-});
-
-export const getLabTerminalCommandLogs = action({
-  args: {
-    threadId: v.string(),
-    sessionId: v.string(),
-    commandId: v.string(),
-  },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      summary: v.string(),
-      sessionId: v.string(),
-      commandId: v.string(),
-      running: v.boolean(),
-      exitCode: v.optional(v.number()),
-      output: v.string(),
-      stdout: v.optional(v.string()),
-      stderr: v.optional(v.string()),
-    }),
-    failureValidator,
-  ),
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
-    try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const streams = await getSessionCommandLogs({
-        sandboxId,
-        sessionId: args.sessionId,
-        commandId: args.commandId,
-      });
-
-      let running = true;
-      let exitCode: number | undefined;
-      try {
-        const status = await getSessionCommand({
-          sandboxId,
-          sessionId: args.sessionId,
-          commandId: args.commandId,
-        });
-        running = status.running;
-        exitCode = status.exitCode;
-      } catch (statusError) {
-        const detail = classifyDaytonaError(statusError);
-        if (detail.category === "not_found") {
-          running = false;
-          exitCode = exitCode ?? 0;
-        } else {
-          throw statusError;
-        }
-      }
-
-      const summary = running
-        ? "Terminal command still running."
-        : `Terminal command finished with exit code ${exitCode ?? 0}.`;
-
-      return {
-        status: "success" as const,
-        summary,
-        sessionId: args.sessionId,
-        commandId: args.commandId,
-        running,
-        exitCode,
-        output: truncateOutput(streams.output ?? "", 20_000),
-        stdout: streams.stdout
-          ? truncateOutput(streams.stdout, 20_000)
-          : undefined,
-        stderr: streams.stderr
-          ? truncateOutput(streams.stderr, 20_000)
-          : undefined,
-      };
-    } catch (error) {
-      return {
-        status: "failed" as const,
-        summary: formatErrorSummary("get terminal logs", error),
-        error: classifyDaytonaError(error),
-      };
-    }
-  },
-});
-
-export const sendLabTerminalInput = action({
-  args: {
-    threadId: v.string(),
-    sessionId: v.string(),
-    commandId: v.string(),
-    data: v.string(),
-  },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      summary: v.string(),
-      sessionId: v.string(),
-      commandId: v.string(),
-    }),
-    failureValidator,
-  ),
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
-    try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      await sendSessionCommandInput({
-        sandboxId,
-        sessionId: args.sessionId,
-        commandId: args.commandId,
-        data: args.data,
-      });
-
-      return {
-        status: "success" as const,
-        summary: "Input sent to running terminal command.",
-        sessionId: args.sessionId,
-        commandId: args.commandId,
-      };
-    } catch (error) {
-      return {
-        status: "failed" as const,
-        summary: formatErrorSummary("send terminal input", error),
-        error: classifyDaytonaError(error),
-      };
-    }
-  },
-});
-
-export const closeLabTerminalSession = action({
-  args: {
-    threadId: v.string(),
-    sessionId: v.string(),
-  },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      summary: v.string(),
-      sessionId: v.string(),
-    }),
-    failureValidator,
-  ),
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
-    try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      await deleteProcessSession({
-        sandboxId,
-        sessionId: args.sessionId,
-      });
-
-      return {
-        status: "success" as const,
-        summary: "Terminal session closed.",
-        sessionId: args.sessionId,
-      };
-    } catch (error) {
-      const detail = classifyDaytonaError(error);
-      if (detail.category === "not_found") {
-        return {
-          status: "success" as const,
-          summary: "Terminal session already closed.",
-          sessionId: args.sessionId,
-        };
-      }
-      return {
-        status: "failed" as const,
-        summary: formatErrorSummary("close terminal session", error),
-        error: detail,
+        error: classifyLabRuntimeError(error),
       };
     }
   },
@@ -809,12 +475,20 @@ export const grepLabFiles = action({
     const userId = await requireUserId(ctx);
 
     try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const result = await grepFiles({
-        sandboxId,
-        pattern: args.pattern,
-        path: args.path,
-        limit: args.limit,
+      const { sandboxId, workspacePath } = await getActiveSession(
+        ctx,
+        userId,
+        args.threadId,
+      );
+      const result = await ctx.runAction(internalApi.labRuntime.execute, {
+        operation: "grepFiles",
+        payload: {
+          sandboxId,
+          workspacePath,
+          pattern: args.pattern,
+          path: args.path,
+          limit: args.limit,
+        },
       });
 
       return {
@@ -822,17 +496,19 @@ export const grepLabFiles = action({
         summary: `Found ${result.total} match(es).`,
         path: result.path,
         total: result.total,
-        matches: result.matches.map((match) => ({
+        matches: result.matches.map(
+          (match: { file: string; line: number; content: string }) => ({
           file: match.file,
           line: match.line,
           content: truncateOutput(match.content, 500),
-        })),
+          }),
+        ),
       };
     } catch (error) {
       return {
         status: "failed" as const,
         summary: formatErrorSummary("grep files", error),
-        error: classifyDaytonaError(error),
+        error: classifyLabRuntimeError(error),
       };
     }
   },
@@ -859,12 +535,20 @@ export const globLabFiles = action({
     const userId = await requireUserId(ctx);
 
     try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const result = await globFiles({
-        sandboxId,
-        pattern: args.pattern,
-        path: args.path,
-        limit: args.limit,
+      const { sandboxId, workspacePath } = await getActiveSession(
+        ctx,
+        userId,
+        args.threadId,
+      );
+      const result = await ctx.runAction(internalApi.labRuntime.execute, {
+        operation: "globFiles",
+        payload: {
+          sandboxId,
+          workspacePath,
+          pattern: args.pattern,
+          path: args.path,
+          limit: args.limit,
+        },
       });
 
       return {
@@ -878,93 +562,36 @@ export const globLabFiles = action({
       return {
         status: "failed" as const,
         summary: formatErrorSummary("glob files", error),
-        error: classifyDaytonaError(error),
+        error: classifyLabRuntimeError(error),
       };
     }
   },
 });
 
-export const getLabPreviewLink = action({
+export const createLabClientSession = action({
   args: {
     threadId: v.string(),
-    port: v.number(),
-    expiresInSeconds: v.optional(v.number()),
+    sessionId: v.optional(v.string()),
   },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      summary: v.string(),
-      port: v.number(),
-      url: v.string(),
-      token: v.optional(v.string()),
-    }),
-    failureValidator,
-  ),
+  returns: serializedSandboxSessionValidator,
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-
-    try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const preview = await getSignedPreviewLink({
+    const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
+    const hostToken = await ctx.runAction(internalApi.labRuntime.execute, {
+      operation: "createHostToken",
+      payload: {
         sandboxId,
-        port: args.port,
-        expiresInSeconds: args.expiresInSeconds,
-      });
+      },
+    });
+    const session = await ctx.runAction(internalApi.labRuntime.execute, {
+      operation: "createBrowserSession",
+      payload: {
+        sandboxId,
+        sessionId: args.sessionId?.trim() || undefined,
+        hostToken,
+      },
+    });
 
-      return {
-        status: "success" as const,
-        summary: `Preview URL ready for port ${args.port}.`,
-        port: args.port,
-        url: preview.url,
-        token: preview.token,
-      };
-    } catch (error) {
-      return {
-        status: "failed" as const,
-        summary: formatErrorSummary("get preview link", error),
-        error: classifyDaytonaError(error),
-      };
-    }
+    return session;
   },
 });
-
-export const getLabPreviewProxyDescriptor = action({
-  args: {
-    threadId: v.string(),
-    port: v.number(),
-  },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      summary: v.string(),
-      port: v.number(),
-      proxyPath: v.string(),
-    }),
-    failureValidator,
-  ),
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
-    try {
-      if (!isPreviewablePort(args.port)) {
-        throw new Error("Preview port must be between 3000 and 9999.");
-      }
-
-      await getActiveSession(ctx, userId, args.threadId);
-
-      return {
-        status: "success" as const,
-        summary: `Preview proxy ready for port ${args.port}.`,
-        port: args.port,
-        proxyPath: `/api/lab/preview/${encodeURIComponent(args.threadId)}/${args.port}`,
-      };
-    } catch (error) {
-      return {
-        status: "failed" as const,
-        summary: formatErrorSummary("get preview proxy descriptor", error),
-        error: classifyDaytonaError(error),
-      };
-    }
-  },
-});
-

@@ -16,6 +16,8 @@ const labMetadataValidator = v.object({
   framework: v.optional(v.string()),
   template: v.optional(v.string()),
   runtimeProfileId: v.optional(v.string()),
+  workspacePath: v.optional(v.string()),
+  templateKey: v.optional(v.string()),
 });
 
 const labSessionValidator = v.object({
@@ -39,6 +41,8 @@ type LabMetadata = {
   framework?: string;
   template?: string;
   runtimeProfileId?: string;
+  workspacePath?: string;
+  templateKey?: string;
 };
 
 function mergeMetadata(
@@ -52,6 +56,8 @@ function mergeMetadata(
     framework: incoming?.framework ?? existing.framework,
     template: incoming?.template ?? existing.template,
     runtimeProfileId: incoming?.runtimeProfileId ?? existing.runtimeProfileId,
+    workspacePath: incoming?.workspacePath ?? existing.workspacePath,
+    templateKey: incoming?.templateKey ?? existing.templateKey,
   };
 }
 
@@ -148,6 +154,8 @@ export const upsertLabSessionInternal = internalMutation({
         framework: args.metadata?.framework,
         template: args.metadata?.template,
         runtimeProfileId: args.metadata?.runtimeProfileId,
+        workspacePath: args.metadata?.workspacePath,
+        templateKey: args.metadata?.templateKey,
       },
       createdAt: now,
       updatedAt: now,

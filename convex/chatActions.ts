@@ -16,12 +16,14 @@ import {
   studiAgent,
 } from "./agent";
 import {
-  classifyDaytonaError,
-  deleteSandboxAndConfirm,
+  classifyLabRuntimeError,
   formatErrorSummary,
-} from "./daytona";
+} from "../lib/lab-runtime/shared";
 
 const internalApi = internal as unknown as {
+  labRuntime: {
+    execute: FunctionReference<"action", "internal">;
+  };
   plans: {
     getPlanSummaryForThreadInternal: FunctionReference<"query", "internal">;
   };
@@ -128,6 +130,7 @@ export const deleteThread: ReturnType<typeof action> = action({
       status: v.literal("success"),
       deleted: v.boolean(),
       deletedLab: v.boolean(),
+      labCleanupWarning: v.optional(v.string()),
     }),
     v.object({
       status: v.literal("failed"),
@@ -141,6 +144,7 @@ export const deleteThread: ReturnType<typeof action> = action({
         requestId: v.optional(v.string()),
         hint: v.optional(v.string()),
         raw: v.optional(v.string()),
+        exitCode: v.optional(v.number()),
       }),
     }),
   ),
@@ -160,15 +164,25 @@ export const deleteThread: ReturnType<typeof action> = action({
       },
     );
 
+    let labCleanupWarning: string | undefined;
+
     if (labSession) {
       try {
-        await deleteSandboxAndConfirm(labSession.sandboxId);
+        await ctx.runAction(internalApi.labRuntime.execute, {
+          operation: "deleteSandboxAndConfirm",
+          payload: {
+            sandboxId: labSession.sandboxId,
+          },
+        });
       } catch (error) {
-        return {
-          status: "failed" as const,
-          summary: formatErrorSummary("delete thread", error),
-          error: classifyDaytonaError(error),
-        };
+        const detail = classifyLabRuntimeError(error);
+        if (detail.category !== "not_found") {
+          return {
+            status: "failed" as const,
+            summary: formatErrorSummary("delete thread", error),
+            error: detail,
+          };
+        }
       }
 
       await ctx.runMutation(internal.labs.deleteLabSessionInternal, {
@@ -198,6 +212,7 @@ export const deleteThread: ReturnType<typeof action> = action({
       status: "success" as const,
       deleted,
       deletedLab: Boolean(labSession),
+      labCleanupWarning,
     };
   },
 });
@@ -225,12 +240,11 @@ export const generateAssistantReply = internalAction({
         threadId: args.threadId,
       },
     );
-    const hasLabSession = Boolean(labSession);
 
     const isVoiceTurn = args.source === "voice";
     const activeAgent = isVoiceTurn
       ? shruAgent
-      : hasLabSession
+      : labSession && !labSession.archivedAt
         ? codiAgent
         : studiAgent;
 
@@ -245,7 +259,7 @@ export const generateAssistantReply = internalAction({
 
     const tools = isVoiceTurn
       ? buildShruToolset(activeModelProfile)
-      : hasLabSession
+      : labSession && !labSession.archivedAt
         ? buildCodiToolset(includePlanTools)
         : buildStudiToolset(activeModelProfile, includePlanTools);
 
@@ -286,7 +300,7 @@ export const generateAssistantReply = internalAction({
           status: "success",
           durationMs,
           metadata: {
-            usedLabAgent: hasLabSession,
+            usedLabAgent: Boolean(labSession && !labSession.archivedAt),
             usedVoiceAgent: isVoiceTurn,
             includePlanTools,
             modelProfile: activeModelProfile,
@@ -301,7 +315,7 @@ export const generateAssistantReply = internalAction({
         properties: {
           thread_id: args.threadId,
           duration_ms: durationMs,
-          used_lab_agent: hasLabSession,
+          used_lab_agent: Boolean(labSession && !labSession.archivedAt),
           used_voice_agent: isVoiceTurn,
           include_plan_tools: includePlanTools,
           model_profile: activeModelProfile,
@@ -323,7 +337,7 @@ export const generateAssistantReply = internalAction({
           retriable: true,
           metadata: {
             error: error instanceof Error ? error.message : String(error),
-            usedLabAgent: hasLabSession,
+            usedLabAgent: Boolean(labSession && !labSession.archivedAt),
             usedVoiceAgent: isVoiceTurn,
             includePlanTools,
             modelProfile: activeModelProfile,
@@ -338,7 +352,7 @@ export const generateAssistantReply = internalAction({
         properties: {
           thread_id: args.threadId,
           duration_ms: durationMs,
-          used_lab_agent: hasLabSession,
+          used_lab_agent: Boolean(labSession && !labSession.archivedAt),
           used_voice_agent: isVoiceTurn,
           include_plan_tools: includePlanTools,
           model_profile: activeModelProfile,

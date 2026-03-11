@@ -9,27 +9,24 @@ import type {
 import { z } from "zod";
 import { internal } from "./_generated/api";
 import {
-  classifyDaytonaError,
-  createSandbox,
-  editFile,
-  ensureSandboxStarted,
+  classifyLabRuntimeError,
   formatErrorSummary,
-  globFiles,
-  grepFiles,
-  listFiles,
-  readFile,
-  runCommand,
   truncateOutput,
-  writeFile,
-  type DaytonaToolError,
-} from "./daytona";
+  type LabRuntimeError,
+} from "../lib/lab-runtime/shared";
 import { capturePosthogEvent } from "./posthog";
 import { resolveLabRuntime } from "../lib/lab-runtime/profiles";
 
 const internalApi = internal as unknown as {
   billing: {
     assertCanCreateLabInternal: FunctionReference<"mutation", "internal">;
-    assertCanRunExpensiveLabCommandInternal: FunctionReference<"mutation", "internal">;
+    assertCanRunExpensiveLabCommandInternal: FunctionReference<
+      "mutation",
+      "internal"
+    >;
+  };
+  labRuntime: {
+    execute: FunctionReference<"action", "internal">;
   };
   plans: {
     ensureLabPlanInternal: FunctionReference<"mutation", "internal">;
@@ -53,10 +50,17 @@ type MutationRunner = <
   ...args: OptionalRestArgs<Mutation>
 ) => Promise<FunctionReturnType<Mutation>>;
 
+type ActionRunner = <
+  Action extends FunctionReference<"action", "public" | "internal">,
+>(
+  action: Action,
+  ...args: OptionalRestArgs<Action>
+) => Promise<FunctionReturnType<Action>>;
+
 type ToolFailurePayload = {
   status: "failed";
   summary: string;
-  error: DaytonaToolError;
+  error: LabRuntimeError;
   diagnostics?: Record<string, unknown>;
 };
 
@@ -68,6 +72,8 @@ type LabSessionLookup = {
       framework?: string;
       template?: string;
       runtimeProfileId?: string;
+      workspacePath?: string;
+      templateKey?: string;
     };
     archivedAt?: number;
   } | null;
@@ -132,28 +138,10 @@ function failure(
   error: unknown,
   diagnostics?: Record<string, unknown>,
 ): ToolFailurePayload {
-  const candidate = error as { data?: { message?: string; surface?: string } };
-  if (
-    candidate?.data &&
-    typeof candidate.data.message === "string" &&
-    candidate.data.message.length > 0
-  ) {
-    return {
-      status: "failed",
-      summary: candidate.data.message,
-      error: {
-        category: "invalid_request",
-        message: candidate.data.message,
-        retriable: false,
-      },
-      diagnostics,
-    };
-  }
-
   return {
     status: "failed",
     summary: formatErrorSummary(operation, error),
-    error: classifyDaytonaError(error),
+    error: classifyLabRuntimeError(error),
     diagnostics,
   };
 }
@@ -197,30 +185,55 @@ async function touchSession(
   });
 }
 
+async function runLabRuntime<Output>(
+  ctx: {
+    runAction: ActionRunner;
+  },
+  operation: string,
+  payload: Record<string, unknown>,
+) {
+  return (await ctx.runAction(internalApi.labRuntime.execute, {
+    operation,
+    payload,
+  })) as Output;
+}
+
 async function getActiveSandbox(ctx: {
   userId?: string;
   threadId?: string;
   runQuery: QueryRunner;
   runMutation: MutationRunner;
+  runAction: ActionRunner;
 }): Promise<{
   sandboxId: string;
+  workspacePath: string;
   userId: string;
   threadId: string;
 }> {
   const { session, userId, threadId } = await getSessionForContext(ctx);
-  if (!session) {
-    throw new Error("No lab session in this thread.");
+  if (!session || session.archivedAt) {
+    throw new Error("No active lab session in this thread.");
   }
 
   await ctx.runMutation(internalApi.billing.assertCanCreateLabInternal, {
     userId,
   });
 
-  await ensureSandboxStarted(session.sandboxId);
+  const workspacePath = session.metadata?.workspacePath?.trim();
+  if (!workspacePath) {
+    throw new Error(
+      "Lab session is missing workspace metadata. Recreate the lab.",
+    );
+  }
+
+  await runLabRuntime<null>(ctx, "resumeSandbox", {
+    sandboxId: session.sandboxId,
+  });
   await touchSession(ctx, userId, threadId);
 
   return {
     sandboxId: session.sandboxId,
+    workspacePath,
     userId,
     threadId,
   };
@@ -233,6 +246,7 @@ const createLabSchema = z.object({
   framework: z.string().optional(),
   template: z.string().optional(),
   createTrack: z.boolean().optional(),
+  forceNewSandbox: z.boolean().optional(),
 });
 
 type CreateLabResult =
@@ -247,6 +261,8 @@ type CreateLabResult =
         framework?: string;
         template?: string;
         runtimeProfileId?: string;
+        workspacePath?: string;
+        templateKey?: string;
       };
     }
   | ToolFailurePayload;
@@ -267,16 +283,19 @@ export const createLabTool = createTool<
       return failure("create_lab", new Error("Missing user/thread context."));
     }
 
+    const runtime = resolveLabRuntime({
+      language: args.language,
+      framework: args.framework,
+      template: args.template,
+    });
+
     try {
       await ctx.runMutation(internalApi.billing.assertCanCreateLabInternal, {
         userId,
       });
 
-      const runtime = resolveLabRuntime({
-        language: args.language,
-        framework: args.framework,
-      });
       const shouldCreateTrack = args.createTrack === true;
+      const forceNewSandbox = args.forceNewSandbox === true;
       const existing = (await ctx.runQuery(
         internal.labs.getLabSessionByThreadForUserInternal,
         {
@@ -286,23 +305,49 @@ export const createLabTool = createTool<
       )) as LabSessionLookup["session"];
 
       let sandboxId: string;
+      let workspacePath: string | undefined;
+      let templateKey: string | undefined;
       let reusedExisting = false;
+      let cleanupWarning: string | undefined;
       const existingProfileId = existing?.metadata?.runtimeProfileId;
-      if (existing?.sandboxId) {
+      if (existing?.sandboxId && !forceNewSandbox) {
         sandboxId = existing.sandboxId;
         reusedExisting = true;
-        await ensureSandboxStarted(sandboxId);
+        workspacePath = existing.metadata?.workspacePath;
+        templateKey = existing.metadata?.templateKey;
+        await runLabRuntime<null>(ctx, "resumeSandbox", {
+          sandboxId,
+        });
       } else {
-        const created = await createSandbox({
-          language: runtime.language,
-          labels: {
-            runtime_language: runtime.language,
-            runtime_framework: runtime.framework,
-            runtime_profile: runtime.runtimeProfileId,
-            runtime_template: args.template,
-          },
+        if (existing?.sandboxId && forceNewSandbox) {
+          try {
+            await runLabRuntime<null>(ctx, "deleteSandboxAndConfirm", {
+              sandboxId: existing.sandboxId,
+            });
+          } catch (error) {
+            const detail = classifyLabRuntimeError(error);
+            if (detail.category !== "not_found") {
+              cleanupWarning = detail.message;
+            }
+          }
+        }
+
+        const created = await runLabRuntime<{
+          sandboxId: string;
+          workspacePath: string;
+          templateKey?: string;
+        }>(ctx, "createSandbox", {
+          templateKey: runtime.templateKey,
+          runtimeProfileId: runtime.runtimeProfileId,
+          title: args.topic?.trim() || "Studi Lab",
         });
         sandboxId = created.sandboxId;
+        workspacePath = created.workspacePath;
+        templateKey = created.templateKey;
+      }
+
+      if (!workspacePath) {
+        throw new Error("Lab sandbox is missing a workspace path.");
       }
 
       await ctx.runMutation(internal.labs.upsertLabSessionInternal, {
@@ -314,9 +359,12 @@ export const createLabTool = createTool<
           objective: args.objective,
           language: runtime.language,
           framework: runtime.framework,
-          template: args.template?.trim() || undefined,
+          template: args.template?.trim() || runtime.templateKey,
           runtimeProfileId: runtime.runtimeProfileId,
+          workspacePath,
+          templateKey,
         },
+        unarchive: true,
       });
 
       if (shouldCreateTrack) {
@@ -332,8 +380,11 @@ export const createLabTool = createTool<
         reusedExisting &&
         existingProfileId &&
         existingProfileId !== runtime.runtimeProfileId
-          ? ` Reused existing sandbox runtime (${existingProfileId}).`
+          ? ` Reused existing sandbox runtime (${existingProfileId}); use forceNewSandbox=true to switch.`
           : "";
+      const cleanupNotice = cleanupWarning
+        ? ` Previous sandbox cleanup warning: ${cleanupWarning}`
+        : "";
 
       await recordLabToolTelemetry(ctx, {
         userId,
@@ -348,28 +399,35 @@ export const createLabTool = createTool<
           framework: runtime.framework,
           template: args.template,
           runtimeProfileId: runtime.runtimeProfileId,
+          selectedTemplateKey: runtime.templateKey,
           inferredFromFramework: runtime.inferredFromFramework,
           createdTrack: shouldCreateTrack,
+          forceNewSandbox,
           reusedExisting,
+          cleanupWarning,
           sandboxId,
+          workspacePath,
+          templateKey,
         },
       });
 
       return {
         status: "active",
-        summary: `Lab is active. I will now use sandbox tools directly and report exact command/file results.${runtimeNotice}`,
+        summary: `Lab is active. I will now use sandbox tools directly and report exact command/file results.${runtimeNotice}${cleanupNotice}`,
         sandboxId,
         metadata: {
           topic: args.topic,
           objective: args.objective,
           language: runtime.language,
           framework: runtime.framework,
-          template: args.template?.trim() || undefined,
+          template: args.template?.trim() || runtime.templateKey,
           runtimeProfileId: runtime.runtimeProfileId,
+          workspacePath,
+          templateKey,
         },
       };
     } catch (error) {
-      const detail = classifyDaytonaError(error);
+      const detail = classifyLabRuntimeError(error);
       await recordLabToolTelemetry(ctx, {
         userId,
         threadId,
@@ -384,12 +442,89 @@ export const createLabTool = createTool<
           language: args.language,
           framework: args.framework,
           template: args.template,
+          selectedTemplateKey: runtime.templateKey,
           createTrack: args.createTrack,
+          forceNewSandbox: args.forceNewSandbox,
           error: detail.message,
           httpStatus: detail.httpStatus,
         },
       });
       return failure("create_lab", error, {
+        threadId,
+      });
+    }
+  },
+});
+
+const archiveLabSchema = z.object({});
+
+type ArchiveLabResult =
+  | {
+      status: "archived";
+      summary: string;
+    }
+  | ToolFailurePayload;
+
+export const archiveLabTool = createTool<
+  z.infer<typeof archiveLabSchema>,
+  ArchiveLabResult
+>({
+  description: "Archive the current lab and hibernate its sandbox.",
+  args: archiveLabSchema,
+  handler: async (ctx) => {
+    const startedAt = Date.now();
+    const userId = ctx.userId;
+    const threadId = ctx.threadId;
+
+    if (!userId || !threadId) {
+      return failure("archive_lab", new Error("Missing user/thread context."));
+    }
+
+    try {
+      const { session } = await getSessionForContext(ctx);
+      if (!session) {
+        return failure("archive_lab", new Error("No lab session found."), {
+          threadId,
+        });
+      }
+
+      await runLabRuntime<null>(ctx, "hibernateSandbox", {
+        sandboxId: session.sandboxId,
+      });
+
+      await ctx.runMutation(internal.labs.archiveLabSessionInternal, {
+        userId,
+        threadId,
+      });
+
+      await recordLabToolTelemetry(ctx, {
+        userId,
+        threadId,
+        name: "archive_lab",
+        status: "success",
+        durationMs: Date.now() - startedAt,
+      });
+
+      return {
+        status: "archived",
+        summary: "Lab archived. Sandbox hibernated and state preserved.",
+      };
+    } catch (error) {
+      const detail = classifyLabRuntimeError(error);
+      await recordLabToolTelemetry(ctx, {
+        userId,
+        threadId,
+        name: "archive_lab",
+        status: "failed",
+        durationMs: Date.now() - startedAt,
+        errorCategory: detail.category,
+        retriable: detail.retriable,
+        metadata: {
+          error: detail.message,
+          httpStatus: detail.httpStatus,
+        },
+      });
+      return failure("archive_lab", error, {
         threadId,
       });
     }
@@ -418,9 +553,15 @@ export const readTool = createTool<z.infer<typeof readSchema>, ReadResult>({
   args: readSchema,
   handler: async (ctx, args) => {
     try {
-      const { sandboxId } = await getActiveSandbox(ctx);
-      const result = await readFile({
+      const { sandboxId, workspacePath } = await getActiveSandbox(ctx);
+      const result = await runLabRuntime<{
+        path: string;
+        content: string;
+        truncated: boolean;
+        isBinary: boolean;
+      }>(ctx, "readFile", {
         sandboxId,
+        workspacePath,
         path: args.path,
         offset: args.offset,
         limit: args.limit,
@@ -464,9 +605,14 @@ export const grepTool = createTool<z.infer<typeof grepSchema>, GrepResult>({
   args: grepSchema,
   handler: async (ctx, args) => {
     try {
-      const { sandboxId } = await getActiveSandbox(ctx);
-      const result = await grepFiles({
+      const { sandboxId, workspacePath } = await getActiveSandbox(ctx);
+      const result = await runLabRuntime<{
+        path: string;
+        total: number;
+        matches: Array<{ file: string; line: number; content: string }>;
+      }>(ctx, "grepFiles", {
         sandboxId,
+        workspacePath,
         pattern: args.pattern,
         path: args.path,
         limit: args.limit,
@@ -513,9 +659,14 @@ export const globTool = createTool<z.infer<typeof globSchema>, GlobResult>({
   args: globSchema,
   handler: async (ctx, args) => {
     try {
-      const { sandboxId } = await getActiveSandbox(ctx);
-      const result = await globFiles({
+      const { sandboxId, workspacePath } = await getActiveSandbox(ctx);
+      const result = await runLabRuntime<{
+        path: string;
+        total: number;
+        files: string[];
+      }>(ctx, "globFiles", {
         sandboxId,
+        workspacePath,
         pattern: args.pattern,
         path: args.path,
         limit: args.limit,
@@ -572,9 +723,14 @@ export const runTool = createTool<z.infer<typeof runSchema>, RunResult>({
         );
       }
 
-      const { sandboxId } = await getActiveSandbox(ctx);
-      const result = await runCommand({
+      const { sandboxId, workspacePath } = await getActiveSandbox(ctx);
+      const result = await runLabRuntime<{
+        cwd: string;
+        exitCode?: number;
+        output: string;
+      }>(ctx, "runCommand", {
         sandboxId,
+        workspacePath,
         command: args.command,
         cwd: args.cwd,
         timeoutSeconds: args.timeoutSeconds,
@@ -602,7 +758,7 @@ export const runTool = createTool<z.infer<typeof runSchema>, RunResult>({
         output: truncateOutput(result.output),
       };
     } catch (error) {
-      const detail = classifyDaytonaError(error);
+      const detail = classifyLabRuntimeError(error);
       await recordLabToolTelemetry(ctx, {
         userId,
         threadId,
@@ -645,9 +801,13 @@ export const writeTool = createTool<z.infer<typeof writeSchema>, WriteResult>({
   args: writeSchema,
   handler: async (ctx, args) => {
     try {
-      const { sandboxId } = await getActiveSandbox(ctx);
-      const result = await writeFile({
+      const { sandboxId, workspacePath } = await getActiveSandbox(ctx);
+      const result = await runLabRuntime<{
+        path: string;
+        bytes: number;
+      }>(ctx, "writeFile", {
         sandboxId,
+        workspacePath,
         path: args.path,
         content: args.content,
       });
@@ -687,9 +847,13 @@ export const editTool = createTool<z.infer<typeof editSchema>, EditResult>({
   args: editSchema,
   handler: async (ctx, args) => {
     try {
-      const { sandboxId } = await getActiveSandbox(ctx);
-      const result = await editFile({
+      const { sandboxId, workspacePath } = await getActiveSandbox(ctx);
+      const result = await runLabRuntime<{
+        path: string;
+        replacements: number;
+      }>(ctx, "editFile", {
         sandboxId,
+        workspacePath,
         path: args.path,
         oldText: args.oldText,
         newText: args.newText,
@@ -734,9 +898,19 @@ export const listTool = createTool<z.infer<typeof listSchema>, ListResult>({
   args: listSchema,
   handler: async (ctx, args) => {
     try {
-      const { sandboxId } = await getActiveSandbox(ctx);
-      const result = await listFiles({
+      const { sandboxId, workspacePath } = await getActiveSandbox(ctx);
+      const result = await runLabRuntime<{
+        path: string;
+        entries: Array<{
+          name: string;
+          path: string;
+          isDir: boolean;
+          size: number;
+          modTime: string;
+        }>;
+      }>(ctx, "listFiles", {
         sandboxId,
+        workspacePath,
         path: args.path,
       });
 
