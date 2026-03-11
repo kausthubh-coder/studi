@@ -45,6 +45,7 @@ async function disposeSandboxClient(client: SandboxClient | null) {
 
 export function useLabSandboxClient(threadId: string): UseLabSandboxClientResult {
   const createLabClientSession = useAction(createLabClientSessionRef);
+  const createLabClientSessionRefValue = useRef(createLabClientSession);
   const clientRef = useRef<SandboxClient | null>(null);
   const requestIdRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
@@ -53,6 +54,10 @@ export function useLabSandboxClient(threadId: string): UseLabSandboxClientResult
   const [error, setError] = useState<string | null>(null);
   const [availablePorts, setAvailablePorts] = useState<number[]>([]);
   const [sandbox, setSandbox] = useState<SandboxClient | null>(null);
+
+  useEffect(() => {
+    createLabClientSessionRefValue.current = createLabClientSession;
+  }, [createLabClientSession]);
 
   const reconnect = useCallback(async () => {
     const requestId = requestIdRef.current + 1;
@@ -69,7 +74,7 @@ export function useLabSandboxClient(threadId: string): UseLabSandboxClientResult
 
     try {
       const initialSession = deserializeSandboxSession(
-        await createLabClientSession({
+        await createLabClientSessionRefValue.current({
           threadId,
           sessionId: sessionIdRef.current ?? undefined,
         }),
@@ -78,7 +83,7 @@ export function useLabSandboxClient(threadId: string): UseLabSandboxClientResult
         session: initialSession,
         getSession: async (sessionId) =>
           deserializeSandboxSession(
-            await createLabClientSession({
+            await createLabClientSessionRefValue.current({
               threadId,
               sessionId,
             }),
@@ -144,7 +149,7 @@ export function useLabSandboxClient(threadId: string): UseLabSandboxClientResult
           : "Unable to connect the lab sandbox.",
       );
     }
-  }, [createLabClientSession, threadId]);
+  }, [threadId]);
 
   useEffect(() => {
     sessionIdRef.current = null;
@@ -158,7 +163,7 @@ export function useLabSandboxClient(threadId: string): UseLabSandboxClientResult
       setSandbox(null);
       void disposeSandboxClient(currentClient);
     };
-  }, [reconnect]);
+  }, [threadId, reconnect]);
 
   return {
     sandbox,

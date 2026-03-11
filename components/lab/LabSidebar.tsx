@@ -38,10 +38,14 @@ export const LabSidebar = memo(function LabSidebar({
   onRefresh,
 }: LabSidebarProps) {
   const segments = useMemo(() => {
-    const normalized = currentPath
-      .replace(/\\/g, "/")
-      .replace(/^\/+/, "")
-      .replace(/\/+$/, "");
+    const trimmed = currentPath.trim();
+    const normalized =
+      !trimmed || trimmed === "." || trimmed === "/"
+        ? ""
+        : trimmed
+            .replace(/\\/g, "/")
+            .replace(/^\/+/, "")
+            .replace(/\/+$/, "");
     const parts = normalized ? normalized.split("/").filter(Boolean) : [];
     return [
       {
@@ -79,7 +83,7 @@ export const LabSidebar = memo(function LabSidebar({
       <nav className="lab-breadcrumb">
         {segments.map((seg, i) => (
           <span
-            key={seg.path}
+            key={`${seg.path}:${i}`}
             style={{ display: "inline-flex", alignItems: "center" }}
           >
             {i > 0 && (
