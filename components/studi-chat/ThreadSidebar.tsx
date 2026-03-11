@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
 import {
   IconCompose,
   IconSettings,
@@ -74,9 +73,9 @@ export function ThreadSidebar({
       </div>
 
       {/* Thread list */}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="flex-1 overflow-y-auto px-3 py-2">
         {threads.length === 0 ? (
-          <div className="px-5 py-6 text-center">
+          <div className="px-2 py-6 text-center">
             <p
               className="text-xs italic text-fg-faint"
               style={{ fontFamily: "var(--font-jakarta)" }}
@@ -94,7 +93,7 @@ export function ThreadSidebar({
                   type="button"
                   onClick={() => onSelectThread(thread.threadId)}
                   data-active={isActive}
-                  className="sidebar-thread-btn w-full border-l-[2.5px] border-l-transparent px-4 py-2.5 pr-14 text-left"
+                  className="sidebar-thread-btn w-full px-3 py-2.5 pr-12 text-left"
                   disabled={isDeleting}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -173,21 +172,8 @@ export function ThreadSidebar({
         )}
       </div>
 
-      {/* Bottom bar: profile + settings */}
-      <div className="flex items-center gap-2 border-t border-border-faint px-4 py-3">
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: "w-8 h-8",
-            },
-          }}
-        />
-        <span
-          className="flex-1 truncate text-xs font-semibold text-fg"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
-          My Account
-        </span>
+      {/* Bottom bar: settings */}
+      <div className="border-t border-border-faint px-3 py-3 mt-auto">
         <Link href="/settings" className="sidebar-settings-link" title="Settings">
           <IconSettings className="h-4 w-4" />
           <span>Settings</span>

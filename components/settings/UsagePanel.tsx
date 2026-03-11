@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PricingTable, UserProfile, useUser } from "@clerk/nextjs";
+import { PricingTable, UserProfile, useUser, SignOutButton } from "@clerk/nextjs";
 import { useAction, useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -460,6 +460,23 @@ export function UsagePanel() {
               {user?.firstName ? `${user.firstName}'s workspace` : "Your workspace"}
               {billing ? ` · ${formatMonthLabel(billing.billingPeriod)}` : ""}
             </p>
+          </div>
+          
+          <div className="mt-2 flex shrink-0">
+            <SignOutButton>
+              <button
+                className="flex items-center gap-2 rounded-xl border-2 px-4 py-2 text-sm font-bold transition-all hover:-translate-y-0.5"
+                style={{
+                  fontFamily: "var(--font-jakarta)",
+                  background: "var(--bg-card)",
+                  borderColor: "#1c1208",
+                  color: "#1c1208",
+                  boxShadow: "2px 2px 0px var(--accent)",
+                }}
+              >
+                Sign out
+              </button>
+            </SignOutButton>
           </div>
         </div>
 
