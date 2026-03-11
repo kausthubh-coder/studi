@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react/no-unescaped-entities */
+
 import { useState, useRef } from "react";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -20,7 +22,6 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
   const joinWaitlist = useAction(api.waitlistPublic.joinWaitlist);
 
   const accentColor = variant === "teal" ? "#3a9e8a" : "#e05a3a";
-  const accentHover = variant === "teal" ? "#2c7a6a" : "#f06a48";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
