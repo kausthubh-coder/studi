@@ -1,24 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { UserProfile, useUser } from "@clerk/nextjs";
+import { PricingTable, UserProfile, useUser } from "@clerk/nextjs";
 import { useAction, useQuery } from "convex/react";
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/convex/_generated/api";
 
-function formatInteger(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+// ─── Formatting helpers ──────────────────────────────────────────────────────
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 4,
-  }).format(value);
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+    value,
+  );
 }
 
 function formatMonthLabel(periodStart: string): string {
@@ -30,45 +24,9 @@ function formatMonthLabel(periodStart: string): string {
   });
 }
 
-function formatLastSeen(value?: number): string {
-  if (!value) {
-    return "No calls yet";
-  }
-
-  return new Date(value).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <article className="rounded-2xl border border-border-faint bg-bg-alt p-3">
-      <p
-        className="text-[11px] text-fg-faint"
-        style={{ fontFamily: "var(--font-jakarta)" }}
-      >
-        {label}
-      </p>
-      <p
-        className="mt-1 text-base font-semibold text-fg"
-        style={{ fontFamily: "var(--font-jakarta)" }}
-      >
-        {value}
-      </p>
-    </article>
-  );
-}
-
 function formatPlanLabel(planKey: string): string {
-  if (planKey === "pro") {
-    return "Pro";
-  }
-  if (planKey === "intro") {
-    return "Intro";
-  }
+  if (planKey === "pro") return "Pro";
+  if (planKey === "intro") return "Intro";
   return "Onboarding";
 }
 
@@ -76,44 +34,77 @@ function formatDurationMinutes(seconds: number): string {
   return `${Math.max(0, Math.floor(seconds / 60))} min`;
 }
 
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
 function UsageMeter({
   label,
   used,
   limit,
   detail,
+  icon,
 }: {
   label: string;
   used: number;
   limit: number;
   detail: string;
+  icon: ReactNode;
 }) {
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const isWarning = percent >= 80;
+  const barColor = isWarning
+    ? "var(--accent)"
+    : "var(--accent2)";
 
   return (
-    <article className="rounded-2xl border border-border-faint bg-white p-3">
-      <div className="flex items-center justify-between gap-3">
-        <h3
-          className="text-sm font-semibold text-fg"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
-          {label}
-        </h3>
+    <article
+      className="rounded-2xl border p-5 transition-all duration-200 hover:-translate-y-0.5"
+      style={{
+        background: "var(--bg-card)",
+        borderColor: isWarning
+          ? "color-mix(in srgb, var(--accent) 30%, var(--border-faint))"
+          : "var(--border-faint)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-lg"
+            style={{
+              background: isWarning ? "var(--accent-dim)" : "var(--accent2-dim)",
+              color: isWarning ? "var(--accent)" : "var(--accent2)",
+            }}
+          >
+            {icon}
+          </span>
+          <h3
+            className="text-base font-semibold"
+            style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg)" }}
+          >
+            {label}
+          </h3>
+        </div>
         <span
-          className="text-[11px] text-fg-faint"
-          style={{ fontFamily: "var(--font-jakarta)" }}
+          className="text-sm font-bold tabular-nums"
+          style={{
+            fontFamily: "var(--font-jakarta)",
+            color: isWarning ? "var(--accent)" : "var(--fg-faint)",
+          }}
         >
           {percent}%
         </span>
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-bg-alt">
+      <div
+        className="mt-4 h-2 overflow-hidden rounded-full"
+        style={{ background: "var(--bg-alt)" }}
+      >
         <div
-          className="h-full rounded-full bg-accent"
-          style={{ width: `${percent}%` }}
+          className="h-full rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${percent}%`, background: barColor }}
         />
       </div>
       <p
-        className="mt-2 text-xs text-fg-muted"
-        style={{ fontFamily: "var(--font-jakarta)" }}
+        className="mt-3 text-sm"
+        style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
       >
         {detail}
       </p>
@@ -121,35 +112,306 @@ function UsageMeter({
   );
 }
 
-function TableHeader({ children }: { children: ReactNode }) {
+function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <th
-      className="border-b border-border-faint px-1 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-fg-faint"
-      style={{ fontFamily: "var(--font-jakarta)" }}
+    <p
+      className="text-[11px] font-bold uppercase tracking-[0.08em]"
+      style={{ fontFamily: "var(--font-jakarta)", color: "var(--accent2)" }}
     >
       {children}
-    </th>
+    </p>
   );
 }
 
-function TableCell({ children }: { children: ReactNode }) {
+// ─── Tab definitions ──────────────────────────────────────────────────────────
+
+type TabId = "usage" | "billing" | "account";
+
+const TABS: { id: TabId; label: string; icon: string }[] = [
+  { id: "usage", label: "Usage", icon: "📊" },
+  { id: "billing", label: "Billing", icon: "💳" },
+  { id: "account", label: "Account", icon: "👤" },
+];
+
+// ─── Clerk appearance matching Studi design system ────────────────────────────
+
+const clerkAppearance = {
+  variables: {
+    colorPrimary: "#e05a3a",
+    colorBackground: "#ffffff",
+    colorForeground: "#1c1208",
+    colorMutedForeground: "#6b5a47",
+    colorNeutral: "#b0a090",
+    colorBorder: "#f0e9e0",
+    colorInput: "#fdf8f2",
+    colorInputForeground: "#1c1208",
+    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+    borderRadius: "0.875rem",
+  },
+  elements: {
+    rootBox: {
+      width: "100%",
+    },
+    card: {
+      boxShadow: "none",
+      border: "none",
+      borderRadius: "0",
+      backgroundColor: "transparent",
+    },
+    navbar: {
+      background: "var(--bg-alt)",
+      borderRight: "1px solid var(--border-faint)",
+      borderRadius: "1rem 0 0 1rem",
+    },
+    navbarButton: {
+      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+      fontSize: "0.8125rem",
+    },
+    pageScrollBox: {
+      padding: "1.25rem 1.5rem",
+    },
+    profilePage__security: {
+      gap: "0.75rem",
+    },
+  },
+};
+
+const pricingAppearance = {
+  variables: {
+    colorPrimary: "#e05a3a",
+    colorBackground: "var(--bg-card)",
+    colorForeground: "#1c1208",
+    colorMutedForeground: "#6b5a47",
+    colorNeutral: "#b0a090",
+    colorBorder: "#f0e9e0",
+    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+    borderRadius: "1rem",
+  },
+  elements: {
+    rootBox: {
+      width: "100%",
+    },
+    pricingTable: {
+      width: "100%",
+    },
+    card: {
+      boxShadow: "none",
+      border: "none",
+      background: "transparent",
+      padding: 0,
+    }
+  },
+};
+
+// ─── Tab panels ──────────────────────────────────────────────────────────────
+
+function UsageTab({
+  billing,
+}: {
+  billing: ReturnType<typeof useQuery<typeof api.billing.getViewerBillingState>>;
+}) {
+  if (billing === undefined) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="flex flex-col items-center gap-3">
+          <div
+            className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
+            style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+          />
+          <p
+            className="text-sm"
+            style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-faint)" }}
+          >
+            Loading usage data…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!billing) {
+    return (
+      <div
+        className="rounded-2xl border p-6 text-center"
+        style={{ background: "var(--bg-alt)", borderColor: "var(--border-faint)" }}
+      >
+        <p
+          className="text-sm"
+          style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+        >
+          Usage information unavailable.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <td
-      className="border-b border-border-faint px-1 py-1.5 text-xs text-fg-muted"
-      style={{ fontFamily: "var(--font-jakarta)" }}
-    >
-      {children}
-    </td>
+    <div className="space-y-6">
+      {/* Plan header */}
+      <div
+        className="flex flex-col gap-4 rounded-2xl border p-6 sm:flex-row sm:items-center sm:justify-between"
+        style={{
+          background: "var(--bg-card)",
+          borderColor: "var(--border-faint)",
+        }}
+      >
+        <div>
+          <SectionLabel>Current plan</SectionLabel>
+          <h2
+            className="mt-2 text-3xl"
+            style={{ fontFamily: "var(--font-dm-serif)", color: "var(--fg)" }}
+          >
+            {formatPlanLabel(billing.planKey)}
+          </h2>
+          <p
+            className="mt-2 text-sm"
+            style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+          >
+            {billing.upgradeReason ??
+              "Your usage is tracked monthly across text, voice, and labs."}
+          </p>
+        </div>
+      </div>
+
+      {/* Onboarding notice */}
+      {billing.planKey === "free_onboarding" && (
+        <div
+          className="rounded-2xl border p-6"
+          style={{
+            background: "color-mix(in srgb, var(--accent3) 8%, var(--bg-card))",
+            borderColor: "color-mix(in srgb, var(--accent3) 30%, var(--border-faint))",
+          }}
+        >
+          <SectionLabel>Guided preview</SectionLabel>
+          <h3
+            className="mt-2 text-xl"
+            style={{ fontFamily: "var(--font-dm-serif)", color: "var(--fg)" }}
+          >
+            You&apos;re on the free preview
+          </h3>
+          <p
+            className="mt-2 max-w-lg text-sm"
+            style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+          >
+            Try a few text chats first. Voice, uploads, and labs unlock after you pick a paid plan.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span
+              className="rounded-full border px-4 py-1.5 text-xs font-semibold"
+              style={{
+                fontFamily: "var(--font-jakarta)",
+                background: "var(--bg-card)",
+                borderColor: "color-mix(in srgb, var(--accent3) 40%, var(--border-faint))",
+                color: "var(--fg-muted)",
+              }}
+            >
+              Free prompts left: {billing.remaining.lifetimeFreePromptCount}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Usage meters */}
+      <div>
+        <h3
+          className="mb-4 text-base font-semibold"
+          style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+        >
+          This month&apos;s usage
+        </h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <UsageMeter
+            label="Text"
+            used={billing.usage.textAiCostUsd}
+            limit={billing.caps.textAiCostUsdLimit}
+            detail={`${formatInteger(billing.usage.textPromptCount)} prompts this month`}
+            icon="💬"
+          />
+          <UsageMeter
+            label={billing.planKey === "intro" ? "Voice preview" : "Voice minutes"}
+            used={billing.usage.voiceSeconds}
+            limit={billing.caps.voiceSecondsLimit}
+            detail={`${formatDurationMinutes(billing.remaining.voiceSeconds)} remaining`}
+            icon="🎙️"
+          />
+          <UsageMeter
+            label="Lab runtime"
+            used={billing.usage.labActiveSeconds}
+            limit={billing.caps.labActiveSecondsLimit}
+            detail={`${formatDurationMinutes(billing.remaining.labActiveSeconds)} remaining`}
+            icon="🧪"
+          />
+          <UsageMeter
+            label="Lab sessions"
+            used={billing.usage.labSessionCount}
+            limit={billing.caps.labSessionLimit}
+            detail={`${billing.remaining.labSessionCount} sessions remaining`}
+            icon="⚗️"
+          />
+        </div>
+      </div>
+    </div>
   );
 }
+
+function BillingTab() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <p
+          className="text-sm"
+          style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+        >
+          Intro gives you full text tutoring plus limited voice and lab previews.
+          Pro unlocks full voice, full labs, and higher monthly limits.
+        </p>
+      </div>
+
+      <div
+        className="overflow-hidden rounded-[24px] border p-2 sm:p-4"
+        style={{
+          background: "var(--bg-card)",
+          borderColor: "var(--border-faint)",
+          boxShadow: "0 4px 12px rgba(28,18,8,0.03)",
+        }}
+      >
+        <PricingTable appearance={pricingAppearance} />
+      </div>
+    </div>
+  );
+}
+
+function AccountTab() {
+  return (
+    <div className="space-y-4">
+      <div>
+        <p
+          className="text-sm"
+          style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+        >
+          Manage your profile, email addresses, security settings, and connected accounts.
+        </p>
+      </div>
+      <div
+        className="overflow-hidden rounded-2xl border"
+        style={{
+          borderColor: "var(--border-faint)",
+          boxShadow: "0 4px 12px rgba(28,18,8,0.03)",
+        }}
+      >
+        <UserProfile routing="hash" appearance={clerkAppearance} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function UsagePanel() {
-  const usage = useQuery(api.telemetry.getCurrentUserMonthlyUsage);
   const billing = useQuery(api.billing.getViewerBillingState);
-  const syncBillingProfile = useAction(
-    api.billingActions.syncCurrentUserBillingProfile,
-  );
+  const syncBillingProfile = useAction(api.billingActions.syncCurrentUserBillingProfile);
   const { user } = useUser();
+  const [activeTab, setActiveTab] = useState<TabId>("usage");
 
   useEffect(() => {
     void syncBillingProfile().catch((error) => {
@@ -159,351 +421,84 @@ export function UsagePanel() {
 
   return (
     <div
-      className="min-h-screen px-4 py-5 md:px-6"
+      className="min-h-screen px-4 py-6 md:px-6"
       style={{
         background:
-          "radial-gradient(1200px 450px at -5% -10%, color-mix(in srgb, var(--accent2) 8%, transparent), transparent 65%), radial-gradient(1100px 500px at 105% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%), var(--bg)",
+          "radial-gradient(1200px 450px at -5% -10%, color-mix(in srgb, var(--accent2) 7%, transparent), transparent 65%), radial-gradient(1100px 500px at 105% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%), var(--bg)",
       }}
     >
-      <header className="mx-auto flex w-full max-w-6xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p
-            className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent2"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            Settings
-          </p>
-          <h1
-            className="mt-1 text-3xl leading-tight text-fg"
-            style={{ fontFamily: "var(--font-dm-serif)" }}
-          >
-            Plan, usage, and account
-          </h1>
-          <p
-            className="mt-2 max-w-2xl text-sm text-fg-muted"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            {user?.firstName ? `Hey ${user.firstName}, ` : ""}
-            this is your live usage panel for{" "}
-            {billing ? formatMonthLabel(billing.billingPeriod) : usage ? formatMonthLabel(usage.billingPeriod) : "this month"}.
-          </p>
+      {/* Page header */}
+      <header className="mx-auto w-full max-w-4xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Link
+              href="/chat"
+              className="inline-flex items-center gap-1.5 text-xs transition hover:opacity-70"
+              style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-faint)" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path
+                  d="M9 11L5 7L9 3"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Back to chat
+            </Link>
+            <h1
+              className="mt-2 text-3xl leading-tight"
+              style={{ fontFamily: "var(--font-dm-serif)", color: "var(--fg)" }}
+            >
+              Settings
+            </h1>
+            <p
+              className="mt-1 text-sm"
+              style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+            >
+              {user?.firstName ? `${user.firstName}'s workspace` : "Your workspace"}
+              {billing ? ` · ${formatMonthLabel(billing.billingPeriod)}` : ""}
+            </p>
+          </div>
         </div>
 
-        <Link
-          href="/chat"
-          className="inline-flex w-fit items-center justify-center rounded-full border border-border-warm bg-bg-card px-4 py-2 text-xs font-semibold text-fg-muted transition hover:-translate-y-0.5 hover:border-accent hover:text-accent"
-          style={{ fontFamily: "var(--font-jakarta)" }}
+        {/* Tab bar */}
+        <nav
+          className="mt-6 flex gap-1 overflow-x-auto rounded-xl border p-1"
+          style={{
+            background: "var(--bg-alt)",
+            borderColor: "var(--border-faint)",
+          }}
         >
-          Back to chat
-        </Link>
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="flex shrink-0 items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all duration-150"
+              style={{
+                fontFamily: "var(--font-jakarta)",
+                background: activeTab === tab.id ? "var(--bg-card)" : "transparent",
+                color: activeTab === tab.id ? "var(--fg)" : "var(--fg-muted)",
+                boxShadow:
+                  activeTab === tab.id
+                    ? "0 1px 3px rgba(28,18,8,0.06), 0 1px 1px rgba(28,18,8,0.04)"
+                    : "none",
+              }}
+            >
+              <span className="text-base leading-none">{tab.icon}</span>
+              {tab.label}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      <section
-        className="mx-auto mt-4 w-full max-w-6xl rounded-3xl border border-border-warm bg-bg-card p-4 shadow-[0_1px_3px_rgba(28,18,8,0.04),0_12px_30px_rgba(28,18,8,0.08)] md:p-5"
-        aria-live="polite"
-      >
-        {usage === undefined ? (
-          <p
-            className="text-sm text-fg-faint"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            Loading usage data...
-          </p>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-              <StatCard
-                label="Calls"
-                value={formatInteger(usage.totals.calls)}
-              />
-              <StatCard
-                label="Total tokens"
-                value={formatInteger(usage.totals.totalTokens)}
-              />
-              <StatCard
-                label="Input tokens"
-                value={formatInteger(usage.totals.inputTokens)}
-              />
-              <StatCard
-                label="Output tokens"
-                value={formatInteger(usage.totals.outputTokens)}
-              />
-              <StatCard
-                label="Avg tokens / call"
-                value={formatInteger(usage.totals.avgTokensPerCall)}
-              />
-              <StatCard
-                label="Estimated cost"
-                value={formatCurrency(usage.totals.estimatedCostUsd)}
-              />
-              <StatCard
-                label="Voice calls"
-                value={formatInteger(usage.voice.calls)}
-              />
-              <StatCard
-                label="Voice est. cost"
-                value={formatCurrency(usage.voice.estimatedCostUsd)}
-              />
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <p
-                className="rounded-full border border-border-faint bg-bg-alt px-2.5 py-1 text-[11px] text-fg-muted"
-                style={{ fontFamily: "var(--font-jakarta)" }}
-              >
-                Billing period: {formatMonthLabel(usage.billingPeriod)}
-              </p>
-              <p
-                className="rounded-full border border-border-faint bg-bg-alt px-2.5 py-1 text-[11px] text-fg-muted"
-                style={{ fontFamily: "var(--font-jakarta)" }}
-              >
-                Last call: {formatLastSeen(usage.lastCallAt)}
-              </p>
-              <p
-                className="rounded-full border border-border-faint bg-bg-alt px-2.5 py-1 text-[11px] text-fg-muted"
-                style={{ fontFamily: "var(--font-jakarta)" }}
-              >
-                Voice input tokens: {formatInteger(usage.voice.inputTokens)}
-              </p>
-              <p
-                className="rounded-full border border-border-faint bg-bg-alt px-2.5 py-1 text-[11px] text-fg-muted"
-                style={{ fontFamily: "var(--font-jakarta)" }}
-              >
-                Last voice call: {formatLastSeen(usage.voice.lastCallAt)}
-              </p>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <article className="rounded-2xl border border-border-faint bg-white p-3">
-                <h2
-                  className="text-base text-fg"
-                  style={{ fontFamily: "var(--font-dm-serif)" }}
-                >
-                  By model
-                </h2>
-
-                {usage.modelBreakdown.length === 0 ? (
-                  <p
-                    className="mt-2 text-xs text-fg-faint"
-                    style={{ fontFamily: "var(--font-jakarta)" }}
-                  >
-                    No model usage yet this month.
-                  </p>
-                ) : (
-                  <div className="mt-2 overflow-x-auto">
-                    <table className="min-w-[340px] w-full border-collapse">
-                      <thead>
-                        <tr>
-                          <TableHeader>Model</TableHeader>
-                          <TableHeader>Calls</TableHeader>
-                          <TableHeader>Tokens</TableHeader>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {usage.modelBreakdown.map((entry) => (
-                          <tr key={`${entry.provider}-${entry.model}`}>
-                            <td className="border-b border-border-faint px-1 py-1.5">
-                              <p
-                                className="text-xs font-semibold text-fg"
-                                style={{ fontFamily: "var(--font-jakarta)" }}
-                              >
-                                {entry.model}
-                              </p>
-                              <p
-                                className="text-[11px] text-fg-faint"
-                                style={{ fontFamily: "var(--font-jakarta)" }}
-                              >
-                                {entry.provider}
-                              </p>
-                            </td>
-                            <TableCell>{formatInteger(entry.calls)}</TableCell>
-                            <TableCell>
-                              {formatInteger(entry.totalTokens)}
-                            </TableCell>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </article>
-
-              <article className="rounded-2xl border border-border-faint bg-white p-3">
-                <h2
-                  className="text-base text-fg"
-                  style={{ fontFamily: "var(--font-dm-serif)" }}
-                >
-                  Top threads
-                </h2>
-
-                {usage.threadBreakdown.length === 0 ? (
-                  <p
-                    className="mt-2 text-xs text-fg-faint"
-                    style={{ fontFamily: "var(--font-jakarta)" }}
-                  >
-                    Start a chat and your thread usage will appear here.
-                  </p>
-                ) : (
-                  <div className="mt-2 overflow-x-auto">
-                    <table className="min-w-[340px] w-full border-collapse">
-                      <thead>
-                        <tr>
-                          <TableHeader>Thread</TableHeader>
-                          <TableHeader>Calls</TableHeader>
-                          <TableHeader>Tokens</TableHeader>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {usage.threadBreakdown.map((entry) => (
-                          <tr key={entry.threadId}>
-                            <td
-                              className="border-b border-border-faint px-1 py-1.5 text-xs font-semibold text-fg"
-                              style={{ fontFamily: "var(--font-jakarta)" }}
-                            >
-                              {entry.threadTitle}
-                            </td>
-                            <TableCell>{formatInteger(entry.calls)}</TableCell>
-                            <TableCell>
-                              {formatInteger(entry.totalTokens)}
-                            </TableCell>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </article>
-            </div>
-          </>
-        )}
-      </section>
-
-      {billing ? (
-        <section className="mx-auto mt-4 w-full max-w-6xl rounded-3xl border border-border-warm bg-bg-card p-4 shadow-[0_1px_3px_rgba(28,18,8,0.04),0_12px_30px_rgba(28,18,8,0.08)] md:p-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p
-                className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent2"
-                style={{ fontFamily: "var(--font-jakarta)" }}
-              >
-                Billing
-              </p>
-              <h2
-                className="mt-1 text-2xl leading-tight text-fg"
-                style={{ fontFamily: "var(--font-dm-serif)" }}
-              >
-                {formatPlanLabel(billing.planKey)} plan
-              </h2>
-              <p
-                className="mt-1 text-sm text-fg-faint"
-                style={{ fontFamily: "var(--font-jakarta)" }}
-              >
-                {billing.upgradeReason ??
-                  "Your billing usage is tracked monthly across text, voice, and labs."}
-              </p>
-            </div>
-            <Link
-              href="/pricing"
-              className="inline-flex w-fit items-center justify-center rounded-full border border-border-warm bg-white px-4 py-2 text-xs font-semibold text-fg-muted transition hover:-translate-y-0.5 hover:border-accent hover:text-accent"
-              style={{ fontFamily: "var(--font-jakarta)" }}
-            >
-              Manage plans
-            </Link>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <UsageMeter
-              label="Text usage"
-              used={billing.usage.textAiCostUsd}
-              limit={billing.caps.textAiCostUsdLimit}
-              detail={`${formatInteger(billing.usage.textPromptCount)} prompts this month`}
-            />
-            <UsageMeter
-              label={billing.planKey === "intro" ? "Voice preview" : "Voice minutes"}
-              used={billing.usage.voiceSeconds}
-              limit={billing.caps.voiceSecondsLimit}
-              detail={`${formatDurationMinutes(billing.remaining.voiceSeconds)} remaining`}
-            />
-            <UsageMeter
-              label="Lab runtime"
-              used={billing.usage.labActiveSeconds}
-              limit={billing.caps.labActiveSecondsLimit}
-              detail={`${formatDurationMinutes(billing.remaining.labActiveSeconds)} remaining`}
-            />
-            <UsageMeter
-              label="Lab sessions"
-              used={billing.usage.labSessionCount}
-              limit={billing.caps.labSessionLimit}
-              detail={`${billing.remaining.labSessionCount} sessions remaining`}
-            />
-          </div>
-
-          {billing.planKey === "free_onboarding" ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <p
-                className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-900"
-                style={{ fontFamily: "var(--font-jakarta)" }}
-              >
-                Onboarding
-              </p>
-              <h3
-                className="mt-1 text-xl text-amber-950"
-                style={{ fontFamily: "var(--font-dm-serif)" }}
-              >
-                You are in the guided preview state
-              </h3>
-              <p
-                className="mt-2 max-w-3xl text-sm text-amber-900"
-                style={{ fontFamily: "var(--font-jakarta)" }}
-              >
-                You can try a few text chats first. Voice, uploads, and labs unlock after you pick a paid plan.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <p
-                  className="rounded-full border border-amber-200 bg-white px-2.5 py-1 text-[11px] text-amber-900"
-                  style={{ fontFamily: "var(--font-jakarta)" }}
-                >
-                  Free prompts left: {billing.remaining.lifetimeFreePromptCount}
-                </p>
-                <Link
-                  href="/pricing"
-                  className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-950 transition hover:bg-amber-100"
-                  style={{ fontFamily: "var(--font-jakarta)" }}
-                >
-                  Choose a plan
-                </Link>
-              </div>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="mx-auto mt-4 w-full max-w-6xl rounded-3xl border border-border-warm bg-bg-card p-4 shadow-[0_1px_3px_rgba(28,18,8,0.04),0_12px_30px_rgba(28,18,8,0.08)] md:p-5">
-        <div className="mb-3">
-          <p
-            className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent2"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            Clerk
-          </p>
-          <h2
-            className="mt-1 text-2xl leading-tight text-fg"
-            style={{ fontFamily: "var(--font-dm-serif)" }}
-          >
-            Account settings
-          </h2>
-          <p
-            className="mt-1 text-sm text-fg-faint"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            Your profile, security, and connected accounts are managed here.
-          </p>
-        </div>
-
-        <div className="overflow-hidden rounded-2xl border border-border-faint">
-          <UserProfile routing="hash" />
-        </div>
-      </section>
+      {/* Tab content */}
+      <main className="mx-auto mt-6 w-full max-w-4xl">
+        {activeTab === "usage" && <UsageTab billing={billing} />}
+        {activeTab === "billing" && <BillingTab />}
+        {activeTab === "account" && <AccountTab />}
+      </main>
     </div>
   );
 }
