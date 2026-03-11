@@ -89,11 +89,30 @@ export function useLabSandboxClient(threadId: string): UseLabSandboxClientResult
             }),
           ),
         onFocusChange: (cb) => {
-          const handleFocus = () => cb(true);
-          const handleBlur = () => cb(false);
+          let active = true;
+          const invoke = (focused: boolean) => {
+            if (!active || requestIdRef.current !== requestId) {
+              return;
+            }
+
+            try {
+              cb(focused);
+            } catch (error) {
+              if (
+                error instanceof Error &&
+                error.message.includes("SandboxClient has been disposed")
+              ) {
+                return;
+              }
+              throw error;
+            }
+          };
+          const handleFocus = () => invoke(true);
+          const handleBlur = () => invoke(false);
           window.addEventListener("focus", handleFocus);
           window.addEventListener("blur", handleBlur);
           return () => {
+            active = false;
             window.removeEventListener("focus", handleFocus);
             window.removeEventListener("blur", handleBlur);
           };

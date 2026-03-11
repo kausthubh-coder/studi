@@ -364,7 +364,6 @@ export const createLabTool = createTool<
           workspacePath,
           templateKey,
         },
-        unarchive: true,
       });
 
       if (shouldCreateTrack) {

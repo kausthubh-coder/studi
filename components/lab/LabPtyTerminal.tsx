@@ -52,6 +52,8 @@ export function LabPtyTerminal({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const remoteTerminalRef = useRef<SandboxTerminal | null>(null);
   const resizeTimerRef = useRef<number | null>(null);
+  const bootstrapIdRef = useRef(0);
+  const lastSandboxRef = useRef<SandboxClient | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [bootstrapStage, setBootstrapStage] = useState(
@@ -103,41 +105,78 @@ export function LabPtyTerminal({
       return;
     }
 
+    // Skip if this sandbox instance has already been bootstrapped
+    if (lastSandboxRef.current === sandboxClient) {
+      return;
+    }
+    lastSandboxRef.current = sandboxClient;
+
+    const bootstrapId = bootstrapIdRef.current + 1;
+    bootstrapIdRef.current = bootstrapId;
+
     setIsBootstrapping(true);
     setTerminalError(null);
-    setBootstrapStage("Creating shell.");
+    setBootstrapStage("Connecting to CodeSandbox.");
 
-    const previousRemote = remoteTerminalRef.current;
+    // Detach from any previous remote terminal without killing it
     remoteTerminalRef.current = null;
-    await disposeRemoteTerminal(previousRemote);
     term.clear();
 
     try {
-      const remoteTerminal = await sandboxClient.terminals.create("bash", {
-        cwd: sandboxClient.workspacePath,
-        name: "Studi",
-        dimensions: getTerminalSize(term),
-      });
+      // Reuse an existing terminal from this sandbox session if one exists
+      let remoteTerminal: SandboxTerminal | null = null;
+      setBootstrapStage("Looking for existing shell.");
+      try {
+        const existing = await sandboxClient.terminals.getAll();
+        const studiterminal = existing.find((t) => t.name === "Studi");
+        if (studiterminal) {
+          remoteTerminal = studiterminal;
+          setBootstrapStage("Resuming shell.");
+        }
+      } catch {
+        // getAll not available or failed — fall through to create
+      }
+
+      if (bootstrapIdRef.current !== bootstrapId) return;
+
+      if (!remoteTerminal) {
+        setBootstrapStage("Creating shell.");
+        remoteTerminal = await sandboxClient.terminals.create("bash", {
+          cwd: sandboxClient.workspacePath,
+          name: "Studi",
+          dimensions: getTerminalSize(term),
+        });
+      }
+
+      if (bootstrapIdRef.current !== bootstrapId) return;
+
       remoteTerminalRef.current = remoteTerminal;
       const initialOutput = await remoteTerminal.open(getTerminalSize(term));
+
+      if (bootstrapIdRef.current !== bootstrapId) return;
+
       if (initialOutput) {
         term.write(initialOutput);
         onOutputChunk(initialOutput);
       }
 
       remoteTerminal.onOutput((chunk) => {
+        if (bootstrapIdRef.current !== bootstrapId) return;
         term.write(chunk);
         onOutputChunk(chunk);
       });
 
       setBootstrapStage("Terminal connected.");
     } catch (error) {
+      if (bootstrapIdRef.current !== bootstrapId) return;
       setBootstrapStage("Terminal bootstrap failed.");
       setTerminalError(
         error instanceof Error ? error.message : "Unable to open terminal.",
       );
     } finally {
-      setIsBootstrapping(false);
+      if (bootstrapIdRef.current === bootstrapId) {
+        setIsBootstrapping(false);
+      }
     }
   }, [onOutputChunk, sandbox]);
 
@@ -205,9 +244,9 @@ export function LabPtyTerminal({
       if (resizeTimerRef.current !== null) {
         window.clearTimeout(resizeTimerRef.current);
       }
-      const currentRemoteTerminal = remoteTerminalRef.current;
+      bootstrapIdRef.current += 1;
       remoteTerminalRef.current = null;
-      void disposeRemoteTerminal(currentRemoteTerminal);
+      lastSandboxRef.current = null;
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;

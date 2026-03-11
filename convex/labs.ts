@@ -209,6 +209,34 @@ export const touchLabSessionInternal = internalMutation({
   },
 });
 
+export const archiveLabSessionInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("labSessions")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+
+    if (!session) {
+      return false;
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(session._id, {
+      updatedAt: now,
+      archivedAt: now,
+    });
+
+    return true;
+  },
+});
+
 export const deleteLabSessionInternal = internalMutation({
   args: {
     userId: v.string(),

@@ -10,6 +10,7 @@ import {
   useState,
   type ComponentType,
 } from "react";
+import { Globe, SquareTerminal } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { LabEditorHeader } from "./LabEditorHeader";
 import { LabPtyTerminal } from "./LabPtyTerminal";
@@ -126,7 +127,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isSavingFile, setIsSavingFile] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<LabTab>("terminal");
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [dismissedPreviewPorts, setDismissedPreviewPorts] = useState<number[]>(
     [],
   );
@@ -164,8 +165,8 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
         }
       }
 
-      if (parsed.activeTab === "terminal" || parsed.activeTab === "preview") {
-        setActiveTab(parsed.activeTab);
+      if (parsed.activeTab === "preview") {
+        setIsPreviewOpen(true);
       }
       if (typeof parsed.activePreviewPort === "number") {
         setActivePreviewPort(parsed.activePreviewPort);
@@ -179,11 +180,11 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     const payload: PersistedState = {
       currentPath,
       selectedFilePath: selectedFilePath ?? undefined,
-      activeTab,
+      activeTab: isPreviewOpen ? "preview" : "terminal",
       activePreviewPort: activePreviewPort ?? undefined,
     };
     window.localStorage.setItem(getStorageKey(threadId), JSON.stringify(payload));
-  }, [activePreviewPort, activeTab, currentPath, selectedFilePath, threadId]);
+  }, [activePreviewPort, isPreviewOpen, currentPath, selectedFilePath, threadId]);
 
   const refreshEntries = useCallback(
     async (pathOverride?: string) => {
@@ -374,7 +375,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
       !availablePorts.includes(activePreviewPort)
     ) {
       setActivePreviewPort(null);
-      setActiveTab("terminal");
+      setIsPreviewOpen(false);
     }
   }, [activePreviewPort, availablePorts]);
 
@@ -397,7 +398,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
       setActivePreviewPort(port);
       setPendingPreviewPort((current) => (current === port ? null : current));
       setPreviewNonce(Date.now());
-      setActiveTab("preview");
+      setIsPreviewOpen(true);
     },
     [sandbox],
   );
@@ -424,6 +425,8 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
     [selectedFilePath],
   );
 
+  const noopOutputChunk = useCallback((_chunk: string) => {}, []);
+
   return (
     <section className="lab-workspace">
       <LabSidebar
@@ -436,49 +439,7 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
         onRefresh={() => void refreshEntries()}
       />
 
-      <div className="lab-main">
-        <LabEditorHeader
-          selectedFilePath={selectedFilePath}
-          isDirty={isDirty}
-          isSaving={isSavingFile}
-          isBinary={isBinary}
-          isTruncated={isTruncated}
-          onSave={() => void saveFile()}
-        />
-
-        <div style={{ flex: 1, minHeight: 0 }}>
-          {!selectedFilePath ? (
-            <div className="flex h-full items-center justify-center text-xs text-fg-faint">
-              Select a file to open it.
-            </div>
-          ) : isBinary ? (
-            <div className="flex h-full items-center justify-center text-xs text-fg-faint">
-              Binary file preview is not supported.
-            </div>
-          ) : isLoadingFile ? (
-            <div className="flex h-full items-center justify-center text-xs text-fg-faint">
-              Loading file...
-            </div>
-          ) : (
-            <MonacoEditor
-              height="100%"
-              language={editorLanguage}
-              value={editorValue}
-              onChange={(value: string | undefined) => setEditorValue(value ?? "")}
-              theme="vs-dark"
-              options={{
-                minimap: { enabled: false },
-                fontSize: 12,
-                lineNumbersMinChars: 3,
-                automaticLayout: true,
-                tabSize: 2,
-                padding: { top: 10 },
-                readOnly: isTruncated,
-              }}
-            />
-          )}
-        </div>
-
+      <div className="lab-main-col">
         {pendingPreviewPort !== null ? (
           <div className="lab-info-bar">
             Detected an app on port {pendingPreviewPort}. Open preview?
@@ -498,107 +459,161 @@ export function LabWorkspace({ threadId }: LabWorkspaceProps) {
             </button>
           </div>
         ) : null}
-
-        <div className="lab-bottom-tabs">
-          <button
-            type="button"
-            className="lab-bottom-tab"
-            data-active={activeTab === "terminal"}
-            onClick={() => setActiveTab("terminal")}
-          >
-            Terminal
-          </button>
-          <button
-            type="button"
-            className="lab-bottom-tab"
-            data-active={activeTab === "preview"}
-            onClick={() => setActiveTab("preview")}
-          >
-            Preview
-          </button>
-        </div>
-
-        <div className="lab-bottom-panel">
-          <div
-            style={{
-              display: activeTab === "terminal" ? "block" : "none",
-              height: "100%",
-            }}
-          >
-            <LabPtyTerminal
-              sandbox={sandbox}
-              connectionState={connectionState}
-              connectionError={connectionError}
-              onReconnect={reconnect}
-              onOutputChunk={() => undefined}
-            />
-          </div>
-
-          <div
-            style={{
-              display: activeTab === "preview" ? "block" : "none",
-              height: "100%",
-            }}
-          >
-            <div className="lab-preview-panel">
-              <div className="lab-preview-controls">
-                <span className="lab-preview-label">
-                  {activePreviewPort
-                    ? `Previewing port ${activePreviewPort}`
-                    : availablePorts.length > 0
-                      ? `Detected ports: ${availablePorts.join(", ")}`
-                      : "No preview port selected"}
-                </span>
-                <button
-                  type="button"
-                  className="lab-preview-btn"
-                  disabled={!activePreviewPort}
-                  onClick={() => setPreviewNonce(Date.now())}
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {previewSrc ? (
-                <>
-                  <div className="lab-preview-frame-wrap">
-                    <iframe
-                      key={previewSrc}
-                      title="lab-preview"
-                      className="lab-preview-frame"
-                      src={previewSrc}
-                    />
-                  </div>
-                  <div className="lab-preview-fallback-row">
-                    <a
-                      className="lab-preview-fallback-link"
-                      href={previewSrc}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open in new tab
-                    </a>
-                  </div>
-                </>
-              ) : (
-                <div className="lab-preview-empty">
-                  Start a web server in the terminal. When CodeSandbox exposes a
-                  previewable port, you can open it here directly.
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
         {isTruncated && selectedFilePath && !isBinary ? (
           <div className="lab-warning-bar">
             Large file preview is truncated. Saving is disabled to protect file
             integrity.
           </div>
         ) : null}
-
         {previewError ? <div className="lab-error-bar">{previewError}</div> : null}
         {workspaceError ? <div className="lab-error-bar">{workspaceError}</div> : null}
+
+        <div className="lab-top-row">
+          <div className="lab-editor-col">
+            <LabEditorHeader
+              selectedFilePath={selectedFilePath}
+              isDirty={isDirty}
+              isSaving={isSavingFile}
+              isBinary={isBinary}
+              isTruncated={isTruncated}
+              onSave={() => void saveFile()}
+            />
+
+            <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+              {!selectedFilePath ? (
+                <div className="lab-editor-empty">
+                  <span>Select a file to open it</span>
+                </div>
+              ) : isBinary ? (
+                <div className="lab-editor-empty">
+                  <span>Binary file — preview not supported</span>
+                </div>
+              ) : isLoadingFile ? (
+                <div className="lab-editor-empty">
+                  <span>Loading…</span>
+                </div>
+              ) : (
+                <MonacoEditor
+                  height="100%"
+                  language={editorLanguage}
+                  value={editorValue}
+                  onChange={(value: string | undefined) => setEditorValue(value ?? "")}
+                  theme="vs-dark"
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 12.5,
+                    lineNumbersMinChars: 3,
+                    automaticLayout: true,
+                    tabSize: 2,
+                    padding: { top: 12, bottom: 12 },
+                    readOnly: isTruncated,
+                    fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", monospace',
+                    fontLigatures: true,
+                    renderLineHighlight: "gutter",
+                    scrollBeyondLastLine: false,
+                    overviewRulerBorder: false,
+                  }}
+                />
+              )}
+            </div>
+          </div>
+
+          {isPreviewOpen && (
+            <div className="lab-preview-col">
+              <div className="lab-preview-panel">
+                <div className="lab-preview-controls">
+                  <span className="lab-preview-label">
+                    {activePreviewPort
+                      ? `Previewing port ${activePreviewPort}`
+                      : availablePorts.length > 0
+                        ? `Detected ports: ${availablePorts.join(", ")}`
+                        : "No preview port selected"}
+                  </span>
+                  <div style={{ display: "flex", gap: "0.25rem" }}>
+                    <button
+                      type="button"
+                      className="lab-preview-btn"
+                      disabled={!activePreviewPort}
+                      onClick={() => setPreviewNonce(Date.now())}
+                      title="Refresh preview"
+                    >
+                      Refresh
+                    </button>
+                    <button
+                      type="button"
+                      className="lab-preview-btn"
+                      onClick={() => setIsPreviewOpen(false)}
+                      title="Close preview"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+
+                {previewSrc ? (
+                  <>
+                    <div className="lab-preview-frame-wrap">
+                      <iframe
+                        key={previewSrc}
+                        title="lab-preview"
+                        className="lab-preview-frame"
+                        src={previewSrc}
+                      />
+                    </div>
+                    <div className="lab-preview-fallback-row">
+                      <a
+                        className="lab-preview-fallback-link"
+                        href={previewSrc}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open in new tab
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <div className="lab-preview-empty">
+                    Start a web server in the terminal. When CodeSandbox exposes a
+                    previewable port, you can open it here directly.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="lab-terminal-col">
+          <div className="lab-terminal-tabs">
+            <button
+              type="button"
+              className="lab-terminal-tab"
+              data-active={true}
+            >
+              <SquareTerminal size={12} strokeWidth={2} />
+              Terminal
+            </button>
+            {!isPreviewOpen && (
+              <button
+                type="button"
+                className="lab-terminal-tab"
+                data-active={false}
+                onClick={() => setIsPreviewOpen(true)}
+              >
+                <Globe size={12} strokeWidth={2} />
+                Preview
+              </button>
+            )}
+          </div>
+          <div className="lab-terminal-panel">
+            <LabPtyTerminal
+              sandbox={sandbox}
+              connectionState={connectionState}
+              connectionError={connectionError}
+              onReconnect={reconnect}
+              onOutputChunk={noopOutputChunk}
+            />
+          </div>
+        </div>
       </div>
     </section>
   );

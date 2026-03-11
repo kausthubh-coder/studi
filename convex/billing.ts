@@ -114,6 +114,7 @@ const viewerBillingStateValidator = v.object({
     labActiveSeconds: v.number(),
     labEstimatedCostUsd: v.number(),
     totalEstimatedCostUsd: v.number(),
+    lastLabActivityAt: v.optional(v.number()),
     lifetimeFreePromptCount: v.number(),
     lifetimeFreeTextAiCostUsd: v.number(),
   }),

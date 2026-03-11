@@ -23,27 +23,31 @@ export const LabEditorHeader = memo(function LabEditorHeader({
     ? (selectedFilePath.split("/").pop() ?? selectedFilePath)
     : null;
 
+  const dirPath = selectedFilePath?.includes("/")
+    ? selectedFilePath.slice(0, selectedFilePath.lastIndexOf("/"))
+    : null;
+
   return (
     <div className="lab-editor-header">
       <div className="lab-editor-file-info">
         <div className="lab-editor-file-title">
           {selectedFilePath ? (
             <>
-              {getFileIcon({ name: basename!, isDir: false }, false, 16)}
+              {getFileIcon({ name: basename!, isDir: false }, false, 14)}
               <p className="lab-editor-file-name">{basename}</p>
               {isDirty && <span className="lab-editor-dirty-dot" />}
             </>
           ) : (
             <p
               className="lab-editor-file-name"
-              style={{ color: "var(--fg-faint)" }}
+              style={{ color: "var(--fg-faint)", fontWeight: 400 }}
             >
-              Select a file
+              No file open
             </p>
           )}
         </div>
-        {selectedFilePath && (
-          <p className="lab-editor-file-path">{selectedFilePath}</p>
+        {dirPath && (
+          <p className="lab-editor-file-path">{dirPath}/</p>
         )}
       </div>
 
@@ -56,11 +60,11 @@ export const LabEditorHeader = memo(function LabEditorHeader({
           }
           onClick={onSave}
         >
-          <Save size={12} strokeWidth={2} />
-          {isSaving ? "Saving..." : "Save"}
+          <Save size={11} strokeWidth={2.2} />
+          {isSaving ? "Saving…" : "Save"}
         </button>
         <span className="lab-editor-save-hint">
-          {isTruncated ? "Read-only (truncated)" : "Ctrl+S"}
+          {isTruncated ? "read-only" : "⌘S / Ctrl+S"}
         </span>
       </div>
     </div>

@@ -109,7 +109,7 @@ export const LabSidebar = memo(function LabSidebar({
 
       {/* File list */}
       <div
-        style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0.35rem" }}
+        style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0.3rem 0.4rem" }}
       >
         {isLoadingFiles ? (
           <div>
