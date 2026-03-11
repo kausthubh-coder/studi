@@ -80,12 +80,20 @@ export function LandingPage() {
                   Sign in
                 </button>
               </SignInButton>
-              <Link
-                href="#get-early-access"
+              <button
+                type="button"
+                onClick={() => {
+                  const section = document.getElementById("get-early-access");
+                  section?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  setTimeout(() => {
+                    const input = section?.querySelector<HTMLInputElement>("input[type='email']");
+                    input?.focus();
+                  }, 600);
+                }}
                 className="font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
               >
                 Get Early Access
-              </Link>
+              </button>
             </div>
           </SignedOut>
 
