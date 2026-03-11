@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { UserProfile, useUser } from "@clerk/nextjs";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { api } from "@/convex/_generated/api";
 
 function formatInteger(value: number): string {
@@ -61,6 +62,65 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatPlanLabel(planKey: string): string {
+  if (planKey === "pro") {
+    return "Pro";
+  }
+  if (planKey === "intro") {
+    return "Intro";
+  }
+  return "Onboarding";
+}
+
+function formatDurationMinutes(seconds: number): string {
+  return `${Math.max(0, Math.floor(seconds / 60))} min`;
+}
+
+function UsageMeter({
+  label,
+  used,
+  limit,
+  detail,
+}: {
+  label: string;
+  used: number;
+  limit: number;
+  detail: string;
+}) {
+  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+
+  return (
+    <article className="rounded-2xl border border-border-faint bg-white p-3">
+      <div className="flex items-center justify-between gap-3">
+        <h3
+          className="text-sm font-semibold text-fg"
+          style={{ fontFamily: "var(--font-jakarta)" }}
+        >
+          {label}
+        </h3>
+        <span
+          className="text-[11px] text-fg-faint"
+          style={{ fontFamily: "var(--font-jakarta)" }}
+        >
+          {percent}%
+        </span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-bg-alt">
+        <div
+          className="h-full rounded-full bg-accent"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p
+        className="mt-2 text-xs text-fg-muted"
+        style={{ fontFamily: "var(--font-jakarta)" }}
+      >
+        {detail}
+      </p>
+    </article>
+  );
+}
+
 function TableHeader({ children }: { children: ReactNode }) {
   return (
     <th
@@ -85,7 +145,17 @@ function TableCell({ children }: { children: ReactNode }) {
 
 export function UsagePanel() {
   const usage = useQuery(api.telemetry.getCurrentUserMonthlyUsage);
+  const billing = useQuery(api.billing.getViewerBillingState);
+  const syncBillingProfile = useAction(
+    api.billingActions.syncCurrentUserBillingProfile,
+  );
   const { user } = useUser();
+
+  useEffect(() => {
+    void syncBillingProfile().catch((error) => {
+      console.error("Billing profile sync failed", error);
+    });
+  }, [syncBillingProfile]);
 
   return (
     <div
@@ -107,7 +177,7 @@ export function UsagePanel() {
             className="mt-1 text-3xl leading-tight text-fg"
             style={{ fontFamily: "var(--font-dm-serif)" }}
           >
-            Usage and account
+            Plan, usage, and account
           </h1>
           <p
             className="mt-2 max-w-2xl text-sm text-fg-muted"
@@ -115,7 +185,7 @@ export function UsagePanel() {
           >
             {user?.firstName ? `Hey ${user.firstName}, ` : ""}
             this is your live usage panel for{" "}
-            {usage ? formatMonthLabel(usage.billingPeriod) : "this month"}.
+            {billing ? formatMonthLabel(billing.billingPeriod) : usage ? formatMonthLabel(usage.billingPeriod) : "this month"}.
           </p>
         </div>
 
@@ -307,6 +377,106 @@ export function UsagePanel() {
           </>
         )}
       </section>
+
+      {billing ? (
+        <section className="mx-auto mt-4 w-full max-w-6xl rounded-3xl border border-border-warm bg-bg-card p-4 shadow-[0_1px_3px_rgba(28,18,8,0.04),0_12px_30px_rgba(28,18,8,0.08)] md:p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p
+                className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent2"
+                style={{ fontFamily: "var(--font-jakarta)" }}
+              >
+                Billing
+              </p>
+              <h2
+                className="mt-1 text-2xl leading-tight text-fg"
+                style={{ fontFamily: "var(--font-dm-serif)" }}
+              >
+                {formatPlanLabel(billing.planKey)} plan
+              </h2>
+              <p
+                className="mt-1 text-sm text-fg-faint"
+                style={{ fontFamily: "var(--font-jakarta)" }}
+              >
+                {billing.upgradeReason ??
+                  "Your billing usage is tracked monthly across text, voice, and labs."}
+              </p>
+            </div>
+            <Link
+              href="/pricing"
+              className="inline-flex w-fit items-center justify-center rounded-full border border-border-warm bg-white px-4 py-2 text-xs font-semibold text-fg-muted transition hover:-translate-y-0.5 hover:border-accent hover:text-accent"
+              style={{ fontFamily: "var(--font-jakarta)" }}
+            >
+              Manage plans
+            </Link>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <UsageMeter
+              label="Text usage"
+              used={billing.usage.textAiCostUsd}
+              limit={billing.caps.textAiCostUsdLimit}
+              detail={`${formatInteger(billing.usage.textPromptCount)} prompts this month`}
+            />
+            <UsageMeter
+              label={billing.planKey === "intro" ? "Voice preview" : "Voice minutes"}
+              used={billing.usage.voiceSeconds}
+              limit={billing.caps.voiceSecondsLimit}
+              detail={`${formatDurationMinutes(billing.remaining.voiceSeconds)} remaining`}
+            />
+            <UsageMeter
+              label="Lab runtime"
+              used={billing.usage.labActiveSeconds}
+              limit={billing.caps.labActiveSecondsLimit}
+              detail={`${formatDurationMinutes(billing.remaining.labActiveSeconds)} remaining`}
+            />
+            <UsageMeter
+              label="Lab sessions"
+              used={billing.usage.labSessionCount}
+              limit={billing.caps.labSessionLimit}
+              detail={`${billing.remaining.labSessionCount} sessions remaining`}
+            />
+          </div>
+
+          {billing.planKey === "free_onboarding" ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p
+                className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-900"
+                style={{ fontFamily: "var(--font-jakarta)" }}
+              >
+                Onboarding
+              </p>
+              <h3
+                className="mt-1 text-xl text-amber-950"
+                style={{ fontFamily: "var(--font-dm-serif)" }}
+              >
+                You are in the guided preview state
+              </h3>
+              <p
+                className="mt-2 max-w-3xl text-sm text-amber-900"
+                style={{ fontFamily: "var(--font-jakarta)" }}
+              >
+                You can try a few text chats first. Voice, uploads, and labs unlock after you pick a paid plan.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <p
+                  className="rounded-full border border-amber-200 bg-white px-2.5 py-1 text-[11px] text-amber-900"
+                  style={{ fontFamily: "var(--font-jakarta)" }}
+                >
+                  Free prompts left: {billing.remaining.lifetimeFreePromptCount}
+                </p>
+                <Link
+                  href="/pricing"
+                  className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-950 transition hover:bg-amber-100"
+                  style={{ fontFamily: "var(--font-jakarta)" }}
+                >
+                  Choose a plan
+                </Link>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="mx-auto mt-4 w-full max-w-6xl rounded-3xl border border-border-warm bg-bg-card p-4 shadow-[0_1px_3px_rgba(28,18,8,0.04),0_12px_30px_rgba(28,18,8,0.08)] md:p-5">
         <div className="mb-3">

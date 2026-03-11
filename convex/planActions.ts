@@ -10,6 +10,9 @@ import { internalAction } from "./_generated/server";
 import { capturePosthogEvent } from "./posthog";
 
 const internalApi = internal as unknown as {
+  billing: {
+    recordTextAiCostInternal: FunctionReference<"mutation", "internal">;
+  };
   plans: {
     getPlanDraftingContextInternal: FunctionReference<"query", "internal">;
     savePlanDraftInternal: FunctionReference<"mutation", "internal">;
@@ -30,6 +33,56 @@ type UsageSnapshot = {
   outputTokenDetails?: unknown;
   raw?: unknown;
 };
+
+function readNumericCandidate(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function extractEstimatedCostUsd(providerMetadata: unknown): number | undefined {
+  if (!providerMetadata || typeof providerMetadata !== "object") {
+    return undefined;
+  }
+
+  const stack: Record<string, unknown>[] = [
+    providerMetadata as Record<string, unknown>,
+  ];
+  const seen = new Set<Record<string, unknown>>();
+  const keys = [
+    "totalCostUsd",
+    "total_cost_usd",
+    "totalCost",
+    "total_cost",
+    "costUsd",
+    "cost_usd",
+    "cost",
+  ];
+
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || seen.has(node)) {
+      continue;
+    }
+    seen.add(node);
+
+    for (const key of keys) {
+      const found = readNumericCandidate(node, key);
+      if (found !== undefined) {
+        return found;
+      }
+    }
+
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        stack.push(value as Record<string, unknown>);
+      }
+    }
+  }
+
+  return undefined;
+}
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
@@ -249,6 +302,11 @@ export const generatePlanDraft = internalAction({
         input_tokens: result.usage?.inputTokens,
         output_tokens: result.usage?.outputTokens,
       },
+    });
+
+    await ctx.runMutation(internalApi.billing.recordTextAiCostInternal, {
+      userId: args.userId,
+      textAiCostUsd: extractEstimatedCostUsd(result.providerMetadata) ?? 0,
     });
 
     await ctx.runMutation(internalApi.plans.savePlanDraftInternal, {

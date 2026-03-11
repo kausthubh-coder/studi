@@ -1,5 +1,13 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+
+const internalApi = internal as {
+  billing: {
+    recordLabActivityInternal: typeof internal.billing.recordLabActivityInternal;
+    recordLabUsageInternal: typeof internal.billing.recordLabUsageInternal;
+  };
+};
 
 const labMetadataValidator = v.object({
   topic: v.optional(v.string()),
@@ -101,7 +109,6 @@ export const upsertLabSessionInternal = internalMutation({
     threadId: v.string(),
     sandboxId: v.string(),
     metadata: v.optional(labMetadataValidator),
-    unarchive: v.optional(v.boolean()),
   },
   returns: v.object({
     labSessionId: v.id("labSessions"),
@@ -122,7 +129,7 @@ export const upsertLabSessionInternal = internalMutation({
         metadata: mergeMetadata(existing.metadata, args.metadata),
         updatedAt: now,
         lastActiveAt: now,
-        archivedAt: args.unarchive === false ? existing.archivedAt : undefined,
+        archivedAt: undefined,
       });
       return {
         labSessionId: existing._id,
@@ -146,6 +153,11 @@ export const upsertLabSessionInternal = internalMutation({
       updatedAt: now,
       lastActiveAt: now,
       archivedAt: undefined,
+    });
+
+    await ctx.runMutation(internalApi.billing.recordLabUsageInternal, {
+      userId: args.userId,
+      labSessionCount: 1,
     });
 
     return {
@@ -174,37 +186,15 @@ export const touchLabSessionInternal = internalMutation({
     }
 
     const now = Date.now();
+    await ctx.runMutation(internalApi.billing.recordLabActivityInternal, {
+      userId: args.userId,
+      threadId: args.threadId,
+      lastActiveAt: session.lastActiveAt,
+      now,
+    });
     await ctx.db.patch(session._id, {
       updatedAt: now,
       lastActiveAt: now,
-    });
-
-    return null;
-  },
-});
-
-export const archiveLabSessionInternal = internalMutation({
-  args: {
-    userId: v.string(),
-    threadId: v.string(),
-    archivedAt: v.optional(v.number()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("labSessions")
-      .withIndex("by_userId_and_threadId", (q) =>
-        q.eq("userId", args.userId).eq("threadId", args.threadId),
-      )
-      .unique();
-
-    if (!session) {
-      throw new Error("Lab session not found");
-    }
-
-    await ctx.db.patch(session._id, {
-      archivedAt: args.archivedAt ?? Date.now(),
-      updatedAt: Date.now(),
     });
 
     return null;

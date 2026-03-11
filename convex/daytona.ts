@@ -116,6 +116,7 @@ function getOptionalOrganizationId(): string | undefined {
   return value && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+
 function buildDaytonaHeaders(json: boolean): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${getApiKey()}`,
@@ -746,18 +747,50 @@ export async function startSandbox(sandboxId: string): Promise<void> {
   });
 }
 
-export async function stopSandbox(sandboxId: string): Promise<void> {
-  await daytonaRequest({
-    path: `/sandbox/${encodeURIComponent(sandboxId)}/stop`,
-    method: "POST",
-  });
-}
-
 export async function deleteSandbox(sandboxId: string): Promise<void> {
   await daytonaRequest({
     path: `/sandbox/${encodeURIComponent(sandboxId)}`,
     method: "DELETE",
   });
+}
+
+export async function deleteSandboxAndConfirm(
+  sandboxId: string,
+): Promise<void> {
+  try {
+    await deleteSandbox(sandboxId);
+  } catch (error) {
+    const detail = classifyDaytonaError(error);
+    if (detail.category === "not_found") {
+      return;
+    }
+    throw error;
+  }
+
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    try {
+      const sandbox = await getSandbox(sandboxId);
+      if (sandbox.state === "destroyed") {
+        return;
+      }
+    } catch (error) {
+      const detail = classifyDaytonaError(error);
+      if (detail.category === "not_found") {
+        return;
+      }
+      throw error;
+    }
+
+    await sleep(250);
+  }
+
+  throw new DaytonaRequestError(
+    `Sandbox ${sandboxId} still exists after delete request completed.`,
+    {
+      endpoint: `/sandbox/${encodeURIComponent(sandboxId)}`,
+    },
+  );
 }
 
 export async function recoverSandbox(sandboxId: string): Promise<void> {
@@ -1297,25 +1330,6 @@ export async function getSignedPreviewLink(params: {
   throw lastError ?? new Error("Unable to create signed preview URL.");
 }
 
-export async function getTerminalLink(params: {
-  sandboxId: string;
-  expiresInSeconds?: number;
-}): Promise<PreviewLinkResponse> {
-  const terminalPort = 22222;
-  try {
-    return await getSignedPreviewLink({
-      sandboxId: params.sandboxId,
-      port: terminalPort,
-      expiresInSeconds: params.expiresInSeconds ?? 3600,
-    });
-  } catch {
-    return await getPreviewLink({
-      sandboxId: params.sandboxId,
-      port: terminalPort,
-    });
-  }
-}
-
 export function classifyDaytonaError(error: unknown): DaytonaToolError {
   if (error instanceof DaytonaRequestError) {
     const status = error.status;
@@ -1445,7 +1459,7 @@ export function classifyDaytonaError(error: unknown): DaytonaToolError {
         message: error.message,
         retriable: false,
         hint:
-          "The sandbox user's login shell is set to /usr/bin/zsh, but that binary is missing. Recreate the sandbox with a valid shell or set DAYTONA_SANDBOX_USER for new labs.",
+          "The lab sandbox image is missing /usr/bin/zsh. Recreate the lab after the image fix is deployed.",
       };
     }
 

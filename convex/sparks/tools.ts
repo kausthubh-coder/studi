@@ -41,6 +41,9 @@ import { internal } from "../_generated/api";
 import { capturePosthogEvent } from "../posthog";
 
 const internalApi = internal as unknown as {
+  billing: {
+    recordTextAiCostInternal: FunctionReference<"mutation", "internal">;
+  };
   telemetry: {
     insertRawUsageInternal: FunctionReference<"mutation", "internal">;
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
@@ -77,6 +80,56 @@ type SparkWorkerUsageRecord = {
 type CreateSparkToolResultWithUsage = CreateSparkToolResult & {
   workerUsage?: SparkWorkerUsageRecord[];
 };
+
+function readNumericCandidate(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function extractEstimatedCostUsd(providerMetadata: unknown): number | undefined {
+  if (!providerMetadata || typeof providerMetadata !== "object") {
+    return undefined;
+  }
+
+  const stack: Record<string, unknown>[] = [
+    providerMetadata as Record<string, unknown>,
+  ];
+  const seen = new Set<Record<string, unknown>>();
+  const keys = [
+    "totalCostUsd",
+    "total_cost_usd",
+    "totalCost",
+    "total_cost",
+    "costUsd",
+    "cost_usd",
+    "cost",
+  ];
+
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || seen.has(node)) {
+      continue;
+    }
+    seen.add(node);
+
+    for (const key of keys) {
+      const found = readNumericCandidate(node, key);
+      if (found !== undefined) {
+        return found;
+      }
+    }
+
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        stack.push(value as Record<string, unknown>);
+      }
+    }
+  }
+
+  return undefined;
+}
 
 export type SparkWorkerModels = Pick<
   ModelConfig,
@@ -2120,6 +2173,15 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
             })
             .catch((error) => {
               console.error("Failed to store spark raw usage", error);
+            });
+
+          await ctx
+            .runMutation(internalApi.billing.recordTextAiCostInternal, {
+              userId: ctx.userId,
+              textAiCostUsd: extractEstimatedCostUsd(record.providerMetadata) ?? 0,
+            })
+            .catch((error) => {
+              console.error("Failed to store spark billing usage", error);
             });
         }
 

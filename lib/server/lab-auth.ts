@@ -19,7 +19,7 @@ export async function requireLabSession(threadId: string) {
     { token },
   );
 
-  if (!session || session.archivedAt) {
+  if (!session) {
     throw new Error("No active lab session for this thread.");
   }
 

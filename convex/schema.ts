@@ -99,6 +99,51 @@ export default defineSchema({
     .index("by_userId_and_threadId", ["userId", "threadId"])
     .index("by_userId_and_updatedAt", ["userId", "updatedAt"]),
 
+  billingProfiles: defineTable({
+    userId: v.string(),
+    planKey: v.union(
+      v.literal("free_onboarding"),
+      v.literal("intro"),
+      v.literal("pro"),
+    ),
+    status: v.union(
+      v.literal("onboarding"),
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("canceled"),
+      v.literal("inactive"),
+    ),
+    clerkSubscriptionId: v.optional(v.string()),
+    clerkSubscriptionItemId: v.optional(v.string()),
+    currentPeriodStart: v.optional(v.number()),
+    currentPeriodEnd: v.optional(v.number()),
+    trialEndsAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
+  billingUsagePeriods: defineTable({
+    userId: v.string(),
+    billingPeriod: v.string(),
+    textPromptCount: v.number(),
+    textAiCostUsd: v.number(),
+    voiceSeconds: v.number(),
+    voiceEstimatedCostUsd: v.number(),
+    labSessionCount: v.number(),
+    labActiveSeconds: v.number(),
+    labEstimatedCostUsd: v.number(),
+    totalEstimatedCostUsd: v.number(),
+    lastLabActivityAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_userId_and_billingPeriod", ["userId", "billingPeriod"]),
+
+  billingOnboarding: defineTable({
+    userId: v.string(),
+    lifetimeFreePromptCount: v.number(),
+    lifetimeFreeTextAiCostUsd: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   rawUsage: defineTable({
     userId: v.string(),
     threadId: v.string(),

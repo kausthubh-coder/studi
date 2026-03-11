@@ -1,17 +1,11 @@
-import { Daytona } from "@daytonaio/sdk";
+"use node";
+
+import { Daytona, Image } from "@daytonaio/sdk";
 
 const DEFAULT_PTY_COLS = 120;
 const DEFAULT_PTY_ROWS = 32;
 const SANDBOX_READY_TIMEOUT_SECONDS = 60;
 const SANDBOX_READY_POLL_MS = 250;
-const WORKSPACE_ROOT = "/workspace";
-const MIGRATION_SKIP_DIRS = new Set([
-  "node_modules",
-  ".next",
-  "dist",
-  "build",
-  ".turbo",
-]);
 
 type PtyShellDiagnostics = {
   sandboxUser: string;
@@ -20,9 +14,6 @@ type PtyShellDiagnostics = {
   userHomeDir: string | null;
   workDir: string | null;
   inspectOutput?: string;
-  repairStatus?: string;
-  repairTarget?: string | null;
-  repairOutput?: string;
 };
 
 function createDaytonaClient() {
@@ -30,7 +21,71 @@ function createDaytonaClient() {
     apiKey: process.env.DAYTONA_API_KEY,
     apiUrl: process.env.DAYTONA_API_URL,
     organizationId: process.env.DAYTONA_ORGANIZATION_ID,
+    target:
+      process.env.DAYTONA_TARGET && process.env.DAYTONA_TARGET.trim().length > 0
+        ? process.env.DAYTONA_TARGET.trim()
+        : undefined,
   });
+}
+
+function resolveSandboxBaseImage(language?: string): string {
+  const normalized = language?.trim().toLowerCase();
+
+  switch (normalized) {
+    case "javascript":
+    case "typescript":
+      return "node:22-bookworm";
+    case "python":
+      return "python:3.12-slim-bookworm";
+    case "go":
+      return "golang:1.24-bookworm";
+    case "rust":
+      return "rust:1.86-bookworm";
+    case "ruby":
+      return "ruby:3.3-bookworm";
+    case "php":
+      return "php:8.3-cli-bookworm";
+    case "java":
+      return "eclipse-temurin:21-jdk";
+    case "csharp":
+      return "mcr.microsoft.com/dotnet/sdk:8.0";
+    case "elixir":
+      return "elixir:1.17-otp-27";
+    default:
+      return "node:22-bookworm";
+  }
+}
+
+function buildLabSandboxImage(language?: string): Image {
+  const normalized = language?.trim().toLowerCase() ?? "typescript";
+  const image = Image.base(resolveSandboxBaseImage(normalized));
+  const bootstrapCommands = [
+    "set -eux",
+    "if command -v apt-get >/dev/null 2>&1; then apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y zsh git curl ca-certificates passwd && rm -rf /var/lib/apt/lists/*; fi",
+    "if command -v apk >/dev/null 2>&1; then apk add --no-cache zsh git curl ca-certificates shadow; fi",
+    'if [ ! -x /usr/bin/zsh ] && command -v zsh >/dev/null 2>&1; then mkdir -p /usr/bin && ln -sf "$(command -v zsh)" /usr/bin/zsh; fi',
+    'if ! id -u daytona >/dev/null 2>&1; then useradd -m -s /usr/bin/zsh daytona; fi',
+    "if command -v usermod >/dev/null 2>&1; then usermod -s /usr/bin/zsh daytona || true; fi",
+    "mkdir -p /workspace",
+    "chown -R daytona:daytona /workspace || true",
+  ];
+
+  if (normalized === "javascript" || normalized === "typescript") {
+    bootstrapCommands.splice(
+      6,
+      0,
+      'if ! command -v bun >/dev/null 2>&1; then curl -fsSL https://bun.sh/install | bash && ln -sf /root/.bun/bin/bun /usr/local/bin/bun; fi',
+    );
+  }
+
+  return image
+    .runCommands(...bootstrapCommands)
+    .env({
+      SHELL: "/usr/bin/zsh",
+      TERM: "xterm-256color",
+      LANG: "en_US.UTF-8",
+    })
+    .workdir("/workspace");
 }
 
 function logDaytona(
@@ -91,10 +146,6 @@ function isPtyAlreadyExistsError(error: unknown): boolean {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function joinSandboxPath(parent: string, child: string) {
-  return `${parent.replace(/\/+$/, "")}/${child.replace(/^\/+/, "")}`;
 }
 
 async function waitForSandboxStarted(sandbox: Awaited<ReturnType<typeof getSandboxById>>) {
@@ -262,54 +313,6 @@ async function inspectPtyShellDiagnostics(
   };
 }
 
-async function attemptMissingZshRepair(
-  sandbox: Awaited<ReturnType<typeof getSandboxById>>,
-) {
-  const repairResult = await safeExecuteCommand(
-    sandbox,
-    [
-      'ALT=""',
-      'for candidate in /bin/bash /usr/bin/bash /bin/sh /usr/bin/sh; do',
-      '  if [ -x "$candidate" ]; then',
-      '    ALT="$candidate"',
-      "    break",
-      "  fi",
-      "done",
-      'if [ -z "$ALT" ]; then',
-      '  echo "repair_status=no_alt_shell"',
-      "  exit 20",
-      "fi",
-      'if [ -x /usr/bin/zsh ]; then',
-      '  echo "repair_status=already_present"',
-      '  echo "repair_target=/usr/bin/zsh"',
-      "  exit 0",
-      "fi",
-      'if ln -sf "$ALT" /usr/bin/zsh 2>/dev/null; then',
-      '  echo "repair_status=linked"',
-      '  echo "repair_target=$ALT"',
-      "  exit 0",
-      "fi",
-      'USER_NAME="$(id -un 2>/dev/null || whoami 2>/dev/null || echo unknown)"',
-      'if command -v chsh >/dev/null 2>&1 && chsh -s "$ALT" "$USER_NAME" >/dev/null 2>&1; then',
-      '  echo "repair_status=changed_login_shell"',
-      '  echo "repair_target=$ALT"',
-      "  exit 0",
-      "fi",
-      'echo "repair_status=repair_failed"',
-      'echo "repair_target=$ALT"',
-      "exit 21",
-    ].join("; "),
-  );
-
-  const parsed = parseKeyValueOutput(repairResult?.result ?? "");
-  return {
-    repairStatus: parsed.repair_status ?? "command_failed",
-    repairTarget: parsed.repair_target ?? null,
-    repairOutput: repairResult?.result,
-    exitCode: repairResult?.exitCode,
-  };
-}
-
 function buildPtyShellErrorMessage(
   baseError: unknown,
   diagnostics: PtyShellDiagnostics,
@@ -317,16 +320,13 @@ function buildPtyShellErrorMessage(
   const availableShells = diagnostics.availableShells.length
     ? diagnostics.availableShells.join(", ")
     : "none";
-  const repairDetail = diagnostics.repairStatus
-    ? ` Repair attempt: ${diagnostics.repairStatus}${diagnostics.repairTarget ? ` (${diagnostics.repairTarget})` : ""}.`
-    : "";
 
   return [
     formatErrorMessage(baseError),
     `Sandbox user: ${diagnostics.sandboxUser}.`,
     `Login shell: ${diagnostics.reportedLoginShell ?? "unknown"}.`,
     `Available shells: ${availableShells}.`,
-    repairDetail.trim(),
+    "The sandbox user's login shell is invalid for PTY startup. Delete this thread and recreate the lab.",
   ]
     .filter(Boolean)
     .join(" ");
@@ -544,10 +544,6 @@ async function createOrReconnectPty(params: {
     }
 
     const diagnostics = await inspectPtyShellDiagnostics(sandbox);
-    const repair = await attemptMissingZshRepair(sandbox);
-    diagnostics.repairStatus = repair.repairStatus;
-    diagnostics.repairTarget = repair.repairTarget;
-    diagnostics.repairOutput = repair.repairOutput;
 
     logDaytona(
       "pty.ensure.missing_zsh",
@@ -557,24 +553,15 @@ async function createOrReconnectPty(params: {
         sandboxUser: diagnostics.sandboxUser,
         loginShell: diagnostics.reportedLoginShell,
         availableShells: diagnostics.availableShells,
-        repairStatus: diagnostics.repairStatus,
-        repairTarget: diagnostics.repairTarget,
         inspectOutput: diagnostics.inspectOutput,
-        repairOutput: diagnostics.repairOutput,
+        userHomeDir: diagnostics.userHomeDir,
+        workDir: diagnostics.workDir,
         error: formatErrorMessage(error),
       },
       "error",
     );
 
-    if (
-      diagnostics.repairStatus === "linked" ||
-      diagnostics.repairStatus === "changed_login_shell" ||
-      diagnostics.repairStatus === "already_present"
-    ) {
-      await createHandle();
-    } else {
-      throw new Error(buildPtyShellErrorMessage(error, diagnostics));
-    }
+    throw new Error(buildPtyShellErrorMessage(error, diagnostics));
   }
 
   logDaytona("pty.ensure.created", {
@@ -595,6 +582,27 @@ async function createOrReconnectPty(params: {
 export async function getSandboxById(sandboxId: string) {
   const daytona = createDaytonaClient();
   return await daytona.get(sandboxId);
+}
+
+export async function createManagedLabSandbox(params: {
+  language: string;
+  user: string;
+  autoDeleteInterval: number;
+  labels: Record<string, string>;
+}) {
+  const daytona = createDaytonaClient();
+  return await daytona.create(
+    {
+      language: params.language,
+      image: buildLabSandboxImage(params.language),
+      autoDeleteInterval: params.autoDeleteInterval,
+      user: params.user,
+      labels: params.labels,
+    },
+    {
+      timeout: 120,
+    },
+  );
 }
 
 export async function ensureSandboxReady(sandboxId: string) {
@@ -731,91 +739,4 @@ export async function getSignedPreviewUrl(params: {
     params.port,
     params.expiresInSeconds,
   );
-}
-
-async function copyWorkspaceDirectory(params: {
-  fromSandbox: Awaited<ReturnType<typeof getSandboxById>>;
-  toSandbox: Awaited<ReturnType<typeof getSandboxById>>;
-  path: string;
-  copied: { files: number; directories: number };
-}) {
-  const entries = await params.fromSandbox.fs.listFiles(params.path);
-
-  for (const entry of entries) {
-    const sourcePath = joinSandboxPath(params.path, entry.name);
-    const destinationPath = joinSandboxPath(params.path, entry.name);
-
-    if (entry.isDir) {
-      if (MIGRATION_SKIP_DIRS.has(entry.name)) {
-        logDaytona("workspace.migrate.skip_dir", {
-          fromSandboxId: params.fromSandbox.id,
-          toSandboxId: params.toSandbox.id,
-          path: sourcePath,
-        });
-        continue;
-      }
-
-      await params.toSandbox.fs.createFolder(destinationPath, "755").catch(() => undefined);
-      params.copied.directories += 1;
-      await copyWorkspaceDirectory({
-        fromSandbox: params.fromSandbox,
-        toSandbox: params.toSandbox,
-        path: sourcePath,
-        copied: params.copied,
-      });
-      continue;
-    }
-
-    const bytes = await params.fromSandbox.fs.downloadFile(sourcePath);
-    await params.toSandbox.fs.uploadFile(bytes, destinationPath);
-    params.copied.files += 1;
-  }
-}
-
-export async function migrateWorkspaceToReplacementSandbox(params: {
-  fromSandboxId: string;
-  toSandboxId: string;
-}) {
-  const [fromSandbox, toSandbox] = await Promise.all([
-    ensureWorkspaceDirectory(params.fromSandboxId),
-    ensureWorkspaceDirectory(params.toSandboxId),
-  ]);
-
-  const copied = { files: 0, directories: 0 };
-
-  logDaytona("workspace.migrate.begin", {
-    fromSandboxId: fromSandbox.id,
-    toSandboxId: toSandbox.id,
-    root: WORKSPACE_ROOT,
-  });
-
-  try {
-    await copyWorkspaceDirectory({
-      fromSandbox,
-      toSandbox,
-      path: WORKSPACE_ROOT,
-      copied,
-    });
-  } catch (error) {
-    logDaytona(
-      "workspace.migrate.failed",
-      {
-        fromSandboxId: fromSandbox.id,
-        toSandboxId: toSandbox.id,
-        error: formatErrorMessage(error),
-      },
-      "error",
-    );
-    throw error;
-  }
-
-  logDaytona("workspace.migrate.complete", {
-    fromSandboxId: fromSandbox.id,
-    toSandboxId: toSandbox.id,
-    files: copied.files,
-    directories: copied.directories,
-    skippedDirectories: Array.from(MIGRATION_SKIP_DIRS),
-  });
-
-  return copied;
 }

@@ -10,7 +10,6 @@ import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import {
   classifyDaytonaError,
-  createSandbox,
   createProcessSession,
   deleteProcessSession,
   editFile,
@@ -27,14 +26,10 @@ import {
   runCommand,
   sendSessionCommandInput,
   getSignedPreviewLink,
-  getTerminalLink,
   truncateOutput,
   writeFile,
 } from "./daytona";
-import {
-  ensurePtySession,
-  migrateWorkspaceToReplacementSandbox,
-} from "../lib/daytona/server";
+import { ensurePtySession } from "../lib/daytona/server";
 import { isPreviewablePort } from "../lib/lab/preview";
 
 const daytonaErrorValidator = v.object({
@@ -114,9 +109,13 @@ async function getActiveSession(
     },
   );
 
-  if (!session || session.archivedAt) {
+  if (!session) {
     throw new Error("No active lab session for this thread.");
   }
+
+  await ctx.runMutation(internal.billing.assertCanCreateLabInternal, {
+    userId,
+  });
 
   await ensureSandboxStarted(session.sandboxId);
   await ctx.runMutation(internal.labs.touchLabSessionInternal, {
@@ -127,61 +126,6 @@ async function getActiveSession(
   return {
     sandboxId: session.sandboxId,
     metadata: session.metadata,
-  };
-}
-
-function isBrokenPtyShellError(error: unknown) {
-  return String(error)
-    .toLowerCase()
-    .includes("fork/exec /usr/bin/zsh: no such file or directory");
-}
-
-async function replaceBrokenPtySandbox(
-  ctx: {
-    runMutation: MutationRunner;
-  },
-  params: {
-    userId: string;
-    threadId: string;
-    sandboxId: string;
-    metadata?: {
-      topic?: string;
-      objective?: string;
-      language?: string;
-      framework?: string;
-      template?: string;
-      runtimeProfileId?: string;
-    };
-  },
-) {
-  const created = await createSandbox({
-    language: params.metadata?.language,
-    labels: {
-      runtime_language: params.metadata?.language,
-      runtime_framework: params.metadata?.framework,
-      runtime_profile: params.metadata?.runtimeProfileId,
-      runtime_template: params.metadata?.template,
-      repaired_from_sandbox: params.sandboxId,
-      repair_reason: "missing_pty_shell",
-    },
-  });
-
-  const migrated = await migrateWorkspaceToReplacementSandbox({
-    fromSandboxId: params.sandboxId,
-    toSandboxId: created.sandboxId,
-  });
-
-  await ctx.runMutation(internal.labs.upsertLabSessionInternal, {
-    userId: params.userId,
-    threadId: params.threadId,
-    sandboxId: created.sandboxId,
-    metadata: params.metadata,
-    unarchive: true,
-  });
-
-  return {
-    sandboxId: created.sandboxId,
-    migrated,
   };
 }
 
@@ -468,6 +412,10 @@ export const runLabCommand = action({
     const userId = await requireUserId(ctx);
 
     try {
+      await ctx.runMutation(internal.billing.assertCanRunExpensiveLabCommandInternal, {
+        userId,
+      });
+
       const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
       const result = await runCommand({
         sandboxId,
@@ -555,9 +503,7 @@ export const ensureLabPtySession = action({
     const userId = await requireUserId(ctx);
 
     try {
-      const activeSession = await getActiveSession(ctx, userId, args.threadId);
-      let { sandboxId } = activeSession;
-      const { metadata } = activeSession;
+      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
       const sessionId = args.sessionId?.trim() || "studi-main";
       const cols =
         typeof args.cols === "number" && Number.isFinite(args.cols)
@@ -568,49 +514,12 @@ export const ensureLabPtySession = action({
           ? Math.max(10, Math.floor(args.rows))
           : DEFAULT_PTY_ROWS;
 
-      let ensured;
-      try {
-        ensured = await ensurePtySession({
-          sandboxId,
-          sessionId,
-          cols,
-          rows,
-        });
-      } catch (error) {
-        if (!isBrokenPtyShellError(error)) {
-          throw error;
-        }
-
-        console.warn("[labIde] replacing broken PTY sandbox", {
-          threadId: args.threadId,
-          sandboxId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-
-        const replacement = await replaceBrokenPtySandbox(ctx, {
-          userId,
-          threadId: args.threadId,
-          sandboxId,
-          metadata,
-        });
-
-        sandboxId = replacement.sandboxId;
-        ensured = await ensurePtySession({
-          sandboxId,
-          sessionId,
-          cols,
-          rows,
-        });
-
-        return {
-          status: "success" as const,
-          summary: `Recreated the lab sandbox on a valid shell user and migrated ${replacement.migrated.files} files. PTY terminal session ready.`,
-          sessionId: ensured.sessionId,
-          created: true,
-          cols: ensured.cols,
-          rows: ensured.rows,
-        };
-      }
+      const ensured = await ensurePtySession({
+        sandboxId,
+        sessionId,
+        cols,
+        rows,
+      });
 
       return {
         status: "success" as const,
@@ -663,6 +572,10 @@ export const runLabTerminalCommand = action({
     const userId = await requireUserId(ctx);
 
     try {
+      await ctx.runMutation(internal.billing.assertCanRunExpensiveLabCommandInternal, {
+        userId,
+      });
+
       const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
       const session = await ensureProcessSession(sandboxId, args.sessionId);
 
@@ -1049,48 +962,6 @@ export const getLabPreviewProxyDescriptor = action({
       return {
         status: "failed" as const,
         summary: formatErrorSummary("get preview proxy descriptor", error),
-        error: classifyDaytonaError(error),
-      };
-    }
-  },
-});
-
-export const getLabTerminalLink = action({
-  args: {
-    threadId: v.string(),
-    expiresInSeconds: v.optional(v.number()),
-  },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      summary: v.string(),
-      url: v.string(),
-      token: v.optional(v.string()),
-      port: v.number(),
-    }),
-    failureValidator,
-  ),
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
-    try {
-      const { sandboxId } = await getActiveSession(ctx, userId, args.threadId);
-      const terminal = await getTerminalLink({
-        sandboxId,
-        expiresInSeconds: args.expiresInSeconds,
-      });
-
-      return {
-        status: "success" as const,
-        summary: "Daytona web terminal link ready.",
-        url: terminal.url,
-        token: terminal.token,
-        port: 22222,
-      };
-    } catch (error) {
-      return {
-        status: "failed" as const,
-        summary: formatErrorSummary("get terminal link", error),
         error: classifyDaytonaError(error),
       };
     }

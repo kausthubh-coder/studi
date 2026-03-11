@@ -11,17 +11,14 @@ import { internal } from "./_generated/api";
 import {
   classifyDaytonaError,
   createSandbox,
-  deleteSandbox,
   editFile,
   ensureSandboxStarted,
   formatErrorSummary,
-  getSandbox,
   globFiles,
   grepFiles,
   listFiles,
   readFile,
   runCommand,
-  stopSandbox,
   truncateOutput,
   writeFile,
   type DaytonaToolError,
@@ -30,6 +27,10 @@ import { capturePosthogEvent } from "./posthog";
 import { resolveLabRuntime } from "../lib/lab-runtime/profiles";
 
 const internalApi = internal as unknown as {
+  billing: {
+    assertCanCreateLabInternal: FunctionReference<"mutation", "internal">;
+    assertCanRunExpensiveLabCommandInternal: FunctionReference<"mutation", "internal">;
+  };
   plans: {
     ensureLabPlanInternal: FunctionReference<"mutation", "internal">;
   };
@@ -131,6 +132,24 @@ function failure(
   error: unknown,
   diagnostics?: Record<string, unknown>,
 ): ToolFailurePayload {
+  const candidate = error as { data?: { message?: string; surface?: string } };
+  if (
+    candidate?.data &&
+    typeof candidate.data.message === "string" &&
+    candidate.data.message.length > 0
+  ) {
+    return {
+      status: "failed",
+      summary: candidate.data.message,
+      error: {
+        category: "invalid_request",
+        message: candidate.data.message,
+        retriable: false,
+      },
+      diagnostics,
+    };
+  }
+
   return {
     status: "failed",
     summary: formatErrorSummary(operation, error),
@@ -189,9 +208,13 @@ async function getActiveSandbox(ctx: {
   threadId: string;
 }> {
   const { session, userId, threadId } = await getSessionForContext(ctx);
-  if (!session || session.archivedAt) {
-    throw new Error("No active lab session in this thread.");
+  if (!session) {
+    throw new Error("No lab session in this thread.");
   }
+
+  await ctx.runMutation(internalApi.billing.assertCanCreateLabInternal, {
+    userId,
+  });
 
   await ensureSandboxStarted(session.sandboxId);
   await touchSession(ctx, userId, threadId);
@@ -210,7 +233,6 @@ const createLabSchema = z.object({
   framework: z.string().optional(),
   template: z.string().optional(),
   createTrack: z.boolean().optional(),
-  forceNewSandbox: z.boolean().optional(),
 });
 
 type CreateLabResult =
@@ -246,12 +268,15 @@ export const createLabTool = createTool<
     }
 
     try {
+      await ctx.runMutation(internalApi.billing.assertCanCreateLabInternal, {
+        userId,
+      });
+
       const runtime = resolveLabRuntime({
         language: args.language,
         framework: args.framework,
       });
       const shouldCreateTrack = args.createTrack === true;
-      const forceNewSandbox = args.forceNewSandbox === true;
       const existing = (await ctx.runQuery(
         internal.labs.getLabSessionByThreadForUserInternal,
         {
@@ -262,24 +287,12 @@ export const createLabTool = createTool<
 
       let sandboxId: string;
       let reusedExisting = false;
-      let cleanupWarning: string | undefined;
       const existingProfileId = existing?.metadata?.runtimeProfileId;
-      if (existing?.sandboxId && !forceNewSandbox) {
+      if (existing?.sandboxId) {
         sandboxId = existing.sandboxId;
         reusedExisting = true;
         await ensureSandboxStarted(sandboxId);
       } else {
-        if (existing?.sandboxId && forceNewSandbox) {
-          try {
-            await deleteSandbox(existing.sandboxId);
-          } catch (error) {
-            const detail = classifyDaytonaError(error);
-            if (detail.category !== "not_found") {
-              cleanupWarning = detail.message;
-            }
-          }
-        }
-
         const created = await createSandbox({
           language: runtime.language,
           labels: {
@@ -304,7 +317,6 @@ export const createLabTool = createTool<
           template: args.template?.trim() || undefined,
           runtimeProfileId: runtime.runtimeProfileId,
         },
-        unarchive: true,
       });
 
       if (shouldCreateTrack) {
@@ -320,11 +332,8 @@ export const createLabTool = createTool<
         reusedExisting &&
         existingProfileId &&
         existingProfileId !== runtime.runtimeProfileId
-          ? ` Reused existing sandbox runtime (${existingProfileId}); use forceNewSandbox=true to switch.`
+          ? ` Reused existing sandbox runtime (${existingProfileId}).`
           : "";
-      const cleanupNotice = cleanupWarning
-        ? ` Previous sandbox cleanup warning: ${cleanupWarning}`
-        : "";
 
       await recordLabToolTelemetry(ctx, {
         userId,
@@ -341,16 +350,14 @@ export const createLabTool = createTool<
           runtimeProfileId: runtime.runtimeProfileId,
           inferredFromFramework: runtime.inferredFromFramework,
           createdTrack: shouldCreateTrack,
-          forceNewSandbox,
           reusedExisting,
-          cleanupWarning,
           sandboxId,
         },
       });
 
       return {
         status: "active",
-        summary: `Lab is active. I will now use sandbox tools directly and report exact command/file results.${runtimeNotice}${cleanupNotice}`,
+        summary: `Lab is active. I will now use sandbox tools directly and report exact command/file results.${runtimeNotice}`,
         sandboxId,
         metadata: {
           topic: args.topic,
@@ -378,88 +385,11 @@ export const createLabTool = createTool<
           framework: args.framework,
           template: args.template,
           createTrack: args.createTrack,
-          forceNewSandbox: args.forceNewSandbox,
           error: detail.message,
           httpStatus: detail.httpStatus,
         },
       });
       return failure("create_lab", error, {
-        threadId,
-      });
-    }
-  },
-});
-
-const archiveLabSchema = z.object({});
-
-type ArchiveLabResult =
-  | {
-      status: "archived";
-      summary: string;
-    }
-  | ToolFailurePayload;
-
-export const archiveLabTool = createTool<
-  z.infer<typeof archiveLabSchema>,
-  ArchiveLabResult
->({
-  description: "Archive the current lab and stop its sandbox.",
-  args: archiveLabSchema,
-  handler: async (ctx) => {
-    const startedAt = Date.now();
-    const userId = ctx.userId;
-    const threadId = ctx.threadId;
-
-    if (!userId || !threadId) {
-      return failure("archive_lab", new Error("Missing user/thread context."));
-    }
-
-    try {
-      const { session } = await getSessionForContext(ctx);
-      if (!session) {
-        return failure("archive_lab", new Error("No lab session found."), {
-          threadId,
-        });
-      }
-
-      const sandbox = await getSandbox(session.sandboxId);
-      if (sandbox.state === "started") {
-        await stopSandbox(session.sandboxId);
-      }
-
-      await ctx.runMutation(internal.labs.archiveLabSessionInternal, {
-        userId,
-        threadId,
-      });
-
-      await recordLabToolTelemetry(ctx, {
-        userId,
-        threadId,
-        name: "archive_lab",
-        status: "success",
-        durationMs: Date.now() - startedAt,
-      });
-
-      return {
-        status: "archived",
-        summary: "Lab archived. Sandbox stopped and state preserved.",
-      };
-    } catch (error) {
-      const detail = classifyDaytonaError(error);
-      await recordLabToolTelemetry(ctx, {
-        userId,
-        threadId,
-        name: "archive_lab",
-        status: "failed",
-        durationMs: Date.now() - startedAt,
-        errorCategory: detail.category,
-        retriable: detail.retriable,
-        metadata: {
-          error: detail.message,
-          httpStatus: detail.httpStatus,
-        },
-      });
-      return failure("archive_lab", error, {
         threadId,
       });
     }
@@ -633,6 +563,15 @@ export const runTool = createTool<z.infer<typeof runSchema>, RunResult>({
     const threadId = ctx.threadId;
 
     try {
+      if (userId) {
+        await ctx.runMutation(
+          internalApi.billing.assertCanRunExpensiveLabCommandInternal,
+          {
+            userId,
+          },
+        );
+      }
+
       const { sandboxId } = await getActiveSandbox(ctx);
       const result = await runCommand({
         sandboxId,
