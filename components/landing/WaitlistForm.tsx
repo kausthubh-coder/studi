@@ -54,7 +54,12 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
         setState("error");
       }
     } catch (err) {
-      posthog.captureException(err);
+      posthog.captureException(err, {
+        surface: "waitlist",
+        action: "join_waitlist",
+        variant,
+        already_on_list: alreadyOnList,
+      });
       setErrorMsg("Something went wrong. Please try again.");
       setState("error");
     }

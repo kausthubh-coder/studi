@@ -46,7 +46,7 @@ export default function PricingPage() {
         </div>
 
         <div className="overflow-hidden rounded-[28px] border border-border-warm bg-bg-card p-3 shadow-[0_1px_3px_rgba(28,18,8,0.04),0_12px_30px_rgba(28,18,8,0.08)] md:p-5">
-          <PricingTable />
+          <PricingTable newSubscriptionRedirectUrl="/settings?from=checkout" />
         </div>
 
         <section className="mt-6 rounded-[28px] border border-border-warm bg-bg-card p-5 shadow-[0_1px_3px_rgba(28,18,8,0.04),0_12px_30px_rgba(28,18,8,0.08)]">

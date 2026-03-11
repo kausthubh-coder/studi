@@ -4,9 +4,17 @@ import {
   createClerkClient,
   type BillingSubscriptionItem,
 } from "@clerk/backend";
+import type { FunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
+import { capturePosthogEvent } from "./posthog";
+
+const internalApi = internal as unknown as {
+  billing: {
+    resolveCurrentPlanInternal: FunctionReference<"query", "internal">;
+  };
+};
 
 function normalizePlanKey(
   value: string | undefined | null,
@@ -102,6 +110,30 @@ function choosePaidSubscriptionItem(items: BillingSubscriptionItem[]) {
   return null;
 }
 
+function shouldCaptureCheckoutCompleted(args: {
+  previous: {
+    planKey: "free_onboarding" | "intro" | "pro";
+    status: "onboarding" | "active" | "past_due" | "canceled" | "inactive";
+  };
+  next: {
+    planKey: "free_onboarding" | "intro" | "pro";
+    status: "onboarding" | "active" | "past_due" | "canceled" | "inactive";
+  };
+}) {
+  if (args.next.planKey === "free_onboarding" || args.next.status !== "active") {
+    return false;
+  }
+
+  if (
+    args.previous.planKey === "free_onboarding" &&
+    (args.next.planKey === "intro" || args.next.planKey === "pro")
+  ) {
+    return true;
+  }
+
+  return args.previous.status !== "active";
+}
+
 export const syncCurrentUserBillingProfile = action({
   args: {},
   returns: v.object({
@@ -125,6 +157,13 @@ export const syncCurrentUserBillingProfile = action({
     }
 
     const planHint = extractPlanHintFromIdentity(identity);
+    const previousState = await ctx.runQuery(
+      internalApi.billing.resolveCurrentPlanInternal,
+      {
+        userId: identity.subject,
+        planHint,
+      },
+    );
     const secretKey = process.env.CLERK_SECRET_KEY;
     if (!secretKey) {
       return {
@@ -155,6 +194,25 @@ export const syncCurrentUserBillingProfile = action({
         currentPeriodStart: paidItem?.periodStart ?? undefined,
         currentPeriodEnd: paidItem?.periodEnd ?? undefined,
       });
+
+      if (
+        shouldCaptureCheckoutCompleted({
+          previous: previousState,
+          next: { planKey, status },
+        })
+      ) {
+        await capturePosthogEvent({
+          event: "checkout_completed",
+          distinctId: identity.subject,
+          properties: {
+            previous_plan_key: previousState.planKey,
+            next_plan_key: planKey,
+            previous_status: previousState.status,
+            next_status: status,
+            billing_provider: "clerk",
+          },
+        });
+      }
 
       return {
         planKey,

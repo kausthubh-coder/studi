@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -86,7 +87,20 @@ function getErrorMessage(error: unknown): string {
   return "Something went wrong.";
 }
 
+function getUpgradeTarget(
+  planKey: "free_onboarding" | "intro" | "pro" | undefined,
+): "intro" | "pro" | undefined {
+  if (planKey === "free_onboarding") {
+    return "intro";
+  }
+  if (planKey === "intro") {
+    return "pro";
+  }
+  return undefined;
+}
+
 export default function StudiChat() {
+  const pathname = usePathname();
   const threadsQuery = useQuery(api.chat.listThreads);
   const threads = useMemo(
     () => (threadsQuery ?? []) as ThreadSummary[],
@@ -152,6 +166,7 @@ export default function StudiChat() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const touchTrackingRef = useRef<boolean>(false);
+  const lastPaywallSurfaceRef = useRef<"chat" | "voice" | null>(null);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
@@ -262,6 +277,16 @@ export default function StudiChat() {
     ],
   );
 
+  const captureUiException = useCallback(
+    (error: unknown, properties: Record<string, unknown>) => {
+      posthog.captureException(error, {
+        route: pathname,
+        ...properties,
+      });
+    },
+    [pathname],
+  );
+
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
       const arr = Array.from(files);
@@ -305,14 +330,28 @@ export default function StudiChat() {
           mime_types: uploaded.map((a) => a.mimeType),
         });
       } catch (error) {
-        posthog.captureException(error);
+        captureUiException(error, {
+          surface: "attachments",
+          action: "upload_attachment",
+          thread_id: selectedThreadId,
+          has_lab: isLabActive,
+          is_voice_mode: isVoiceMode,
+          attachment_count: arr.length,
+        });
         setComposerError(getErrorMessage(error));
         console.error("Failed to upload attachment", error);
       } finally {
         setIsUploading(false);
       }
     },
-    [generateUploadUrl, saveAttachment],
+    [
+      captureUiException,
+      generateUploadUrl,
+      isLabActive,
+      isVoiceMode,
+      saveAttachment,
+      selectedThreadId,
+    ],
   );
 
   const onPaste = useCallback(
@@ -375,7 +414,14 @@ export default function StudiChat() {
           });
         }
       } catch (error) {
-        posthog.captureException(error);
+        captureUiException(error, {
+          surface: "chat",
+          action: "send_message",
+          thread_id: selectedThreadId,
+          has_lab: isLabActive,
+          is_voice_mode: isVoiceMode,
+          attachment_count: attachmentIds.length,
+        });
         setInput(draft);
         setPendingAttachments(attachmentsSnapshot);
         setComposerError(getErrorMessage(error));
@@ -386,9 +432,12 @@ export default function StudiChat() {
     },
     [
       canSend,
+      captureUiException,
       input,
+      isLabActive,
       pendingAttachments,
       isOnWelcome,
+      isVoiceMode,
       selectedThreadId,
       sendFirstMessageAction,
       sendMessageMutation,
@@ -522,7 +571,13 @@ export default function StudiChat() {
         setIsVoiceMode(true);
         posthog.capture("voice_mode_opened", { thread_id: threadId, from_welcome: true });
       } catch (error) {
-        posthog.captureException(error);
+        captureUiException(error, {
+          surface: "voice",
+          action: "open_voice_mode",
+          thread_id: selectedThreadId,
+          has_lab: isLabActive,
+          is_voice_mode: false,
+        });
         setComposerError(getErrorMessage(error));
         console.error("Failed to create thread for voice mode", error);
       }
@@ -535,7 +590,14 @@ export default function StudiChat() {
     }
     setIsVoiceMode(true);
     posthog.capture("voice_mode_opened", { thread_id: selectedThreadId, from_welcome: false });
-  }, [createThreadAction, isOnWelcome, selectedThreadId, voiceDisabledReason]);
+  }, [
+    captureUiException,
+    createThreadAction,
+    isLabActive,
+    isOnWelcome,
+    selectedThreadId,
+    voiceDisabledReason,
+  ]);
 
   const handleCloseVoiceMode = useCallback(() => {
     void voiceSession.stop("manual_hangup");
@@ -684,10 +746,16 @@ export default function StudiChat() {
       );
       posthog.capture("plan_accepted", { thread_id: selectedThreadId });
     } catch (error) {
-      posthog.captureException(error);
+      captureUiException(error, {
+        surface: "plan",
+        action: "accept_plan_prompt",
+        thread_id: selectedThreadId,
+        has_lab: isLabActive,
+        is_voice_mode: isVoiceMode,
+      });
       console.error("Failed to send plan acceptance message", error);
     }
-  }, [selectedThreadId, sendPlanKickoffMessage]);
+  }, [captureUiException, isLabActive, isVoiceMode, selectedThreadId, sendPlanKickoffMessage]);
 
   const handleStartTrack = useCallback(async () => {
     if (!selectedThreadId) return;
@@ -702,12 +770,25 @@ export default function StudiChat() {
       setTimeout(() => textareaRef.current?.focus(), 50);
       posthog.capture("track_started", { thread_id: selectedThreadId });
     } catch (error) {
-      posthog.captureException(error);
+      captureUiException(error, {
+        surface: "plan",
+        action: "start_track",
+        thread_id: selectedThreadId,
+        has_lab: isLabActive,
+        is_voice_mode: isVoiceMode,
+      });
       console.error("Failed to start track", error);
     } finally {
       setIsSending(false);
     }
-  }, [selectedThreadId, sendPlanKickoffMessage, startPlanMode]);
+  }, [
+    captureUiException,
+    isLabActive,
+    isVoiceMode,
+    selectedThreadId,
+    sendPlanKickoffMessage,
+    startPlanMode,
+  ]);
 
   const handleTogglePlanExpanded = useCallback(() => {
     setIsPlanExpanded((v) => !v);
@@ -838,7 +919,13 @@ export default function StudiChat() {
           had_lab: thread.hasLab,
         });
       } catch (error) {
-        posthog.captureException(error);
+        captureUiException(error, {
+          surface: "thread",
+          action: "delete_thread",
+          thread_id: thread.threadId,
+          has_lab: thread.hasLab,
+          is_voice_mode: isVoiceMode,
+        });
         setThreadDeleteError(
           error instanceof Error
             ? error.message
@@ -849,7 +936,7 @@ export default function StudiChat() {
         setDeletingThreadId(null);
       }
     },
-    [deleteThreadAction],
+    [captureUiException, deleteThreadAction, isVoiceMode],
   );
 
   const handleDeleteThread = useCallback(
@@ -926,10 +1013,7 @@ export default function StudiChat() {
     }
   }, [isVoiceMode, voiceDisabledReason]);
 
-  const billingBanner = useMemo(() => {
-    if (composerError) {
-      return composerError;
-    }
+  const upgradeBannerReason = useMemo(() => {
     if (billingState?.lockedSurfaces.chat || billingState?.lockedSurfaces.voice) {
       return billingState.upgradeReason ?? null;
     }
@@ -938,8 +1022,48 @@ export default function StudiChat() {
     billingState?.lockedSurfaces.chat,
     billingState?.lockedSurfaces.voice,
     billingState?.upgradeReason,
-    composerError,
   ]);
+
+  const billingBanner = useMemo(() => {
+    if (composerError) {
+      return composerError;
+    }
+    return upgradeBannerReason;
+  }, [composerError, upgradeBannerReason]);
+
+  const paywallSurface = useMemo<"chat" | "voice" | null>(() => {
+    if (billingState?.lockedSurfaces.chat) {
+      return "chat";
+    }
+    if (billingState?.lockedSurfaces.voice) {
+      return "voice";
+    }
+    return null;
+  }, [
+    billingState?.lockedSurfaces.chat,
+    billingState?.lockedSurfaces.voice,
+  ]);
+
+  useEffect(() => {
+    if (!upgradeBannerReason || !paywallSurface || !billingState) {
+      lastPaywallSurfaceRef.current = null;
+      return;
+    }
+
+    if (lastPaywallSurfaceRef.current === paywallSurface) {
+      return;
+    }
+
+    lastPaywallSurfaceRef.current = paywallSurface;
+    posthog.capture("paywall_shown", {
+      surface: paywallSurface,
+      plan_key: billingState.planKey,
+      upgrade_target: getUpgradeTarget(billingState.planKey),
+      reason_text: upgradeBannerReason,
+      route: pathname,
+      thread_id: selectedThreadId,
+    });
+  }, [billingState, pathname, paywallSurface, selectedThreadId, upgradeBannerReason]);
 
   return (
     <div
@@ -992,7 +1116,7 @@ export default function StudiChat() {
                 <div className="flex items-center justify-between gap-3">
                   <span>{billingBanner}</span>
                   <Link
-                    href="/pricing"
+                    href={`/pricing?entry_point=chat_banner${paywallSurface ? `&surface=${paywallSurface}` : ""}`}
                     className="shrink-0 rounded-full border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-950 transition hover:bg-amber-100"
                   >
                     View plans

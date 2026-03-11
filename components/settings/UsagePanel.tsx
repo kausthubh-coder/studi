@@ -5,7 +5,9 @@ import { PricingTable, UserProfile, useUser, SignOutButton } from "@clerk/nextjs
 import { useAction, useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { api } from "@/convex/_generated/api";
+import { handleExplicitPosthogLogout } from "@/components/analytics/PostHogAuthSync";
 
 // ─── Formatting helpers ──────────────────────────────────────────────────────
 
@@ -375,7 +377,10 @@ function BillingTab() {
           boxShadow: "0 4px 12px rgba(28,18,8,0.03)",
         }}
       >
-        <PricingTable appearance={pricingAppearance} />
+        <PricingTable
+          appearance={pricingAppearance}
+          newSubscriptionRedirectUrl="/settings?from=checkout"
+        />
       </div>
     </div>
   );
@@ -411,6 +416,7 @@ export function UsagePanel() {
   const billing = useQuery(api.billing.getViewerBillingState);
   const syncBillingProfile = useAction(api.billingActions.syncCurrentUserBillingProfile);
   const { user } = useUser();
+  const pathname = usePathname();
   const [activeTab, setActiveTab] = useState<TabId>("usage");
 
   useEffect(() => {
@@ -465,6 +471,7 @@ export function UsagePanel() {
           <div className="mt-2 flex shrink-0">
             <SignOutButton>
               <button
+                onClick={() => handleExplicitPosthogLogout(pathname)}
                 className="flex items-center gap-2 rounded-xl border-2 px-4 py-2 text-sm font-bold transition-all hover:-translate-y-0.5"
                 style={{
                   fontFamily: "var(--font-jakarta)",

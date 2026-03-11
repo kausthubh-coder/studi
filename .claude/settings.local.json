@@ -37,7 +37,12 @@
       "Bash(bun test)",
       "Bash(bun test --testPathPattern=\"^\\(?!.*examples\\)\")",
       "Bash(bun test lib/ convex/ components/voice/input-device-utils.test.ts)",
-      "Bash(bun run lint)"
+      "Bash(bun run lint)",
+      "Bash(xargs cat)",
+      "Bash(xargs grep -l \"telemetry\\\\|insertTelemetryEventInternal\\\\|insertRawUsageInternal\")",
+      "Bash(xargs grep -l \"telemetryInternal\\\\|telemetry\\\\.ts\")",
+      "Bash(ls -la /c/Users/kaust/Documents/coding/studi/convex/*.ts)",
+      "Bash(grep -r \"POSTHOG\\\\|CLERK\\\\|NEXT_PUBLIC\" /c/Users/kaust/Documents/coding/studi/.env.* /c/Users/kaust/Documents/coding/studi/.env)"
     ]
   }
 }
