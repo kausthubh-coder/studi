@@ -18,6 +18,13 @@ import { capturePosthogEvent } from "./posthog";
 import { resolveLabRuntime } from "../lib/lab-runtime/profiles";
 
 const internalApi = internal as unknown as {
+  billing: {
+    assertCanCreateLabInternal: FunctionReference<"mutation", "internal">;
+    assertCanRunExpensiveLabCommandInternal: FunctionReference<
+      "mutation",
+      "internal"
+    >;
+  };
   labRuntime: {
     execute: FunctionReference<"action", "internal">;
   };
@@ -208,6 +215,10 @@ async function getActiveSandbox(ctx: {
     throw new Error("No active lab session in this thread.");
   }
 
+  await ctx.runMutation(internalApi.billing.assertCanCreateLabInternal, {
+    userId,
+  });
+
   const workspacePath = session.metadata?.workspacePath?.trim();
   if (!workspacePath) {
     throw new Error(
@@ -279,6 +290,10 @@ export const createLabTool = createTool<
     });
 
     try {
+      await ctx.runMutation(internalApi.billing.assertCanCreateLabInternal, {
+        userId,
+      });
+
       const shouldCreateTrack = args.createTrack === true;
       const forceNewSandbox = args.forceNewSandbox === true;
       const existing = (await ctx.runQuery(
@@ -699,6 +714,15 @@ export const runTool = createTool<z.infer<typeof runSchema>, RunResult>({
     const threadId = ctx.threadId;
 
     try {
+      if (userId) {
+        await ctx.runMutation(
+          internalApi.billing.assertCanRunExpensiveLabCommandInternal,
+          {
+            userId,
+          },
+        );
+      }
+
       const { sandboxId, workspacePath } = await getActiveSandbox(ctx);
       const result = await runLabRuntime<{
         cwd: string;

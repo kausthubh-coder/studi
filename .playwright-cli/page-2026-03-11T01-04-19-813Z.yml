@@ -1,0 +1,421 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner:
+      - generic [ref=e3]:
+        - generic [ref=e4]: studi
+        - generic [ref=e6]:
+          - button "Sign in" [ref=e7]
+          - link "Get Early Access" [ref=e8] [cursor=pointer]:
+            - /url: "#get-early-access"
+    - main [ref=e9]:
+      - generic [ref=e11]:
+        - generic [ref=e14]: Now in early access
+        - heading "The AI tutor that makes you feel like you figured it out yourself." [level=1] [ref=e15]:
+          - text: The AI tutor that makes you feel like you figured it out
+          - generic [ref=e16]:
+            - text: yourself.
+            - img [ref=e17]
+        - paragraph [ref=e19]: Studi asks questions, builds interactive tools mid-conversation, and gives you real coding challenges — guiding you to discover answers rather than just receive them.
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - textbox "your@email.com" [ref=e24]
+            - button "Get Early Access" [ref=e25]
+          - paragraph [ref=e26]: No credit card required. Free for students.
+        - paragraph [ref=e27]: Join 340+ students on the waitlist
+        - generic [ref=e30]:
+          - generic [ref=e35]: Studi — Recursion Session
+          - generic [ref=e36]:
+            - generic [ref=e37]:
+              - generic [ref=e38]: You
+              - generic [ref=e39]: I don't understand why recursion doesn't just loop forever.
+            - generic [ref=e40]:
+              - generic [ref=e41]:
+                - text: Good question — let me ask you something first.
+                - text: "Look at this function:"
+                - generic [ref=e42]:
+                  - paragraph [ref=e43]: "def factorial(n):"
+                  - paragraph [ref=e44]: "if n == 1: # the base case"
+                  - paragraph [ref=e45]: return 1
+                  - paragraph [ref=e46]: return n * factorial(n - 1)
+                - generic [ref=e47]:
+                  - text: What do you think would happen if we removed the
+                  - code [ref=e48]: if n == 1
+                  - text: line entirely? Take a guess →
+              - generic [ref=e49]: Studi
+            - generic [ref=e50]:
+              - generic [ref=e51]: You
+              - generic [ref=e52]: Oh — it would call itself forever. The base case is what makes it stop. It's the condition that breaks the loop!
+            - generic [ref=e494]:
+              - generic [ref=e53]:
+                - text: Exactly right. You just discovered it yourself. Now let's make sure it sticks —
+                - generic [ref=e54]: Generating call-stack Spark...
+              - generic [ref=e56]: Studi
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - generic [ref=e61]: Interactive Scenes
+            - generic [ref=e62]: ·
+          - generic [ref=e63]:
+            - generic [ref=e64]: Desmos Graphs
+            - generic [ref=e65]: ·
+          - generic [ref=e66]:
+            - generic [ref=e67]: Python Playground
+            - generic [ref=e68]: ·
+          - generic [ref=e69]:
+            - generic [ref=e70]: Web Playground
+            - generic [ref=e71]: ·
+          - generic [ref=e72]:
+            - generic [ref=e73]: Adaptive Quizzes
+            - generic [ref=e74]: ·
+          - generic [ref=e75]:
+            - generic [ref=e76]: Flashcard Sets
+            - generic [ref=e77]: ·
+          - generic [ref=e78]:
+            - generic [ref=e79]: Coding Labs
+            - generic [ref=e80]: ·
+          - generic [ref=e81]:
+            - generic [ref=e82]: Voice Tutoring
+            - generic [ref=e83]: ·
+          - generic [ref=e84]:
+            - generic [ref=e85]: Learning Plans
+            - generic [ref=e86]: ·
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - generic [ref=e89]: Interactive Scenes
+            - generic [ref=e90]: ·
+          - generic [ref=e91]:
+            - generic [ref=e92]: Desmos Graphs
+            - generic [ref=e93]: ·
+          - generic [ref=e94]:
+            - generic [ref=e95]: Python Playground
+            - generic [ref=e96]: ·
+          - generic [ref=e97]:
+            - generic [ref=e98]: Web Playground
+            - generic [ref=e99]: ·
+          - generic [ref=e100]:
+            - generic [ref=e101]: Adaptive Quizzes
+            - generic [ref=e102]: ·
+          - generic [ref=e103]:
+            - generic [ref=e104]: Flashcard Sets
+            - generic [ref=e105]: ·
+          - generic [ref=e106]:
+            - generic [ref=e107]: Coding Labs
+            - generic [ref=e108]: ·
+          - generic [ref=e109]:
+            - generic [ref=e110]: Voice Tutoring
+            - generic [ref=e111]: ·
+          - generic [ref=e112]:
+            - generic [ref=e113]: Learning Plans
+            - generic [ref=e114]: ·
+        - generic [ref=e115]:
+          - generic [ref=e116]:
+            - generic [ref=e117]: Interactive Scenes
+            - generic [ref=e118]: ·
+          - generic [ref=e119]:
+            - generic [ref=e120]: Desmos Graphs
+            - generic [ref=e121]: ·
+          - generic [ref=e122]:
+            - generic [ref=e123]: Python Playground
+            - generic [ref=e124]: ·
+          - generic [ref=e125]:
+            - generic [ref=e126]: Web Playground
+            - generic [ref=e127]: ·
+          - generic [ref=e128]:
+            - generic [ref=e129]: Adaptive Quizzes
+            - generic [ref=e130]: ·
+          - generic [ref=e131]:
+            - generic [ref=e132]: Flashcard Sets
+            - generic [ref=e133]: ·
+          - generic [ref=e134]:
+            - generic [ref=e135]: Coding Labs
+            - generic [ref=e136]: ·
+          - generic [ref=e137]:
+            - generic [ref=e138]: Voice Tutoring
+            - generic [ref=e139]: ·
+          - generic [ref=e140]:
+            - generic [ref=e141]: Learning Plans
+            - generic [ref=e142]: ·
+      - generic [ref=e143]:
+        - generic [ref=e145]:
+          - heading "Stuck studying alone at 2am — and still not getting it?" [level=2] [ref=e146]
+          - paragraph [ref=e147]:
+            - text: You've read the chapter. Watched the lecture. Asked ChatGPT. You got a perfect-sounding answer. And still don't really get it.
+            - text: Because understanding doesn't come from being told. It comes from figuring it out. No tutor was ever built around that —
+            - strong [ref=e148]: until now.
+          - generic [ref=e149]:
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - generic [ref=e152]: AI
+                - generic [ref=e153]: ChatGPT
+              - paragraph [ref=e154]: Recursion is a programming technique where a function calls itself. It consists of a base case, which terminates the recursion, and a recursive case, which continues it. Each call creates a new stack frame...
+              - paragraph [ref=e155]: The time complexity of recursive algorithms can be analyzed using the Master theorem...
+              - paragraph [ref=e156]: Hope that helps! Let me know if you have more questions.
+              - paragraph [ref=e158]: ...okay but why?
+            - generic [ref=e159]:
+              - generic [ref=e160]:
+                - generic [ref=e161]: S
+                - generic [ref=e162]: Studi
+              - paragraph [ref=e163]: Before I explain — what do you think would happen if we removed the base case entirely?
+              - generic [ref=e164]:
+                - generic [ref=e167]: Call Stack Spark
+                - generic [ref=e168]: factorial(3) → factorial(2) → factorial(1) ...
+              - paragraph [ref=e169]: You just figured out the base case yourself. It sticks now.
+        - generic [ref=e171]:
+          - heading "How Studi teaches" [level=2] [ref=e172]
+          - paragraph [ref=e173]: Every session is a guided discovery. Studi asks before it tells, builds tools when words aren't enough, and gives you the problem to prove it.
+          - generic [ref=e174]:
+            - generic [ref=e175]:
+              - generic [ref=e176]: "01"
+              - heading "You ask." [level=3] [ref=e177]
+              - paragraph [ref=e178]: "\"I don't understand why recursion doesn't just loop forever.\""
+              - generic [ref=e179]: Any question, any subject
+            - generic [ref=e180]:
+              - generic [ref=e181]: "02"
+              - heading "Studi asks back." [level=3] [ref=e182]
+              - paragraph [ref=e183]: "\"What do you think happens when n = 1? Walk me through it.\" + a call-stack Spark to visualise your thinking."
+              - generic [ref=e184]: Socratic method + Sparks
+            - generic [ref=e185]:
+              - generic [ref=e186]: "03"
+              - heading "You own it." [level=3] [ref=e187]
+              - paragraph [ref=e188]: You work it out. The answer feels like your idea. Because it is — you discovered it.
+              - generic [ref=e189]: Intuition that sticks
+        - generic [ref=e191]:
+          - heading "Some concepts need to be seen. Or touched. Or broken." [level=2] [ref=e192]
+          - paragraph [ref=e193]: Studi generates the right interactive tool for the right moment — a graph you can manipulate, a simulation you can break, a challenge you have to pass. Not an attachment. Not a link. Built for your exact question, inside the conversation.
+          - generic [ref=e195]:
+            - generic [ref=e196]:
+              - button "Interactive Scene" [ref=e495]:
+                - generic [ref=e198]:
+                  - img [ref=e200]
+                  - heading "Interactive Scene" [level=4] [ref=e203]
+              - button "Desmos Graph See the math move. Manipulate equations and watch the graph respond in real time." [ref=e496]:
+                - generic [ref=e206]:
+                  - img [ref=e208]
+                  - heading "Desmos Graph" [level=4] [ref=e210]
+                - paragraph [ref=e497]: See the math move. Manipulate equations and watch the graph respond in real time.
+              - button "Code Playground" [ref=e211]:
+                - generic [ref=e212]:
+                  - img [ref=e214]
+                  - heading "Code Playground" [level=4] [ref=e218]
+              - button "Web Playground" [ref=e219]:
+                - generic [ref=e220]:
+                  - img [ref=e222]
+                  - heading "Web Playground" [level=4] [ref=e225]
+              - button "Adaptive Quiz" [ref=e226]:
+                - generic [ref=e227]:
+                  - img [ref=e229]
+                  - heading "Adaptive Quiz" [level=4] [ref=e241]
+              - button "Flashcards" [ref=e242]:
+                - generic [ref=e243]:
+                  - img [ref=e245]
+                  - heading "Flashcards" [level=4] [ref=e248]
+            - generic [ref=e249]:
+              - generic [ref=e256]: Studi is generating a Spark...
+              - generic [ref=e499]:
+                - img [ref=e501]
+                - paragraph [ref=e504]: y = sin(x) + cos(2x)
+          - paragraph [ref=e264]: Every Spark is generated on the fly and tailored to exactly what you're stuck on.
+        - generic [ref=e266]:
+          - generic [ref=e267]:
+            - heading "Tell it what you want to learn. It builds the roadmap." [level=2] [ref=e268]
+            - paragraph [ref=e269]:
+              - text: Going into an exam? Learning Python from scratch? Trying to finally understand linear algebra?
+              - text: Tell Studi. It drafts a milestone plan, tracks where you are, and adjusts as you go. You always know what's next — and so does your tutor.
+          - generic [ref=e271]:
+            - generic [ref=e272]: Understand Calculus for Physics
+            - generic [ref=e273]:
+              - generic [ref=e274]:
+                - generic [ref=e275]: ✓
+                - generic [ref=e276]:
+                  - heading "Limits and Infinity" [level=4] [ref=e277]
+                  - paragraph [ref=e278]: Completed yesterday
+              - generic [ref=e281]:
+                - generic [ref=e282]: In Progress
+                - heading "The Derivative" [level=4] [ref=e283]
+                - paragraph [ref=e284]: Visualising rates of change
+              - generic [ref=e287]:
+                - heading "Integrals" [level=4] [ref=e288]
+                - paragraph [ref=e289]: Locked — complete The Derivative first
+        - generic [ref=e292]:
+          - generic [ref=e293]:
+            - generic [ref=e294]: The Lab
+            - heading "Where you prove you understand it." [level=2] [ref=e295]
+            - paragraph [ref=e296]: When you're ready to go beyond understanding — the Lab opens a real coding environment, right inside your session. Studi gives you the challenge, watches you work, reads your files, runs your code, and tells you when you've got it.
+            - paragraph [ref=e297]: Not a sandbox you paste into. A real environment your tutor opens, owns, and evaluates.
+            - list [ref=e298]:
+              - listitem [ref=e299]:
+                - generic [ref=e300]: ✓
+                - text: Persistent real browser sandbox
+              - listitem [ref=e301]:
+                - generic [ref=e302]: ✓
+                - text: Tutor assigns the exact challenge
+              - listitem [ref=e303]:
+                - generic [ref=e304]: ✓
+                - text: Reads and runs your code live
+              - listitem [ref=e305]:
+                - generic [ref=e306]: ✓
+                - text: Guides you when you're stuck
+              - listitem [ref=e307]:
+                - generic [ref=e308]: ✓
+                - text: You don't move on until it passes
+          - generic [ref=e310]:
+            - generic [ref=e311]:
+              - generic [ref=e314]: Studi Tutor
+              - generic [ref=e315]:
+                - generic [ref=e316]: ~/lab/
+                - generic [ref=e317]: binary_search.py
+                - generic [ref=e320]: unsaved
+            - generic [ref=e321]:
+              - generic [ref=e322]:
+                - generic [ref=e323]: Great — you understand binary search. Now prove it.
+                - generic [ref=e324]:
+                  - paragraph [ref=e325]: "Challenge:"
+                  - paragraph [ref=e326]:
+                    - text: Implement
+                    - code [ref=e327]: binary_search(arr, target)
+                    - text: that returns
+                    - code [ref=e328]: "-1"
+                    - text: if not found.
+              - generic [ref=e329]:
+                - generic [ref=e330]:
+                  - paragraph [ref=e331]: "def binary_search(arr, target):"
+                  - paragraph [ref=e332]: left, right = 0, len(arr) - 1
+                  - paragraph [ref=e333]: "while left <= right:"
+                  - paragraph [ref=e334]: mid = (left + right) // 2
+                  - paragraph [ref=e335]: "if arr[mid] == target:"
+                  - paragraph [ref=e336]: return mid
+                  - paragraph [ref=e337]: "elif arr[mid] < target:"
+                  - paragraph [ref=e338]: left = mid + 1
+                  - paragraph [ref=e339]: "else:"
+                  - paragraph [ref=e340]: right = mid - 1
+                - generic [ref=e343]:
+                  - generic [ref=e346]: Running tests...
+                  - generic [ref=e347]: 2 / 3 passing
+        - generic [ref=e349]:
+          - generic [ref=e350]:
+            - generic [ref=e351]:
+              - generic [ref=e352]: P
+              - generic [ref=e353]: M
+              - generic [ref=e354]: D
+            - paragraph [ref=e355]: Join 340+ students on the waitlist
+          - generic [ref=e356]:
+            - generic [ref=e357]:
+              - generic [ref=e358]:
+                - generic [ref=e359]: ★
+                - generic [ref=e360]: ★
+                - generic [ref=e361]: ★
+                - generic [ref=e362]: ★
+                - generic [ref=e363]: ★
+              - paragraph [ref=e364]: "\"Studi helped me finally understand Big O notation. I'd been staring at it for weeks — it asked me one question and suddenly it clicked.\""
+              - generic [ref=e365]:
+                - generic [ref=e366]: P
+                - generic [ref=e367]:
+                  - paragraph [ref=e368]: Priya K.
+                  - paragraph [ref=e369]: CS sophomore
+            - generic [ref=e370]:
+              - generic [ref=e371]:
+                - generic [ref=e372]: ★
+                - generic [ref=e373]: ★
+                - generic [ref=e374]: ★
+                - generic [ref=e375]: ★
+                - generic [ref=e376]: ★
+              - paragraph [ref=e377]: "\"I've never felt like I actually got recursion until Studi made me walk through it myself. It doesn't give you the answer. It makes you find it.\""
+              - generic [ref=e378]:
+                - generic [ref=e379]: M
+                - generic [ref=e380]:
+                  - paragraph [ref=e381]: Marcus T.
+                  - paragraph [ref=e382]: Self-taught developer
+            - generic [ref=e383]:
+              - generic [ref=e384]:
+                - generic [ref=e385]: ★
+                - generic [ref=e386]: ★
+                - generic [ref=e387]: ★
+                - generic [ref=e388]: ★
+                - generic [ref=e389]: ★
+              - paragraph [ref=e390]: "\"The Lab is wild. It assigns me a challenge, watches me code, and tells me exactly when I'm wrong — and why. Like having a senior dev next to you.\""
+              - generic [ref=e391]:
+                - generic [ref=e392]: D
+                - generic [ref=e393]:
+                  - paragraph [ref=e394]: Daniela R.
+                  - paragraph [ref=e395]: Pre-med taking data science
+          - paragraph [ref=e396]: "* Testimonials from early beta users. Replace with real quotes when available."
+        - generic [ref=e398]:
+          - heading "ChatGPT answers. Studi asks." [level=2] [ref=e399]:
+            - text: ChatGPT answers.
+            - text: Studi asks.
+          - paragraph [ref=e400]: The direction of information is completely different. ChatGPT flows answers at you. Studi draws them out of you.
+          - generic [ref=e401]:
+            - generic [ref=e402]:
+              - paragraph [ref=e403]: ChatGPT
+              - paragraph [ref=e410]: ...okay but why does it work?
+              - generic [ref=e411]:
+                - generic [ref=e412]: 😶
+                - paragraph [ref=e413]: You copy-paste the answer. Move on. Forget it by tomorrow.
+            - generic [ref=e414]:
+              - paragraph [ref=e415]: Studi
+              - generic [ref=e416]:
+                - generic [ref=e417]: Before I explain — what do you think the function does when n equals 1?
+                - generic [ref=e418]:
+                  - generic [ref=e421]: "Spark: Call Stack Visualiser"
+                  - generic [ref=e422]: factorial(3) → factorial(2) → factorial(1) → 1
+                - generic [ref=e423]:
+                  - generic [ref=e424]: ✓
+                  - text: "Lab challenge: implemented factorial. 3/3 tests passing."
+              - generic [ref=e425]:
+                - generic [ref=e426]: 🧠
+                - paragraph [ref=e427]: You discovered it yourself. It feels like your idea. It sticks.
+          - paragraph [ref=e428]: There's a difference between being told something and understanding it. Studi is built for the second one.
+        - generic [ref=e430]:
+          - heading "Common questions" [level=2] [ref=e431]
+          - generic [ref=e432]:
+            - button "Is it free? +" [ref=e434]:
+              - generic [ref=e435]: Is it free?
+              - generic [ref=e436]: +
+            - button "How is this different from ChatGPT? +" [ref=e438]:
+              - generic [ref=e439]: How is this different from ChatGPT?
+              - generic [ref=e440]: +
+            - button "What subjects does it cover? +" [ref=e442]:
+              - generic [ref=e443]: What subjects does it cover?
+              - generic [ref=e444]: +
+            - button "What is a Spark? +" [ref=e446]:
+              - generic [ref=e447]: What is a Spark?
+              - generic [ref=e448]: +
+            - button "What is a Lab? +" [ref=e450]:
+              - generic [ref=e451]: What is a Lab?
+              - generic [ref=e452]: +
+        - generic [ref=e454]:
+          - heading "Stop being told. Start figuring it out." [level=2] [ref=e455]:
+            - text: Stop being told.
+            - text: Start figuring it out.
+          - paragraph [ref=e456]: Join the waitlist. Be first when Studi launches.
+          - list [ref=e457]:
+            - listitem [ref=e458]:
+              - generic [ref=e459]: ✓
+              - text: Socratic tutoring that leads you to the answer
+            - listitem [ref=e460]:
+              - generic [ref=e461]: ✓
+              - text: Sparks — interactive tools in the moment
+            - listitem [ref=e462]:
+              - generic [ref=e463]: ✓
+              - text: Labs — real coding challenges in your session
+            - listitem [ref=e464]:
+              - generic [ref=e465]: ✓
+              - text: Learning plans with milestone tracking
+            - listitem [ref=e466]:
+              - generic [ref=e467]: ✓
+              - text: Voice mode for spoken sessions
+            - listitem [ref=e468]:
+              - generic [ref=e469]: ✓
+              - text: Works for any subject
+          - generic [ref=e474]:
+            - generic [ref=e475]:
+              - textbox "your@email.com" [ref=e476]
+              - button "Get Early Access" [ref=e477]
+            - paragraph [ref=e478]: No credit card required. Free for students.
+    - contentinfo [ref=e479]:
+      - generic [ref=e480]:
+        - generic [ref=e481]: studi
+        - paragraph [ref=e483]: © 2026 Studi · The tutor that makes you feel like you figured it out yourself.
+  - button "Open Next.js Dev Tools" [ref=e489] [cursor=pointer]:
+    - img [ref=e490]
+  - alert [ref=e493]

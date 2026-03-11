@@ -83,6 +83,13 @@ type ActionRunner = <
 ) => Promise<FunctionReturnType<Action>>;
 
 const internalApi = internal as unknown as {
+  billing: {
+    assertCanCreateLabInternal: FunctionReference<"mutation", "internal">;
+    assertCanRunExpensiveLabCommandInternal: FunctionReference<
+      "mutation",
+      "internal"
+    >;
+  };
   chat: {
     assertThreadOwner: FunctionReference<"query", "internal">;
   };
@@ -132,6 +139,10 @@ async function getActiveSession(
   if (!session || session.archivedAt) {
     throw new Error("No active lab session for this thread.");
   }
+
+  await ctx.runMutation(internalApi.billing.assertCanCreateLabInternal, {
+    userId,
+  });
 
   const workspacePath = session.metadata?.workspacePath?.trim();
   if (!workspacePath) {
@@ -396,6 +407,13 @@ export const runLabCommand = action({
     const userId = await requireUserId(ctx);
 
     try {
+      await ctx.runMutation(
+        internalApi.billing.assertCanRunExpensiveLabCommandInternal,
+        {
+          userId,
+        },
+      );
+
       const { sandboxId, workspacePath } = await getActiveSession(
         ctx,
         userId,

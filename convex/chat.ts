@@ -15,6 +15,12 @@ import {
 } from "./_generated/server";
 
 const internalApi = internal as unknown as {
+  billing: {
+    assertCanSendMessageInternal: FunctionReference<"mutation", "internal">;
+    assertCanUseAttachmentsInternal: FunctionReference<"mutation", "internal">;
+    incrementFreeOnboardingUsageInternal: FunctionReference<"mutation", "internal">;
+    recordTextAiCostInternal: FunctionReference<"mutation", "internal">;
+  };
   plans: {
     deletePlanForThreadInternal: FunctionReference<"mutation", "internal">;
   };
@@ -113,7 +119,7 @@ export const listThreads = query({
         hasActiveLab: false,
       };
       existing.hasLab = true;
-      existing.hasActiveLab = existing.hasActiveLab || !session.archivedAt;
+      existing.hasActiveLab = true;
       labStatusByThreadId.set(session.threadId, existing);
     }
 
@@ -238,6 +244,10 @@ export const generateUploadUrl = mutation({
       throw new Error("Unauthorized");
     }
 
+    await ctx.runMutation(internalApi.billing.assertCanUseAttachmentsInternal, {
+      userId: identity.subject,
+    });
+
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -260,6 +270,10 @@ export const saveAttachment = mutation({
     if (!identity) {
       throw new Error("Unauthorized");
     }
+
+    await ctx.runMutation(internalApi.billing.assertCanUseAttachmentsInternal, {
+      userId: identity.subject,
+    });
 
     const attachmentId = await ctx.db.insert("attachments", {
       userId: identity.subject,
@@ -319,6 +333,14 @@ export const sendMessage = mutation({
         deduped: true,
       };
     }
+
+    const billingSnapshot = await ctx.runMutation(
+      internalApi.billing.assertCanSendMessageInternal,
+      {
+        userId: identity.subject,
+        attachmentCount: attachmentIds.length,
+      },
+    );
 
     const attachments = await ctx.runQuery(internal.chat.resolveAttachments, {
       userId: identity.subject,
@@ -382,6 +404,21 @@ export const sendMessage = mutation({
         source: args.source ?? "text",
       },
     );
+
+    if (billingSnapshot.planKey === "free_onboarding") {
+      await ctx.runMutation(
+        internalApi.billing.incrementFreeOnboardingUsageInternal,
+        {
+          userId: identity.subject,
+          promptCount: 1,
+        },
+      );
+    } else {
+      await ctx.runMutation(internalApi.billing.recordTextAiCostInternal, {
+        userId: identity.subject,
+        textPromptCount: 1,
+      });
+    }
 
     return {
       promptMessageId: messageId,

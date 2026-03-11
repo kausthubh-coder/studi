@@ -37,6 +37,10 @@ const usageValidator = v.object({
 });
 
 const internalApi = internal as unknown as {
+  billing: {
+    assertCanUseVoiceInternal: FunctionReference<"mutation", "internal">;
+    recordVoiceUsageInternal: FunctionReference<"mutation", "internal">;
+  };
   chat: {
     assertThreadOwner: FunctionReference<"query", "internal">;
   };
@@ -349,6 +353,9 @@ export const createRealtimeClientSecret = action({
     await ctx.runQuery(internalApi.chat.assertThreadOwner, {
       userId,
       threadId: args.threadId,
+    });
+    await ctx.runMutation(internalApi.billing.assertCanUseVoiceInternal, {
+      userId,
     });
 
     const apiKey = process.env.OPENAI_API_KEY;
@@ -696,6 +703,11 @@ export const recordVoiceUsage = action({
       },
     });
 
+    await ctx.runMutation(internalApi.billing.recordVoiceUsageInternal, {
+      userId,
+      voiceEstimatedCostUsd: estimatedCostUsd ?? 0,
+    });
+
     await capturePosthogEvent({
       event: "voice_usage_recorded",
       distinctId: userId,
@@ -754,6 +766,18 @@ export const recordVoiceEvent = action({
         ...(args.metadata ?? {}),
       },
     });
+
+    if (
+      args.name === "voice_session_closed" &&
+      args.status === "success" &&
+      typeof args.durationMs === "number" &&
+      args.durationMs > 0
+    ) {
+      await ctx.runMutation(internalApi.billing.recordVoiceUsageInternal, {
+        userId,
+        voiceSeconds: Math.floor(args.durationMs / 1000),
+      });
+    }
 
     return null;
   },

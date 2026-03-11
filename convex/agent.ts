@@ -19,7 +19,6 @@ import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
 import { capturePosthogEvent } from "./posthog";
 import { components, internal } from "./_generated/api";
 import {
-  archiveLabTool,
   createLabTool,
   editTool,
   globTool,
@@ -38,6 +37,9 @@ import {
 import { createWarningTool } from "./voiceTools";
 
 const internalApi = internal as unknown as {
+  billing: {
+    recordTextAiCostInternal: FunctionReference<"mutation", "internal">;
+  };
   telemetry: {
     insertRawUsageInternal: FunctionReference<"mutation", "internal">;
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
@@ -130,6 +132,11 @@ const usageHandler: UsageHandler = async (ctx, args) => {
       },
     });
 
+    await ctx.runMutation(internalApi.billing.recordTextAiCostInternal, {
+      userId: args.userId,
+      textAiCostUsd: estimatedCostUsd ?? 0,
+    });
+
     await capturePosthogEvent({
       event: "agent_usage_recorded",
       distinctId: args.userId,
@@ -179,7 +186,6 @@ export function buildStudiToolset(
     create_spark: createSparkToolForProfile(profile),
     get_code_spark_context: getCodeSparkContextTool,
     create_lab: createLabTool,
-    archive_lab: archiveLabTool,
     glob: globTool,
     run: runTool,
     ...planToolsAlways,
@@ -195,7 +201,6 @@ function buildStudiToolsetWithSparkModels(
     create_spark: createSparkToolForModels(sparkModels),
     get_code_spark_context: getCodeSparkContextTool,
     create_lab: createLabTool,
-    archive_lab: archiveLabTool,
     glob: globTool,
     run: runTool,
     ...planToolsAlways,
@@ -212,7 +217,6 @@ export function buildCodiToolset(includePlanTools: boolean) {
     run: runTool,
     edit: editTool,
     write: writeTool,
-    archive_lab: archiveLabTool,
     ...planToolsAlways,
     ...(includePlanTools ? planToolsWhenPresent : {}),
   };

@@ -17,6 +17,7 @@ import {
 } from "./agent";
 import {
   classifyLabRuntimeError,
+  formatErrorSummary,
 } from "../lib/lab-runtime/shared";
 
 const internalApi = internal as unknown as {
@@ -124,11 +125,29 @@ export const deleteThread: ReturnType<typeof action> = action({
   args: {
     threadId: v.string(),
   },
-  returns: v.object({
-    deleted: v.boolean(),
-    deletedLab: v.boolean(),
-    labCleanupWarning: v.optional(v.string()),
-  }),
+  returns: v.union(
+    v.object({
+      status: v.literal("success"),
+      deleted: v.boolean(),
+      deletedLab: v.boolean(),
+      labCleanupWarning: v.optional(v.string()),
+    }),
+    v.object({
+      status: v.literal("failed"),
+      summary: v.string(),
+      error: v.object({
+        category: v.string(),
+        message: v.string(),
+        retriable: v.boolean(),
+        httpStatus: v.optional(v.number()),
+        endpoint: v.optional(v.string()),
+        requestId: v.optional(v.string()),
+        hint: v.optional(v.string()),
+        raw: v.optional(v.string()),
+        exitCode: v.optional(v.number()),
+      }),
+    }),
+  ),
   handler: async (ctx, args) => {
     const userId = await requireAuthenticatedUserId(ctx);
 
@@ -158,9 +177,11 @@ export const deleteThread: ReturnType<typeof action> = action({
       } catch (error) {
         const detail = classifyLabRuntimeError(error);
         if (detail.category !== "not_found") {
-          throw new Error(
-            `Failed to delete lab sandbox before deleting thread: ${detail.message}`,
-          );
+          return {
+            status: "failed" as const,
+            summary: formatErrorSummary("delete thread", error),
+            error: detail,
+          };
         }
       }
 
@@ -188,6 +209,7 @@ export const deleteThread: ReturnType<typeof action> = action({
     );
 
     return {
+      status: "success" as const,
       deleted,
       deletedLab: Boolean(labSession),
       labCleanupWarning,

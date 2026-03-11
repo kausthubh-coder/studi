@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -64,6 +65,26 @@ function releaseAttachmentPreviewUrls(attachments: PendingAttachment[]) {
   }
 }
 
+function getErrorMessage(error: unknown): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "data" in error &&
+    error.data &&
+    typeof error.data === "object" &&
+    "message" in error.data &&
+    typeof error.data.message === "string"
+  ) {
+    return error.data.message;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Something went wrong.";
+}
+
 export default function StudiChat() {
   const threadsQuery = useQuery(api.chat.listThreads);
   const threads = useMemo(
@@ -90,9 +111,15 @@ export default function StudiChat() {
   );
   const recordVoiceUsage = useAction(api.voiceActions.recordVoiceUsage);
   const recordVoiceEvent = useAction(api.voiceActions.recordVoiceEvent);
+  const syncBillingProfile = useAction(
+    api.billingActions.syncCurrentUserBillingProfile,
+  );
+  const billingState = useQuery(api.billing.getViewerBillingState);
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
+  const [threadDeleteError, setThreadDeleteError] = useState<string | null>(null);
+  const [composerError, setComposerError] = useState<string | null>(null);
   const [threadPendingDelete, setThreadPendingDelete] =
     useState<ThreadSummary | null>(null);
   const [expandedSpark, setExpandedSpark] = useState<ExpandedSpark | null>(
@@ -151,6 +178,12 @@ export default function StudiChat() {
     });
   }, [backfillThreadActivity]);
 
+  useEffect(() => {
+    void syncBillingProfile().catch((error) => {
+      console.error("Billing profile sync failed", error);
+    });
+  }, [syncBillingProfile]);
+
   // Don't auto-select first thread — start on welcome view
   // User can click a thread in the sidebar to open it
 
@@ -185,9 +218,7 @@ export default function StudiChat() {
     api.labs.getLabSession,
     selectedThreadId ? { threadId: selectedThreadId } : "skip",
   );
-  const isLabActive = Boolean(
-    selectedThreadId && activeLabSession && !activeLabSession.archivedAt,
-  );
+  const isLabActive = Boolean(selectedThreadId && activeLabSession);
 
   const isOnWelcome = selectedThreadId === null;
 
@@ -198,6 +229,12 @@ export default function StudiChat() {
   const threadPlan = threadPlanQuery as ThreadPlan | null | undefined;
 
   const voiceDisabledReason = useMemo(() => {
+    if (billingState?.lockedSurfaces.voice) {
+      return (
+        billingState.upgradeReason ??
+        "Voice tutoring is unavailable on your current plan."
+      );
+    }
     if (selectedThreadId && isLabActive) {
       return "Voice mode is disabled while a lab session is active.";
     }
@@ -205,15 +242,17 @@ export default function StudiChat() {
       return "Voice mode is disabled for plan and track threads.";
     }
     return null;
-  }, [isLabActive, selectedThreadId, threadPlan]);
+  }, [billingState?.lockedSurfaces.voice, billingState?.upgradeReason, isLabActive, selectedThreadId, threadPlan]);
 
   const canSend = useMemo(
     () =>
       !isSending &&
       !isUploading &&
       !hasActiveAgentWork &&
+      !billingState?.lockedSurfaces.chat &&
       (input.trim().length > 0 || pendingAttachments.length > 0),
     [
+      billingState?.lockedSurfaces.chat,
       input,
       hasActiveAgentWork,
       isSending,
@@ -226,6 +265,7 @@ export default function StudiChat() {
     async (files: FileList | File[]) => {
       const arr = Array.from(files);
       if (!arr.length) return;
+      setComposerError(null);
       setIsUploading(true);
       try {
         const uploaded: PendingAttachment[] = [];
@@ -259,6 +299,9 @@ export default function StudiChat() {
           });
         }
         setPendingAttachments((previous) => [...previous, ...uploaded]);
+      } catch (error) {
+        setComposerError(getErrorMessage(error));
+        console.error("Failed to upload attachment", error);
       } finally {
         setIsUploading(false);
       }
@@ -287,6 +330,7 @@ export default function StudiChat() {
     async (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       if (!canSend) return;
+      setComposerError(null);
 
       const draft = input;
       const prompt = draft.trim() || undefined;
@@ -318,6 +362,7 @@ export default function StudiChat() {
       } catch (error) {
         setInput(draft);
         setPendingAttachments(attachmentsSnapshot);
+        setComposerError(getErrorMessage(error));
         console.error("Failed to send message", error);
       } finally {
         setIsSending(false);
@@ -453,18 +498,21 @@ export default function StudiChat() {
   });
 
   const handleOpenVoiceMode = useCallback(async () => {
+    setComposerError(null);
     if (isOnWelcome) {
       try {
         const threadId = await createThreadAction({});
         setSelectedThreadId(threadId);
         setIsVoiceMode(true);
       } catch (error) {
+        setComposerError(getErrorMessage(error));
         console.error("Failed to create thread for voice mode", error);
       }
       return;
     }
 
     if (voiceDisabledReason) {
+      setComposerError(voiceDisabledReason);
       return;
     }
     setIsVoiceMode(true);
@@ -642,6 +690,7 @@ export default function StudiChat() {
   }, []);
 
   const handleNewThread = useCallback(() => {
+    setThreadDeleteError(null);
     setSelectedThreadId(null);
     setExpandedSpark(null);
     setIsPlanExpanded(false);
@@ -657,6 +706,7 @@ export default function StudiChat() {
   }, []);
 
   const handleSelectThread = useCallback((id: string | null) => {
+    setThreadDeleteError(null);
     setSelectedThreadId(id);
     setExpandedSpark(null);
     setIsPlanExpanded(false);
@@ -732,10 +782,11 @@ export default function StudiChat() {
   const performThreadDelete = useCallback(
     async (thread: ThreadSummary) => {
       setDeletingThreadId(thread.threadId);
+      setThreadDeleteError(null);
       try {
         const result = await deleteThreadAction({ threadId: thread.threadId });
-        if (result.labCleanupWarning) {
-          console.warn("Lab sandbox cleanup warning", result.labCleanupWarning);
+        if (result.status === "failed") {
+          throw new Error(result.summary);
         }
 
         window.localStorage.removeItem(
@@ -758,6 +809,11 @@ export default function StudiChat() {
           return null;
         });
       } catch (error) {
+        setThreadDeleteError(
+          error instanceof Error
+            ? error.message
+            : "Failed to delete thread.",
+        );
         console.error("Failed to delete thread", error);
       } finally {
         setDeletingThreadId(null);
@@ -834,6 +890,21 @@ export default function StudiChat() {
     }
   }, [isVoiceMode, voiceDisabledReason]);
 
+  const billingBanner = useMemo(() => {
+    if (composerError) {
+      return composerError;
+    }
+    if (billingState?.lockedSurfaces.chat || billingState?.lockedSurfaces.voice) {
+      return billingState.upgradeReason ?? null;
+    }
+    return null;
+  }, [
+    billingState?.lockedSurfaces.chat,
+    billingState?.lockedSurfaces.voice,
+    billingState?.upgradeReason,
+    composerError,
+  ]);
+
   return (
     <div
       className="flex h-screen overflow-hidden bg-bg"
@@ -873,6 +944,28 @@ export default function StudiChat() {
       />
 
       <main className="relative flex min-w-0 flex-1 overflow-hidden">
+        {threadDeleteError || billingBanner ? (
+          <div className="absolute left-1/2 top-3 z-20 w-full max-w-xl -translate-x-1/2 px-4">
+            {threadDeleteError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50/95 px-4 py-3 text-sm text-red-900 shadow-sm backdrop-blur">
+                {threadDeleteError}
+              </div>
+            ) : null}
+            {billingBanner ? (
+              <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-sm text-amber-950 shadow-sm backdrop-blur">
+                <div className="flex items-center justify-between gap-3">
+                  <span>{billingBanner}</span>
+                  <Link
+                    href="/pricing"
+                    className="shrink-0 rounded-full border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-950 transition hover:bg-amber-100"
+                  >
+                    View plans
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {isOnWelcome ? (
           <WelcomeView
             pendingAttachments={pendingAttachments}
