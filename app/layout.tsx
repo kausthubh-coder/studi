@@ -6,6 +6,7 @@ import "highlight.js/styles/github-dark.css";
 import "@xterm/xterm/css/xterm.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Analytics } from "@vercel/analytics/next";
 
 const dmSerifDisplay = DM_Serif_Display({
   variable: "--font-dm-serif",
@@ -49,6 +50,7 @@ export default function RootLayout({
         <ClerkProvider dynamic>
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ClerkProvider>
+        <Analytics />
       </body>
     </html>
   );
