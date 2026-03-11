@@ -1,0 +1,92 @@
+{
+  "astro": {
+    "label": "Astro",
+    "envVarName": "CSB_TEMPLATE_ASTRO_ID",
+    "upstreamSlug": "astro",
+    "directory": "codesandbox/templates/astro"
+  },
+  "bun": {
+    "label": "Bun",
+    "envVarName": "CSB_TEMPLATE_BUN_ID",
+    "upstreamSlug": "bun",
+    "directory": "codesandbox/templates/bun"
+  },
+  "elixir": {
+    "label": "Elixir",
+    "envVarName": "CSB_TEMPLATE_ELIXIR_ID",
+    "upstreamSlug": "elixir",
+    "directory": "codesandbox/templates/elixir"
+  },
+  "gleam": {
+    "label": "Gleam",
+    "envVarName": "CSB_TEMPLATE_GLEAM_ID",
+    "upstreamSlug": "gleam",
+    "directory": "codesandbox/templates/gleam"
+  },
+  "go": {
+    "label": "Go",
+    "envVarName": "CSB_TEMPLATE_GO_ID",
+    "upstreamSlug": "go",
+    "directory": "codesandbox/templates/go"
+  },
+  "html_css": {
+    "label": "HTML/CSS",
+    "envVarName": "CSB_TEMPLATE_HTML_CSS_ID",
+    "upstreamSlug": "html-css",
+    "directory": "codesandbox/templates/html-css"
+  },
+  "javascript": {
+    "label": "JavaScript",
+    "envVarName": "CSB_TEMPLATE_JAVASCRIPT_ID",
+    "upstreamSlug": "javascript",
+    "directory": "codesandbox/templates/javascript"
+  },
+  "nextjs": {
+    "label": "Next.js",
+    "envVarName": "CSB_TEMPLATE_NEXTJS_ID",
+    "upstreamSlug": "nextjs",
+    "directory": "codesandbox/templates/nextjs"
+  },
+  "python_flask_server": {
+    "label": "Python Flask Server",
+    "envVarName": "CSB_TEMPLATE_PYTHON_FLASK_SERVER_ID",
+    "upstreamSlug": "python-flask-server",
+    "directory": "codesandbox/templates/python-flask-server"
+  },
+  "python": {
+    "label": "Python",
+    "envVarName": "CSB_TEMPLATE_PYTHON_ID",
+    "upstreamSlug": "python",
+    "directory": "codesandbox/templates/python"
+  },
+  "rails": {
+    "label": "Rails",
+    "envVarName": "CSB_TEMPLATE_RAILS_ID",
+    "upstreamSlug": "rails",
+    "directory": "codesandbox/templates/rails"
+  },
+  "react_vite": {
+    "label": "React + Vite",
+    "envVarName": "CSB_TEMPLATE_REACT_VITE_ID",
+    "upstreamSlug": "react-vite",
+    "directory": "codesandbox/templates/react-vite"
+  },
+  "rust": {
+    "label": "Rust",
+    "envVarName": "CSB_TEMPLATE_RUST_ID",
+    "upstreamSlug": "rust",
+    "directory": "codesandbox/templates/rust"
+  },
+  "sveltekit": {
+    "label": "SvelteKit",
+    "envVarName": "CSB_TEMPLATE_SVELTEKIT_ID",
+    "upstreamSlug": "sveltekit",
+    "directory": "codesandbox/templates/sveltekit"
+  },
+  "vite": {
+    "label": "Vite",
+    "envVarName": "CSB_TEMPLATE_VITE_ID",
+    "upstreamSlug": "vite",
+    "directory": "codesandbox/templates/vite"
+  }
+}
