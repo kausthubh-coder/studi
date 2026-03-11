@@ -38,6 +38,7 @@ import { useVoiceSession } from "@/components/voice/useVoiceSession";
 import { VoiceWarningBanner } from "@/components/studi-chat/VoiceWarningBanner";
 import { IconCompose } from "@/components/studi-chat/icons";
 import type { CreateWarningToolResult } from "@/lib/voice/contracts";
+import posthog from "posthog-js";
 
 const plansApi = (
   api as unknown as {
@@ -299,7 +300,12 @@ export default function StudiChat() {
           });
         }
         setPendingAttachments((previous) => [...previous, ...uploaded]);
+        posthog.capture("attachment_uploaded", {
+          file_count: uploaded.length,
+          mime_types: uploaded.map((a) => a.mimeType),
+        });
       } catch (error) {
+        posthog.captureException(error);
         setComposerError(getErrorMessage(error));
         console.error("Failed to upload attachment", error);
       } finally {
@@ -350,6 +356,10 @@ export default function StudiChat() {
           });
           releaseAttachmentPreviewUrls(attachmentsSnapshot);
           setSelectedThreadId(threadId);
+          posthog.capture("thread_created", {
+            has_attachments: attachmentIds.length > 0,
+            attachment_count: attachmentIds.length,
+          });
         } else {
           await sendMessageMutation({
             threadId: selectedThreadId!,
@@ -358,8 +368,14 @@ export default function StudiChat() {
             requestId: makeRequestId(),
           });
           releaseAttachmentPreviewUrls(attachmentsSnapshot);
+          posthog.capture("message_sent", {
+            thread_id: selectedThreadId,
+            has_attachments: attachmentIds.length > 0,
+            attachment_count: attachmentIds.length,
+          });
         }
       } catch (error) {
+        posthog.captureException(error);
         setInput(draft);
         setPendingAttachments(attachmentsSnapshot);
         setComposerError(getErrorMessage(error));
@@ -504,7 +520,9 @@ export default function StudiChat() {
         const threadId = await createThreadAction({});
         setSelectedThreadId(threadId);
         setIsVoiceMode(true);
+        posthog.capture("voice_mode_opened", { thread_id: threadId, from_welcome: true });
       } catch (error) {
+        posthog.captureException(error);
         setComposerError(getErrorMessage(error));
         console.error("Failed to create thread for voice mode", error);
       }
@@ -516,12 +534,14 @@ export default function StudiChat() {
       return;
     }
     setIsVoiceMode(true);
-  }, [createThreadAction, isOnWelcome, voiceDisabledReason]);
+    posthog.capture("voice_mode_opened", { thread_id: selectedThreadId, from_welcome: false });
+  }, [createThreadAction, isOnWelcome, selectedThreadId, voiceDisabledReason]);
 
   const handleCloseVoiceMode = useCallback(() => {
     void voiceSession.stop("manual_hangup");
     setIsVoiceMode(false);
-  }, [voiceSession]);
+    posthog.capture("voice_mode_closed", { thread_id: selectedThreadId });
+  }, [selectedThreadId, voiceSession]);
 
   const handleVoiceSwitchToText = useCallback(
     (warning?: CreateWarningToolResult) => {
@@ -662,7 +682,9 @@ export default function StudiChat() {
         selectedThreadId,
         "I've accepted the learning plan — let's start with the first milestone!",
       );
+      posthog.capture("plan_accepted", { thread_id: selectedThreadId });
     } catch (error) {
+      posthog.captureException(error);
       console.error("Failed to send plan acceptance message", error);
     }
   }, [selectedThreadId, sendPlanKickoffMessage]);
@@ -678,7 +700,9 @@ export default function StudiChat() {
       );
       setInput("");
       setTimeout(() => textareaRef.current?.focus(), 50);
+      posthog.capture("track_started", { thread_id: selectedThreadId });
     } catch (error) {
+      posthog.captureException(error);
       console.error("Failed to start track", error);
     } finally {
       setIsSending(false);
@@ -808,7 +832,13 @@ export default function StudiChat() {
           }
           return null;
         });
+
+        posthog.capture("thread_deleted", {
+          thread_id: thread.threadId,
+          had_lab: thread.hasLab,
+        });
       } catch (error) {
+        posthog.captureException(error);
         setThreadDeleteError(
           error instanceof Error
             ? error.message
@@ -868,6 +898,12 @@ export default function StudiChat() {
     ) => {
       setExpandedSpark({ artifact, threadId, sparkInstanceId });
       setMobileLabView("lab");
+      posthog.capture("spark_expanded", {
+        thread_id: threadId,
+        spark_instance_id: sparkInstanceId,
+        spark_kind: artifact.kind,
+        spark_type: artifact.sparkType,
+      });
     },
     [],
   );

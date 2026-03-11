@@ -2183,6 +2183,22 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
             .catch((error) => {
               console.error("Failed to store spark billing usage", error);
             });
+
+          await capturePosthogEvent({
+            event: "$ai_generation",
+            distinctId: ctx.userId,
+            properties: {
+              $ai_trace_id: ctx.threadId,
+              $ai_model: record.model,
+              $ai_provider: "openrouter",
+              $ai_input_tokens: record.usage?.inputTokens,
+              $ai_output_tokens: record.usage?.outputTokens,
+              $ai_total_cost_usd: extractEstimatedCostUsd(record.providerMetadata),
+              $ai_span_name: `spark_worker:${record.sparkId}:${record.attempt}`,
+            },
+          }).catch((error) => {
+            console.error("Failed to capture spark $ai_generation event", error);
+          });
         }
 
         await ctx

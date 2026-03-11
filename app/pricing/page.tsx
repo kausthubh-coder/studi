@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { PricingTable } from "@clerk/nextjs";
+import { PricingPageView } from "@/components/analytics/PricingPageView";
 
 export default function PricingPage() {
   return (
+    <>
+      <PricingPageView />
     <div
       className="min-h-screen px-4 py-8 md:px-6"
       style={{
@@ -112,5 +115,6 @@ export default function PricingPage() {
         </section>
       </div>
     </div>
+    </>
   );
 }

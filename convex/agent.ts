@@ -138,6 +138,20 @@ const usageHandler: UsageHandler = async (ctx, args) => {
     });
 
     await capturePosthogEvent({
+      event: "$ai_generation",
+      distinctId: args.userId,
+      properties: {
+        $ai_trace_id: args.threadId,
+        $ai_model: args.model,
+        $ai_provider: args.provider ?? "openrouter",
+        $ai_input_tokens: args.usage.inputTokens,
+        $ai_output_tokens: args.usage.outputTokens,
+        $ai_total_cost_usd: estimatedCostUsd,
+        $ai_span_name: args.agentName ?? "agent_generation",
+      },
+    });
+
+    await capturePosthogEvent({
       event: "agent_usage_recorded",
       distinctId: args.userId,
       properties: {

@@ -47,3 +47,4 @@ next-env.d.ts
 # reference-only examples
 /examples/
 /examples/**
+.env.local
