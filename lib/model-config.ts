@@ -11,38 +11,39 @@ export type ModelConfig = {
   sparkFlash: string;
 };
 
-const universalModel = "z-ai/glm-5";
+const defaultAgentModel = "anthropic/claude-sonnet-4.6";
+const defaultSparkModel = "anthropic/claude-haiku-4.5";
 
 const modelProfiles: Record<ModelProfile, ModelConfig> = {
   balanced: {
-    studiAgent: universalModel,
-    codiAgent: universalModel,
-    shruAgent: universalModel,
-    sparkScene: universalModel,
-    sparkDesmos: universalModel,
-    sparkCode: universalModel,
-    sparkQuiz: universalModel,
-    sparkFlash: universalModel,
+    studiAgent: defaultAgentModel,
+    codiAgent: defaultAgentModel,
+    shruAgent: defaultAgentModel,
+    sparkScene: defaultSparkModel,
+    sparkDesmos: defaultSparkModel,
+    sparkCode: defaultSparkModel,
+    sparkQuiz: defaultSparkModel,
+    sparkFlash: defaultSparkModel,
   },
   fast: {
-    studiAgent: universalModel,
-    codiAgent: universalModel,
-    shruAgent: universalModel,
-    sparkScene: universalModel,
-    sparkDesmos: universalModel,
-    sparkCode: universalModel,
-    sparkQuiz: universalModel,
-    sparkFlash: universalModel,
+    studiAgent: defaultAgentModel,
+    codiAgent: defaultAgentModel,
+    shruAgent: defaultAgentModel,
+    sparkScene: defaultSparkModel,
+    sparkDesmos: defaultSparkModel,
+    sparkCode: defaultSparkModel,
+    sparkQuiz: defaultSparkModel,
+    sparkFlash: defaultSparkModel,
   },
   quality: {
-    studiAgent: universalModel,
-    codiAgent: universalModel,
-    shruAgent: universalModel,
-    sparkScene: universalModel,
-    sparkDesmos: universalModel,
-    sparkCode: universalModel,
-    sparkQuiz: universalModel,
-    sparkFlash: universalModel,
+    studiAgent: defaultAgentModel,
+    codiAgent: defaultAgentModel,
+    shruAgent: defaultAgentModel,
+    sparkScene: defaultSparkModel,
+    sparkDesmos: defaultSparkModel,
+    sparkCode: defaultSparkModel,
+    sparkQuiz: defaultSparkModel,
+    sparkFlash: defaultSparkModel,
   },
 };
 
