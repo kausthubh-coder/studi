@@ -310,16 +310,20 @@ export const createLabTool = createTool<
       let reusedExisting = false;
       let cleanupWarning: string | undefined;
       const existingProfileId = existing?.metadata?.runtimeProfileId;
-      if (existing?.sandboxId && !forceNewSandbox) {
+      const existingWorkspacePath = existing?.metadata?.workspacePath;
+      const canReuseExistingSandbox =
+        existing?.sandboxId && existingWorkspacePath && !forceNewSandbox;
+
+      if (canReuseExistingSandbox) {
         sandboxId = existing.sandboxId;
         reusedExisting = true;
-        workspacePath = existing.metadata?.workspacePath;
+        workspacePath = existingWorkspacePath;
         templateKey = existing.metadata?.templateKey;
         await runLabRuntime<null>(ctx, "resumeSandbox", {
           sandboxId,
         });
       } else {
-        if (existing?.sandboxId && forceNewSandbox) {
+        if (existing?.sandboxId) {
           try {
             await runLabRuntime<null>(ctx, "deleteSandboxAndConfirm", {
               sandboxId: existing.sandboxId,

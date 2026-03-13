@@ -15,10 +15,7 @@ import {
   shruAgent,
   studiAgent,
 } from "./agent";
-import {
-  classifyLabRuntimeError,
-  formatErrorSummary,
-} from "../lib/lab-runtime/shared";
+import { classifyLabRuntimeError } from "../lib/lab-runtime/shared";
 
 const internalApi = internal as unknown as {
   labRuntime: {
@@ -177,11 +174,7 @@ export const deleteThread: ReturnType<typeof action> = action({
       } catch (error) {
         const detail = classifyLabRuntimeError(error);
         if (detail.category !== "not_found") {
-          return {
-            status: "failed" as const,
-            summary: formatErrorSummary("delete thread", error),
-            error: detail,
-          };
+          labCleanupWarning = detail.message;
         }
       }
 
