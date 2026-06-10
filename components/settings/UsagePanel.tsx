@@ -5,9 +5,7 @@ import { PricingTable, UserProfile, useUser, SignOutButton } from "@clerk/nextjs
 import { useAction, useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
 import { api } from "@/convex/_generated/api";
-import { handleExplicitPosthogLogout } from "@/components/analytics/PostHogAuthSync";
 
 // ─── Formatting helpers ──────────────────────────────────────────────────────
 
@@ -30,10 +28,6 @@ function formatPlanLabel(planKey: string): string {
   if (planKey === "pro") return "Pro";
   if (planKey === "intro") return "Intro";
   return "Onboarding";
-}
-
-function formatDurationMinutes(seconds: number): string {
-  return `${Math.max(0, Math.floor(seconds / 60))} min`;
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -270,7 +264,7 @@ function UsageTab({
             style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
           >
             {billing.upgradeReason ??
-              "Your usage is tracked monthly across text, voice, and labs."}
+              "Your usage is tracked monthly."}
           </p>
         </div>
       </div>
@@ -295,7 +289,7 @@ function UsageTab({
             className="mt-2 max-w-lg text-sm"
             style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
           >
-            Try a few text chats first. Voice, uploads, and labs unlock after you pick a paid plan.
+            Try a few text chats first. Uploads unlock after you pick a paid plan.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <span
@@ -329,27 +323,6 @@ function UsageTab({
             detail={`${formatInteger(billing.usage.textPromptCount)} prompts this month`}
             icon="💬"
           />
-          <UsageMeter
-            label={billing.planKey === "intro" ? "Voice preview" : "Voice minutes"}
-            used={billing.usage.voiceSeconds}
-            limit={billing.caps.voiceSecondsLimit}
-            detail={`${formatDurationMinutes(billing.remaining.voiceSeconds)} remaining`}
-            icon="🎙️"
-          />
-          <UsageMeter
-            label="Lab runtime"
-            used={billing.usage.labActiveSeconds}
-            limit={billing.caps.labActiveSecondsLimit}
-            detail={`${formatDurationMinutes(billing.remaining.labActiveSeconds)} remaining`}
-            icon="🧪"
-          />
-          <UsageMeter
-            label="Lab sessions"
-            used={billing.usage.labSessionCount}
-            limit={billing.caps.labSessionLimit}
-            detail={`${billing.remaining.labSessionCount} sessions remaining`}
-            icon="⚗️"
-          />
         </div>
       </div>
     </div>
@@ -364,8 +337,8 @@ function BillingTab() {
           className="text-sm"
           style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
         >
-          Intro gives you full text tutoring plus limited voice and lab previews.
-          Pro unlocks full voice, full labs, and higher monthly limits.
+          Intro gives you full text tutoring. Pro unlocks higher monthly
+          limits.
         </p>
       </div>
 
@@ -416,7 +389,6 @@ export function UsagePanel() {
   const billing = useQuery(api.billing.getViewerBillingState);
   const syncBillingProfile = useAction(api.billingActions.syncCurrentUserBillingProfile);
   const { user } = useUser();
-  const pathname = usePathname();
   const [activeTab, setActiveTab] = useState<TabId>("usage");
 
   useEffect(() => {
@@ -471,7 +443,6 @@ export function UsagePanel() {
           <div className="mt-2 flex shrink-0">
             <SignOutButton>
               <button
-                onClick={() => handleExplicitPosthogLogout(pathname)}
                 className="flex items-center gap-2 rounded-xl border-2 px-4 py-2 text-sm font-bold transition-all hover:-translate-y-0.5"
                 style={{
                   fontFamily: "var(--font-jakarta)",

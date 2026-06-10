@@ -3,7 +3,7 @@ import type { FunctionReference } from "convex/server";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
 import { action } from "./_generated/server";
-import { playgroundAgents } from "./agent";
+import { getPlaygroundAgents } from "./agent";
 import { internal } from "./_generated/api";
 
 const internalApi = internal as unknown as {
@@ -16,12 +16,6 @@ const internalApi = internal as unknown as {
   };
 };
 
-/**
- * Exposes the Agent Playground API.
- *
- * Use an API key issued from the agent component:
- * bunx convex run --component agent apiKeys:issue '{"name":"studi-playground"}'
- */
 export const {
   isApiKeyValid,
   listAgents,
@@ -32,7 +26,7 @@ export const {
   generateText,
   fetchPromptContext,
 } = definePlaygroundAPI(components.agent, {
-  agents: playgroundAgents,
+  agents: process.env.OPENROUTER_API_KEY ? getPlaygroundAgents() : [],
 });
 
 export const getThreadObservabilitySummary = action({
@@ -51,10 +45,7 @@ export const getThreadObservabilitySummary = action({
       events: v.number(),
       failures: v.number(),
       sparkFailures: v.number(),
-      labToolFailures: v.number(),
-      planToolFailures: v.number(),
       runtimeFailures: v.number(),
-      voiceFailures: v.number(),
       lastFailureAt: v.optional(v.number()),
     }),
   }),

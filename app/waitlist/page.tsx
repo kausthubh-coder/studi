@@ -1,7 +1,7 @@
 import Script from "next/script";
 
 type WaitlistPageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
 const FALLBACK_TALLY_URL = "https://tally.so/r/WOAjRv";
@@ -32,8 +32,8 @@ function buildTallySrc(
   return url.toString();
 }
 
-export default function WaitlistPage({ searchParams }: WaitlistPageProps) {
-  const tallySrc = buildTallySrc(searchParams ?? {});
+export default async function WaitlistPage({ searchParams }: WaitlistPageProps) {
+  const tallySrc = buildTallySrc((await searchParams) ?? {});
 
   return (
     <>

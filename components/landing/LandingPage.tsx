@@ -137,7 +137,7 @@ export function LandingPage() {
               </motion.h1>
 
               <motion.p variants={fadeUp} className="text-lg md:text-xl text-[#6b5a47] font-body max-w-2xl mx-auto lg:mx-0 mb-8 leading-relaxed">
-                Studi asks questions, builds interactive tools mid-conversation, and gives you real coding challenges — guiding you to discover answers rather than just receive them.
+                Studi asks questions and builds interactive tools mid-conversation, guiding you to discover answers rather than just receive them.
               </motion.p>
 
               {/* Waitlist form */}
@@ -150,7 +150,7 @@ export function LandingPage() {
                     href="/chat"
                     className="inline-block w-full max-w-sm font-bold px-8 py-4 rounded-xl border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-all shadow-[4px_4px_0px_#1c1208] text-lg text-center"
                   >
-                    Enter Your Lab →
+                    Enter Studi →
                   </Link>
                 </SignedIn>
               </motion.div>
@@ -245,9 +245,7 @@ export function LandingPage() {
                   "Web Playground",
                   "Adaptive Quizzes",
                   "Flashcard Sets",
-                  "Coding Labs",
-                  "Voice Tutoring",
-                  "Learning Plans",
+                  "Socratic Practice",
                 ].map((item) => (
                   <span key={item} className="flex items-center gap-6 px-6">
                     <span className="font-bold text-white text-sm md:text-base uppercase tracking-wider">{item}</span>
@@ -418,7 +416,7 @@ export function LandingPage() {
             </motion.div>
           </section>
 
-          {/* ── PLANS ── */}
+          {/* ── PRACTICE ── */}
           <section>
             <motion.div
               initial="hidden"
@@ -429,11 +427,11 @@ export function LandingPage() {
             >
               <div className="lg:w-1/2 text-left">
                 <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-6xl mb-6 leading-tight">
-                  Tell it what you want to learn. It builds the roadmap.
+                  Tell it what you want to learn. It keeps the next step clear.
                 </motion.h2>
                 <motion.p variants={fadeUp} className="text-lg md:text-xl font-body leading-relaxed text-[#6b5a47]">
                   Going into an exam? Learning Python from scratch? Trying to finally understand linear algebra?<br /><br />
-                  Tell Studi. It drafts a milestone plan, tracks where you are, and adjusts as you go. You always know what's next — and so does your tutor.
+                  Tell Studi where you are stuck. It asks the next useful question, generates a Spark when visuals help, and keeps the session focused on understanding.
                 </motion.p>
               </div>
 
@@ -471,7 +469,7 @@ export function LandingPage() {
             </motion.div>
           </section>
 
-          {/* ── LABS ── */}
+          {/* ── SPARKS ── */}
           <section>
             <motion.div
               initial="hidden"
@@ -483,24 +481,24 @@ export function LandingPage() {
               <div className="flex flex-col lg:flex-row gap-10 md:gap-16 items-center">
                 <div className="lg:w-5/12 text-left">
                   <motion.div variants={fadeUp} className="inline-block mb-4 px-3 py-1 rounded-full border-2 border-[#e05a3a] bg-[#e05a3a]/10 font-bold text-xs uppercase tracking-wider text-[#e05a3a]">
-                    The Lab
+                    Sparks
                   </motion.div>
                   <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-6xl mb-6 leading-tight">
-                    Where you prove you understand it.
+                    Where ideas become interactive.
                   </motion.h2>
                   <motion.p variants={fadeUp} className="text-lg md:text-xl font-body leading-relaxed text-[#6b5a47] mb-6">
-                    When you're ready to go beyond understanding — the Lab opens a real coding environment, right inside your session. Studi gives you the challenge, watches you work, reads your files, runs your code, and tells you when you've got it.
+                    When an explanation needs motion, code, a graph, or a quick check, Studi creates a Spark right inside the conversation.
                   </motion.p>
                   <motion.p variants={fadeUp} className="text-lg md:text-xl font-body leading-relaxed text-[#6b5a47] font-bold border-l-4 border-[#e05a3a] pl-5 mb-8">
-                    Not a sandbox you paste into. A real environment your tutor opens, owns, and evaluates.
+                    Not a generic worksheet. A small interactive artifact built for the exact thing you are trying to understand.
                   </motion.p>
                   <motion.ul variants={fadeUp} className="space-y-2">
                     {[
-                      "Persistent real browser sandbox",
-                      "Tutor assigns the exact challenge",
-                      "Reads and runs your code live",
-                      "Guides you when you're stuck",
-                      "You don't move on until it passes",
+                      "Interactive scenes and graphs",
+                      "Quizzes and flash cards",
+                      "Python and web playgrounds",
+                      "Built from your current question",
+                      "Safe iframe rendering inside chat",
                     ].map((item) => (
                       <li key={item} className="flex items-center gap-3 font-ui font-bold text-[#1c1208] text-sm md:text-base">
                         <span className="w-5 h-5 rounded-full bg-[#e05a3a] border-2 border-[#1c1208] flex items-center justify-center text-white text-xs shrink-0">✓</span>
@@ -510,7 +508,7 @@ export function LandingPage() {
                   </motion.ul>
                 </div>
 
-                {/* Lab IDE mockup */}
+                {/* Spark mockup */}
                 <motion.div variants={fadeUp} className="lg:w-7/12 w-full">
                   <div className="w-full aspect-[4/3] md:aspect-video bg-[#1c1208] rounded-2xl md:rounded-3xl border-4 border-[#1c1208] shadow-[8px_8px_0px_#e05a3a] md:shadow-[12px_12px_0px_#e05a3a] overflow-hidden flex flex-col">
                     {/* Title bar */}
@@ -520,7 +518,7 @@ export function LandingPage() {
                         <span>Studi Tutor</span>
                       </div>
                       <div className="flex-1 px-4 py-3 font-mono text-xs text-gray-300 flex items-center gap-2">
-                        <span className="text-gray-500">~/lab/</span>
+                        <span className="text-gray-500">spark/</span>
                         <span>binary_search.py</span>
                         <span className="ml-auto flex items-center gap-1.5 text-[#e8a030]">
                           <span className="w-1.5 h-1.5 rounded-full bg-[#e8a030]" />
@@ -620,7 +618,7 @@ export function LandingPage() {
                     color: "#3a9e8a",
                   },
                   {
-                    quote: "The Lab is wild. It assigns me a challenge, watches me code, and tells me exactly when I'm wrong — and why. Like having a senior dev next to you.",
+                    quote: "The interactive Spark made the idea click immediately. I could move the pieces around instead of rereading another paragraph.",
                     name: "Daniela R.",
                     role: "Pre-med taking data science",
                     color: "#e8a030",
@@ -712,7 +710,7 @@ export function LandingPage() {
                       <div className="font-mono text-xs text-gray-400">factorial(3) → factorial(2) → factorial(1) → 1</div>
                     </div>
                     <div className="bg-[#3a9e8a]/10 border-2 border-[#3a9e8a]/30 rounded-xl p-3 font-bold text-xs text-[#3a9e8a] flex items-center gap-2">
-                      <span>✓</span> Lab challenge: implemented factorial. 3/3 tests passing.
+                      <span>✓</span> Spark check: base case identified correctly.
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
@@ -747,19 +745,15 @@ export function LandingPage() {
                 />
                 <FaqItem
                   q="How is this different from ChatGPT?"
-                  a="ChatGPT gives you answers. Studi asks you questions and guides you to figure it out yourself — so you actually understand it, not just copy it. It also generates interactive tools mid-conversation and gives you real coding challenges to prove you understand."
+                  a="ChatGPT gives you answers. Studi asks you questions and guides you to figure it out yourself — so you actually understand it, not just copy it. It also generates interactive tools mid-conversation."
                 />
                 <FaqItem
                   q="What subjects does it cover?"
-                  a="Studi works across any subject — CS, math, physics, biology, history, languages. If you can ask a question about it, Studi can teach it. The Labs currently focus on coding, with more types coming."
+                  a="Studi works across any subject — CS, math, physics, biology, history, languages. If you can ask a question about it, Studi can teach it."
                 />
                 <FaqItem
                   q="What is a Spark?"
                   a="A Spark is an interactive tool Studi generates mid-conversation — a live Desmos graph, a physics simulation, a Python playground, a web preview, a quiz, or a flashcard set. Built for your exact question, in real time, inside the chat."
-                />
-                <FaqItem
-                  q="What is a Lab?"
-                  a="Labs are persistent coding environments attached to your session. Your tutor opens the sandbox, assigns you a specific challenge, watches you write the code, runs your tests, and evaluates your solution. Currently supports coding sandboxes — more Lab types are coming."
                 />
               </motion.div>
             </motion.div>
@@ -787,9 +781,7 @@ export function LandingPage() {
                 {[
                   "Socratic tutoring that leads you to the answer",
                   "Sparks — interactive tools in the moment",
-                  "Labs — real coding challenges in your session",
-                  "Learning plans with milestone tracking",
-                  "Voice mode for spoken sessions",
+                  "Adaptive quizzes and flashcards",
                   "Works for any subject",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2 text-sm font-ui text-[#1c1208]">

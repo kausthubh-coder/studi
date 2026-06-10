@@ -54,53 +54,6 @@ export default defineSchema({
       "sparkInstanceId",
     ]),
 
-  labSessions: defineTable({
-    userId: v.string(),
-    threadId: v.string(),
-    sandboxId: v.string(),
-    metadata: v.object({
-      topic: v.optional(v.string()),
-      objective: v.optional(v.string()),
-      language: v.optional(v.string()),
-      framework: v.optional(v.string()),
-      template: v.optional(v.string()),
-      runtimeProfileId: v.optional(v.string()),
-      workspacePath: v.optional(v.string()),
-      templateKey: v.optional(v.string()),
-    }),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    lastActiveAt: v.number(),
-    archivedAt: v.optional(v.number()),
-    lastError: v.optional(v.string()),
-  })
-    .index("by_userId", ["userId"])
-    .index("by_threadId", ["threadId"])
-    .index("by_userId_and_threadId", ["userId", "threadId"]),
-
-  learningPlans: defineTable({
-    userId: v.string(),
-    threadId: v.string(),
-    phase: v.union(
-      v.literal("discovery"),
-      v.literal("draft_review"),
-      v.literal("active"),
-      v.literal("completed"),
-    ),
-    revision: v.number(),
-    title: v.optional(v.string()),
-    acceptedPlan: v.optional(v.any()),
-    draftPlan: v.optional(v.any()),
-    latestChangeRequest: v.optional(v.string()),
-    progressPercent: v.number(),
-    totalItems: v.number(),
-    completedItems: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_userId_and_threadId", ["userId", "threadId"])
-    .index("by_userId_and_updatedAt", ["userId", "updatedAt"]),
-
   billingProfiles: defineTable({
     userId: v.string(),
     planKey: v.union(
@@ -128,13 +81,7 @@ export default defineSchema({
     billingPeriod: v.string(),
     textPromptCount: v.number(),
     textAiCostUsd: v.number(),
-    voiceSeconds: v.number(),
-    voiceEstimatedCostUsd: v.number(),
-    labSessionCount: v.number(),
-    labActiveSeconds: v.number(),
-    labEstimatedCostUsd: v.number(),
     totalEstimatedCostUsd: v.number(),
-    lastLabActivityAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_userId_and_billingPeriod", ["userId", "billingPeriod"]),
 
@@ -180,9 +127,6 @@ export default defineSchema({
       v.literal("agent_usage"),
       v.literal("agent_runtime"),
       v.literal("spark"),
-      v.literal("lab_tool"),
-      v.literal("plan_tool"),
-      v.literal("voice"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),

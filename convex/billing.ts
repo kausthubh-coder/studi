@@ -2,7 +2,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery, query } from "./_generated/server";
-import { enforceChatSendRateLimit, enforceLabRunRateLimit } from "./rateLimits";
+import { enforceChatSendRateLimit } from "./rateLimits";
 
 export type BillingPlanKey = "free_onboarding" | "intro" | "pro";
 export type BillingStatus =
@@ -15,51 +15,14 @@ export type BillingStatus =
 type BillingUsageRecord = {
   textPromptCount: number;
   textAiCostUsd: number;
-  voiceSeconds: number;
-  voiceEstimatedCostUsd: number;
-  labSessionCount: number;
-  labActiveSeconds: number;
-  labEstimatedCostUsd: number;
   totalEstimatedCostUsd: number;
-  lastLabActivityAt?: number;
 };
 
 type BillingCaps = {
   freePromptLimit: number;
   freeTextAiCostUsdLimit: number;
   textAiCostUsdLimit: number;
-  voiceSecondsLimit: number;
-  voiceEstimatedCostUsdLimit: number;
-  labSessionLimit: number;
-  labActiveSecondsLimit: number;
-  labEstimatedCostUsdLimit: number;
   totalEstimatedCostUsdLimit: number;
-};
-
-type ViewerBillingState = {
-  planKey: BillingPlanKey;
-  status: BillingStatus;
-  billingPeriod: string;
-  caps: BillingCaps;
-  usage: BillingUsageRecord & {
-    lifetimeFreePromptCount: number;
-    lifetimeFreeTextAiCostUsd: number;
-  };
-  remaining: {
-    textAiCostUsd: number;
-    voiceSeconds: number;
-    labSessionCount: number;
-    labActiveSeconds: number;
-    totalEstimatedCostUsd: number;
-    lifetimeFreePromptCount: number;
-  };
-  lockedSurfaces: {
-    chat: boolean;
-    attachments: boolean;
-    voice: boolean;
-    labs: boolean;
-  };
-  upgradeReason?: string;
 };
 
 const billingPlanKeyValidator = v.union(
@@ -80,24 +43,13 @@ const billingCapsValidator = v.object({
   freePromptLimit: v.number(),
   freeTextAiCostUsdLimit: v.number(),
   textAiCostUsdLimit: v.number(),
-  voiceSecondsLimit: v.number(),
-  voiceEstimatedCostUsdLimit: v.number(),
-  labSessionLimit: v.number(),
-  labActiveSecondsLimit: v.number(),
-  labEstimatedCostUsdLimit: v.number(),
   totalEstimatedCostUsdLimit: v.number(),
 });
 
 const billingUsageValidator = v.object({
   textPromptCount: v.number(),
   textAiCostUsd: v.number(),
-  voiceSeconds: v.number(),
-  voiceEstimatedCostUsd: v.number(),
-  labSessionCount: v.number(),
-  labActiveSeconds: v.number(),
-  labEstimatedCostUsd: v.number(),
   totalEstimatedCostUsd: v.number(),
-  lastLabActivityAt: v.optional(v.number()),
 });
 
 const viewerBillingStateValidator = v.object({
@@ -108,29 +60,18 @@ const viewerBillingStateValidator = v.object({
   usage: v.object({
     textPromptCount: v.number(),
     textAiCostUsd: v.number(),
-    voiceSeconds: v.number(),
-    voiceEstimatedCostUsd: v.number(),
-    labSessionCount: v.number(),
-    labActiveSeconds: v.number(),
-    labEstimatedCostUsd: v.number(),
     totalEstimatedCostUsd: v.number(),
-    lastLabActivityAt: v.optional(v.number()),
     lifetimeFreePromptCount: v.number(),
     lifetimeFreeTextAiCostUsd: v.number(),
   }),
   remaining: v.object({
     textAiCostUsd: v.number(),
-    voiceSeconds: v.number(),
-    labSessionCount: v.number(),
-    labActiveSeconds: v.number(),
     totalEstimatedCostUsd: v.number(),
     lifetimeFreePromptCount: v.number(),
   }),
   lockedSurfaces: v.object({
     chat: v.boolean(),
     attachments: v.boolean(),
-    voice: v.boolean(),
-    labs: v.boolean(),
   }),
   upgradeReason: v.optional(v.string()),
 });
@@ -145,53 +86,21 @@ const PLAN_CAPS: Record<BillingPlanKey, BillingCaps> = {
     freePromptLimit: 3,
     freeTextAiCostUsdLimit: 0.15,
     textAiCostUsdLimit: 0.15,
-    voiceSecondsLimit: 0,
-    voiceEstimatedCostUsdLimit: 0,
-    labSessionLimit: 0,
-    labActiveSecondsLimit: 0,
-    labEstimatedCostUsdLimit: 0,
     totalEstimatedCostUsdLimit: 0.15,
   },
   intro: {
     freePromptLimit: 0,
     freeTextAiCostUsdLimit: 0,
     textAiCostUsdLimit: 1.5,
-    voiceSecondsLimit: 12 * 60,
-    voiceEstimatedCostUsdLimit: 0.5,
-    labSessionLimit: 2,
-    labActiveSecondsLimit: 90 * 60,
-    labEstimatedCostUsdLimit: 0.5,
-    totalEstimatedCostUsdLimit: 2.5,
+    totalEstimatedCostUsdLimit: 2,
   },
   pro: {
     freePromptLimit: 0,
     freeTextAiCostUsdLimit: 0,
     textAiCostUsdLimit: 4.5,
-    voiceSecondsLimit: 90 * 60,
-    voiceEstimatedCostUsdLimit: 2,
-    labSessionLimit: 20,
-    labActiveSecondsLimit: 15 * 60 * 60,
-    labEstimatedCostUsdLimit: 2,
-    totalEstimatedCostUsdLimit: 7,
+    totalEstimatedCostUsdLimit: 6,
   },
 };
-
-const LAB_ACTIVE_HOUR_COST_USD = readNumericEnv(
-  "LAB_ACTIVE_HOUR_COST_USD",
-  0.2,
-);
-
-function readNumericEnv(name: string, fallback: number) {
-  const raw = process.env[name];
-  if (!raw) {
-    return fallback;
-  }
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return fallback;
-  }
-  return parsed;
-}
 
 function getBillingPeriod(at: number) {
   const now = new Date(at);
@@ -215,11 +124,6 @@ function createEmptyUsage(): BillingUsageRecord {
   return {
     textPromptCount: 0,
     textAiCostUsd: 0,
-    voiceSeconds: 0,
-    voiceEstimatedCostUsd: 0,
-    labSessionCount: 0,
-    labActiveSeconds: 0,
-    labEstimatedCostUsd: 0,
     totalEstimatedCostUsd: 0,
   };
 }
@@ -234,20 +138,12 @@ function toUsageRecord(
   return {
     textPromptCount: usageDoc.textPromptCount,
     textAiCostUsd: usageDoc.textAiCostUsd,
-    voiceSeconds: usageDoc.voiceSeconds,
-    voiceEstimatedCostUsd: usageDoc.voiceEstimatedCostUsd,
-    labSessionCount: usageDoc.labSessionCount,
-    labActiveSeconds: usageDoc.labActiveSeconds,
-    labEstimatedCostUsd: usageDoc.labEstimatedCostUsd,
     totalEstimatedCostUsd: usageDoc.totalEstimatedCostUsd,
-    lastLabActivityAt: usageDoc.lastLabActivityAt,
   };
 }
 
 function normalizePlanKey(value: string | undefined | null): BillingPlanKey {
-  if (value === "intro" || value === "pro") {
-    return value;
-  }
+  if (value === "intro" || value === "pro") return value;
   return "free_onboarding";
 }
 
@@ -255,9 +151,7 @@ function normalizeStatus(value: string | undefined | null): BillingStatus {
   if (value === "active" || value === "past_due" || value === "canceled") {
     return value;
   }
-  if (value === "inactive") {
-    return "inactive";
-  }
+  if (value === "inactive") return "inactive";
   return "onboarding";
 }
 
@@ -268,33 +162,19 @@ function maybeString(value: unknown): string | undefined {
 }
 
 function extractPlanHintFromIdentity(identity: unknown): BillingPlanKey | undefined {
-  if (!identity || typeof identity !== "object") {
-    return undefined;
-  }
+  if (!identity || typeof identity !== "object") return undefined;
 
   const stack: unknown[] = [identity];
   const seen = new Set<object>();
 
   while (stack.length > 0) {
     const node = stack.pop();
-    if (!node) {
-      continue;
-    }
-
+    if (!node) continue;
     if (typeof node === "string") {
-      if (node === "intro" || node === "pro") {
-        return node;
-      }
+      if (node === "intro" || node === "pro") return node;
       continue;
     }
-
-    if (typeof node !== "object") {
-      continue;
-    }
-
-    if (seen.has(node)) {
-      continue;
-    }
+    if (typeof node !== "object" || seen.has(node)) continue;
     seen.add(node);
 
     for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
@@ -306,24 +186,15 @@ function extractPlanHintFromIdentity(identity: unknown): BillingPlanKey | undefi
         key === "slug"
       ) {
         const candidate = maybeString(value);
-        if (candidate === "intro" || candidate === "pro") {
-          return candidate;
-        }
+        if (candidate === "intro" || candidate === "pro") return candidate;
       }
 
       if (Array.isArray(value)) {
-        for (const item of value) {
-          stack.push(item);
-        }
-        continue;
-      }
-
-      if (value && typeof value === "object") {
+        stack.push(...value);
+      } else if (value && typeof value === "object") {
         stack.push(value);
-      } else if (typeof value === "string") {
-        if (value === "intro" || value === "pro") {
-          return value;
-        }
+      } else if (value === "intro" || value === "pro") {
+        return value;
       }
     }
   }
@@ -335,9 +206,8 @@ function throwBillingError(args: {
   code:
     | "BILLING_REQUIRED"
     | "PLAN_REQUIRED"
-    | "PREVIEW_EXHAUSTED"
     | "USAGE_BUDGET_EXHAUSTED";
-  surface: "chat" | "attachments" | "voice" | "labs";
+  surface: "chat" | "attachments";
   planKey: BillingPlanKey;
   message: string;
   upgradeTarget?: "intro" | "pro";
@@ -385,7 +255,7 @@ async function getBillingOnboardingDoc(
 }
 
 async function resolvePlanState(args: {
-  ctx: any;
+  ctx: Parameters<typeof getBillingProfileDoc>[0];
   userId: string;
   planHint?: string;
 }) {
@@ -403,17 +273,12 @@ async function resolvePlanState(args: {
   return {
     planKey,
     status: normalizeStatus(status),
-    profile,
   };
 }
 
 function getUpgradeTarget(planKey: BillingPlanKey): "intro" | "pro" | undefined {
-  if (planKey === "free_onboarding") {
-    return "intro";
-  }
-  if (planKey === "intro") {
-    return "pro";
-  }
+  if (planKey === "free_onboarding") return "intro";
+  if (planKey === "intro") return "pro";
   return undefined;
 }
 
@@ -426,7 +291,7 @@ function buildViewerBillingState(args: {
     lifetimeFreePromptCount: number;
     lifetimeFreeTextAiCostUsd: number;
   };
-}): ViewerBillingState {
+}) {
   const caps = PLAN_CAPS[args.planKey];
   const totalBudgetExceeded =
     args.usage.totalEstimatedCostUsd >= caps.totalEstimatedCostUsdLimit;
@@ -436,19 +301,6 @@ function buildViewerBillingState(args: {
     args.onboarding.lifetimeFreeTextAiCostUsd >= caps.freeTextAiCostUsdLimit;
   const paidChatLocked =
     args.usage.textAiCostUsd >= caps.textAiCostUsdLimit || totalBudgetExceeded;
-  const voiceLocked =
-    args.planKey === "free_onboarding"
-      ? true
-      : args.usage.voiceSeconds >= caps.voiceSecondsLimit ||
-        args.usage.voiceEstimatedCostUsd >= caps.voiceEstimatedCostUsdLimit ||
-        totalBudgetExceeded;
-  const labsLocked =
-    args.planKey === "free_onboarding"
-      ? true
-      : args.usage.labSessionCount >= caps.labSessionLimit ||
-        args.usage.labActiveSeconds >= caps.labActiveSecondsLimit ||
-        args.usage.labEstimatedCostUsd >= caps.labEstimatedCostUsdLimit ||
-        totalBudgetExceeded;
   const chatLocked =
     args.planKey === "free_onboarding" ? freeChatLocked : paidChatLocked;
 
@@ -456,19 +308,13 @@ function buildViewerBillingState(args: {
   if (args.planKey === "free_onboarding") {
     upgradeReason = chatLocked
       ? "You've used your free onboarding chats. Choose a plan to keep going."
-      : "Choose a paid plan to unlock uploads, voice tutoring, and labs.";
+      : "Choose a paid plan to unlock uploads.";
   } else if (args.planKey === "intro") {
-    if (voiceLocked) {
-      upgradeReason =
-        "You've used your monthly voice preview. Upgrade to Pro for full voice tutoring.";
-    } else if (labsLocked) {
-      upgradeReason =
-        "You've used your monthly lab preview. Upgrade to Pro to keep building in labs.";
-    } else if (chatLocked) {
+    if (chatLocked) {
       upgradeReason =
         "You've reached this month's Intro usage limit. Upgrade to Pro for higher monthly capacity.";
     }
-  } else if (chatLocked || voiceLocked || labsLocked) {
+  } else if (chatLocked) {
     upgradeReason =
       "You've reached this month's Pro usage limit. Contact support if you need a higher cap.";
   }
@@ -484,12 +330,9 @@ function buildViewerBillingState(args: {
       lifetimeFreeTextAiCostUsd: args.onboarding.lifetimeFreeTextAiCostUsd,
     },
     remaining: {
-      textAiCostUsd: clampRemaining(caps.textAiCostUsdLimit, args.usage.textAiCostUsd),
-      voiceSeconds: clampRemainingCount(caps.voiceSecondsLimit, args.usage.voiceSeconds),
-      labSessionCount: clampRemainingCount(caps.labSessionLimit, args.usage.labSessionCount),
-      labActiveSeconds: clampRemainingCount(
-        caps.labActiveSecondsLimit,
-        args.usage.labActiveSeconds,
+      textAiCostUsd: clampRemaining(
+        caps.textAiCostUsdLimit,
+        args.usage.textAiCostUsd,
       ),
       totalEstimatedCostUsd: clampRemaining(
         caps.totalEstimatedCostUsdLimit,
@@ -503,15 +346,15 @@ function buildViewerBillingState(args: {
     lockedSurfaces: {
       chat: chatLocked,
       attachments: args.planKey === "free_onboarding",
-      voice: voiceLocked,
-      labs: labsLocked,
     },
     upgradeReason,
   };
 }
 
 async function buildViewerBillingStateForUser(args: {
-  ctx: any;
+  ctx: Parameters<typeof getBillingProfileDoc>[0] &
+    Parameters<typeof getBillingUsageDoc>[0] &
+    Parameters<typeof getBillingOnboardingDoc>[0];
   userId: string;
   planHint?: string;
 }) {
@@ -545,24 +388,20 @@ async function ensureUsageRow(
     billingPeriod: string;
   },
 ) {
-  const existing = await getBillingUsageDoc(ctx, args.userId, args.billingPeriod);
-  if (existing) {
-    return existing;
-  }
+  const existing = await getBillingUsageDoc(
+    ctx,
+    args.userId,
+    args.billingPeriod,
+  );
+  if (existing) return existing;
 
-  const now = Date.now();
   const id = await ctx.db.insert("billingUsagePeriods", {
     userId: args.userId,
     billingPeriod: args.billingPeriod,
     textPromptCount: 0,
     textAiCostUsd: 0,
-    voiceSeconds: 0,
-    voiceEstimatedCostUsd: 0,
-    labSessionCount: 0,
-    labActiveSeconds: 0,
-    labEstimatedCostUsd: 0,
     totalEstimatedCostUsd: 0,
-    updatedAt: now,
+    updatedAt: Date.now(),
   });
   return await ctx.db.get(id);
 }
@@ -574,39 +413,21 @@ async function patchUsageDelta(
     billingPeriod?: string;
     textPromptCount?: number;
     textAiCostUsd?: number;
-    voiceSeconds?: number;
-    voiceEstimatedCostUsd?: number;
-    labSessionCount?: number;
-    labActiveSeconds?: number;
-    labEstimatedCostUsd?: number;
-    lastLabActivityAt?: number;
   },
 ) {
   const billingPeriod = args.billingPeriod ?? getBillingPeriod(Date.now());
-  const current = (await ensureUsageRow(ctx, {
+  const current = await ensureUsageRow(ctx, {
     userId: args.userId,
     billingPeriod,
-  })) as Doc<"billingUsagePeriods">;
+  });
+  if (!current) throw new Error("Failed to create billing usage row");
 
   await ctx.db.patch(current._id, {
     textPromptCount: current.textPromptCount + (args.textPromptCount ?? 0),
     textAiCostUsd: roundUsd(current.textAiCostUsd + (args.textAiCostUsd ?? 0)),
-    voiceSeconds: current.voiceSeconds + (args.voiceSeconds ?? 0),
-    voiceEstimatedCostUsd: roundUsd(
-      current.voiceEstimatedCostUsd + (args.voiceEstimatedCostUsd ?? 0),
-    ),
-    labSessionCount: current.labSessionCount + (args.labSessionCount ?? 0),
-    labActiveSeconds: current.labActiveSeconds + (args.labActiveSeconds ?? 0),
-    labEstimatedCostUsd: roundUsd(
-      current.labEstimatedCostUsd + (args.labEstimatedCostUsd ?? 0),
-    ),
     totalEstimatedCostUsd: roundUsd(
-      current.totalEstimatedCostUsd +
-        (args.textAiCostUsd ?? 0) +
-        (args.voiceEstimatedCostUsd ?? 0) +
-        (args.labEstimatedCostUsd ?? 0),
+      current.totalEstimatedCostUsd + (args.textAiCostUsd ?? 0),
     ),
-    lastLabActivityAt: args.lastLabActivityAt ?? current.lastLabActivityAt,
     updatedAt: Date.now(),
   });
 }
@@ -616,9 +437,7 @@ async function ensureOnboardingRow(
   userId: string,
 ) {
   const existing = await getBillingOnboardingDoc(ctx, userId);
-  if (existing) {
-    return existing;
-  }
+  if (existing) return existing;
 
   const now = Date.now();
   const id = await ctx.db.insert("billingOnboarding", {
@@ -655,16 +474,11 @@ export const resolveCurrentPlanInternal = internalQuery({
   },
   returns: billingProfileSnapshotValidator,
   handler: async (ctx, args) => {
-    const resolved = await resolvePlanState({
+    return await resolvePlanState({
       ctx,
       userId: args.userId,
       planHint: args.planHint,
     });
-
-    return {
-      planKey: resolved.planKey,
-      status: resolved.status,
-    };
   },
 });
 
@@ -740,48 +554,6 @@ export const recordTextAiCostInternal = internalMutation({
   },
 });
 
-export const recordVoiceUsageInternal = internalMutation({
-  args: {
-    userId: v.string(),
-    billingPeriod: v.optional(v.string()),
-    voiceSeconds: v.optional(v.number()),
-    voiceEstimatedCostUsd: v.optional(v.number()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await patchUsageDelta(ctx, {
-      userId: args.userId,
-      billingPeriod: args.billingPeriod,
-      voiceSeconds: args.voiceSeconds ?? 0,
-      voiceEstimatedCostUsd: args.voiceEstimatedCostUsd ?? 0,
-    });
-    return null;
-  },
-});
-
-export const recordLabUsageInternal = internalMutation({
-  args: {
-    userId: v.string(),
-    billingPeriod: v.optional(v.string()),
-    labSessionCount: v.optional(v.number()),
-    labActiveSeconds: v.optional(v.number()),
-    labEstimatedCostUsd: v.optional(v.number()),
-    lastLabActivityAt: v.optional(v.number()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await patchUsageDelta(ctx, {
-      userId: args.userId,
-      billingPeriod: args.billingPeriod,
-      labSessionCount: args.labSessionCount ?? 0,
-      labActiveSeconds: args.labActiveSeconds ?? 0,
-      labEstimatedCostUsd: args.labEstimatedCostUsd ?? 0,
-      lastLabActivityAt: args.lastLabActivityAt,
-    });
-    return null;
-  },
-});
-
 export const incrementFreeOnboardingUsageInternal = internalMutation({
   args: {
     userId: v.string(),
@@ -790,44 +562,16 @@ export const incrementFreeOnboardingUsageInternal = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const row = (await ensureOnboardingRow(ctx, args.userId)) as Doc<"billingOnboarding">;
+    const row = await ensureOnboardingRow(ctx, args.userId);
+    if (!row) throw new Error("Failed to create onboarding usage row");
+
     await ctx.db.patch(row._id, {
-      lifetimeFreePromptCount: row.lifetimeFreePromptCount + (args.promptCount ?? 0),
+      lifetimeFreePromptCount:
+        row.lifetimeFreePromptCount + (args.promptCount ?? 0),
       lifetimeFreeTextAiCostUsd: roundUsd(
         row.lifetimeFreeTextAiCostUsd + (args.textAiCostUsd ?? 0),
       ),
       updatedAt: Date.now(),
-    });
-    return null;
-  },
-});
-
-export const recordLabActivityInternal = internalMutation({
-  args: {
-    userId: v.string(),
-    threadId: v.string(),
-    lastActiveAt: v.number(),
-    now: v.optional(v.number()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const now = args.now ?? Date.now();
-    const boundedSeconds = Math.max(
-      0,
-      Math.min(Math.floor((now - args.lastActiveAt) / 1000), 600),
-    );
-
-    if (boundedSeconds === 0) {
-      return null;
-    }
-
-    await patchUsageDelta(ctx, {
-      userId: args.userId,
-      labActiveSeconds: boundedSeconds,
-      labEstimatedCostUsd: roundUsd(
-        (boundedSeconds / 3600) * LAB_ACTIVE_HOUR_COST_USD,
-      ),
-      lastLabActivityAt: now,
     });
     return null;
   },
@@ -911,115 +655,3 @@ export const assertCanUseAttachmentsInternal = internalMutation({
   },
 });
 
-export const assertCanUseVoiceInternal = internalMutation({
-  args: {
-    userId: v.string(),
-    planHint: v.optional(v.string()),
-  },
-  returns: billingProfileSnapshotValidator,
-  handler: async (ctx, args) => {
-    const state = await buildViewerBillingStateForUser({
-      ctx,
-      userId: args.userId,
-      planHint: args.planHint,
-    });
-
-    if (state.lockedSurfaces.voice) {
-      throwBillingError({
-        code:
-          state.planKey === "free_onboarding"
-            ? "PLAN_REQUIRED"
-            : state.planKey === "intro"
-              ? "PREVIEW_EXHAUSTED"
-              : "USAGE_BUDGET_EXHAUSTED",
-        surface: "voice",
-        planKey: state.planKey,
-        message:
-          state.upgradeReason ??
-          "Voice tutoring is not available with your current plan state.",
-        upgradeTarget: getUpgradeTarget(state.planKey),
-      });
-    }
-
-    return {
-      planKey: state.planKey,
-      status: state.status,
-    };
-  },
-});
-
-export const assertCanCreateLabInternal = internalMutation({
-  args: {
-    userId: v.string(),
-    planHint: v.optional(v.string()),
-  },
-  returns: billingProfileSnapshotValidator,
-  handler: async (ctx, args) => {
-    const state = await buildViewerBillingStateForUser({
-      ctx,
-      userId: args.userId,
-      planHint: args.planHint,
-    });
-
-    if (state.lockedSurfaces.labs) {
-      throwBillingError({
-        code:
-          state.planKey === "free_onboarding"
-            ? "PLAN_REQUIRED"
-            : state.planKey === "intro"
-              ? "PREVIEW_EXHAUSTED"
-              : "USAGE_BUDGET_EXHAUSTED",
-        surface: "labs",
-        planKey: state.planKey,
-        message:
-          state.upgradeReason ??
-          "Labs are not available with your current plan state.",
-        upgradeTarget: getUpgradeTarget(state.planKey),
-      });
-    }
-
-    return {
-      planKey: state.planKey,
-      status: state.status,
-    };
-  },
-});
-
-export const assertCanRunExpensiveLabCommandInternal = internalMutation({
-  args: {
-    userId: v.string(),
-    planHint: v.optional(v.string()),
-  },
-  returns: billingProfileSnapshotValidator,
-  handler: async (ctx, args) => {
-    const state = await buildViewerBillingStateForUser({
-      ctx,
-      userId: args.userId,
-      planHint: args.planHint,
-    });
-
-    if (state.lockedSurfaces.labs) {
-      throwBillingError({
-        code:
-          state.planKey === "free_onboarding"
-            ? "PLAN_REQUIRED"
-            : state.planKey === "intro"
-              ? "PREVIEW_EXHAUSTED"
-              : "USAGE_BUDGET_EXHAUSTED",
-        surface: "labs",
-        planKey: state.planKey,
-        message:
-          state.upgradeReason ??
-          "You have reached your lab usage limit for this billing period.",
-        upgradeTarget: getUpgradeTarget(state.planKey),
-      });
-    }
-
-    await enforceLabRunRateLimit(ctx, state.planKey, args.userId);
-
-    return {
-      planKey: state.planKey,
-      status: state.status,
-    };
-  },
-});

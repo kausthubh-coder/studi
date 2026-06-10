@@ -30,9 +30,6 @@ const telemetrySourceValidator = v.union(
   v.literal("agent_usage"),
   v.literal("agent_runtime"),
   v.literal("spark"),
-  v.literal("lab_tool"),
-  v.literal("plan_tool"),
-  v.literal("voice"),
 );
 
 const telemetryStatusValidator = v.union(
@@ -51,10 +48,7 @@ const summaryReturnsValidator = v.object({
     events: v.number(),
     failures: v.number(),
     sparkFailures: v.number(),
-    labToolFailures: v.number(),
-    planToolFailures: v.number(),
     runtimeFailures: v.number(),
-    voiceFailures: v.number(),
     lastFailureAt: v.optional(v.number()),
   }),
 });
@@ -92,13 +86,6 @@ const monthlyUsageSummaryReturnsValidator = v.object({
       outputTokens: v.number(),
     }),
   ),
-  voice: v.object({
-    calls: v.number(),
-    inputTokens: v.number(),
-    outputTokens: v.number(),
-    estimatedCostUsd: v.number(),
-    lastCallAt: v.optional(v.number()),
-  }),
   lastCallAt: v.optional(v.number()),
 });
 
@@ -229,10 +216,7 @@ async function buildThreadObservabilitySummary(
 
   let lastFailureAt: number | undefined;
   let sparkFailures = 0;
-  let labToolFailures = 0;
-  let planToolFailures = 0;
   let runtimeFailures = 0;
-  let voiceFailures = 0;
   let failures = 0;
 
   for (const row of telemetryRows) {
@@ -245,14 +229,8 @@ async function buildThreadObservabilitySummary(
     }
     if (row.source === "spark") {
       sparkFailures += 1;
-    } else if (row.source === "lab_tool") {
-      labToolFailures += 1;
-    } else if (row.source === "plan_tool") {
-      planToolFailures += 1;
     } else if (row.source === "agent_runtime") {
       runtimeFailures += 1;
-    } else if (row.source === "voice") {
-      voiceFailures += 1;
     }
   }
 
@@ -262,10 +240,7 @@ async function buildThreadObservabilitySummary(
       events: telemetryRows.length,
       failures,
       sparkFailures,
-      labToolFailures,
-      planToolFailures,
       runtimeFailures,
-      voiceFailures,
       lastFailureAt,
     },
   };
@@ -600,11 +575,6 @@ export const getCurrentUserMonthlyUsage = query({
     let cachedInputTokens = 0;
     let estimatedCostUsd = 0;
     let lastCallAt: number | undefined;
-    let voiceCalls = 0;
-    let voiceInputTokens = 0;
-    let voiceOutputTokens = 0;
-    let voiceEstimatedCostUsd = 0;
-    let lastVoiceCallAt: number | undefined;
 
     for (const row of usageRows) {
       const rowTotalTokens = row.usage.totalTokens ?? 0;
@@ -621,20 +591,6 @@ export const getCurrentUserMonthlyUsage = query({
       reasoningTokens += rowReasoningTokens;
       cachedInputTokens += rowCachedInputTokens;
       estimatedCostUsd += rowEstimatedCostUsd;
-
-      const isVoiceRow =
-        row.provider === "openai" &&
-        typeof row.agentName === "string" &&
-        row.agentName.startsWith("shru-voice");
-      if (isVoiceRow) {
-        voiceCalls += 1;
-        voiceInputTokens += rowInputTokens;
-        voiceOutputTokens += rowOutputTokens;
-        voiceEstimatedCostUsd += rowEstimatedCostUsd;
-        if (!lastVoiceCallAt || row.createdAt > lastVoiceCallAt) {
-          lastVoiceCallAt = row.createdAt;
-        }
-      }
 
       if (!lastCallAt || row.createdAt > lastCallAt) {
         lastCallAt = row.createdAt;
@@ -698,13 +654,6 @@ export const getCurrentUserMonthlyUsage = query({
       },
       modelBreakdown,
       threadBreakdown,
-      voice: {
-        calls: voiceCalls,
-        inputTokens: voiceInputTokens,
-        outputTokens: voiceOutputTokens,
-        estimatedCostUsd: voiceEstimatedCostUsd,
-        lastCallAt: lastVoiceCallAt,
-      },
       lastCallAt,
     };
   },

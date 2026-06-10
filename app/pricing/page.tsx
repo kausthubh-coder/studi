@@ -1,11 +1,8 @@
 import Link from "next/link";
 import { PricingTable } from "@clerk/nextjs";
-import { PricingPageView } from "@/components/analytics/PricingPageView";
 
 export default function PricingPage() {
   return (
-    <>
-      <PricingPageView />
     <div
       className="min-h-screen px-4 py-8 md:px-6"
       style={{
@@ -32,8 +29,8 @@ export default function PricingPage() {
               className="mt-2 max-w-2xl text-sm text-fg-muted"
               style={{ fontFamily: "var(--font-jakarta)" }}
             >
-              Intro gives you full text tutoring plus limited voice and lab previews.
-              Pro unlocks full voice, full labs, and higher monthly limits.
+              Intro gives you full text tutoring. Pro unlocks higher monthly
+              limits.
             </p>
           </div>
           <Link
@@ -66,7 +63,7 @@ export default function PricingPage() {
             className="mt-2 max-w-3xl text-sm text-fg-muted"
             style={{ fontFamily: "var(--font-jakarta)" }}
           >
-            Studi lets new users try a few text chats first so they can feel the tutoring flow. Uploads, voice tutoring, and labs unlock once they choose Intro or Pro.
+            Studi lets new users try a few text chats first so they can feel the tutoring flow. Uploads unlock once they choose Intro or Pro.
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <article className="rounded-2xl border border-border-faint bg-white p-4">
@@ -94,7 +91,7 @@ export default function PricingPage() {
                 className="mt-2 text-xs text-fg-muted"
                 style={{ fontFamily: "var(--font-jakarta)" }}
               >
-                Full text tutoring plus limited monthly voice and lab previews.
+                Full text tutoring with a generous monthly limit.
               </p>
             </article>
             <article className="rounded-2xl border border-border-faint bg-white p-4">
@@ -108,13 +105,12 @@ export default function PricingPage() {
                 className="mt-2 text-xs text-fg-muted"
                 style={{ fontFamily: "var(--font-jakarta)" }}
               >
-                Full voice, full labs, and the highest monthly usage limits.
+                The highest monthly usage limits.
               </p>
             </article>
           </div>
         </section>
       </div>
     </div>
-    </>
   );
 }

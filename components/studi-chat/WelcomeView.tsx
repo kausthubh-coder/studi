@@ -30,9 +30,9 @@ const chips = [
   },
   {
     emoji: "💡",
-    label: "Study plan",
-    sub: "Structured learning paths",
-    prompt: "Create a study plan for learning calculus in 4 weeks",
+    label: "Practice",
+    sub: "Questions that build intuition",
+    prompt: "Quiz me on calculus basics and explain what I miss",
     colorClass: "card-lavender",
   },
 ];
@@ -49,8 +49,6 @@ export function WelcomeView({
   onUpload,
   onRemoveAttachment,
   onSuggestionClick,
-  onOpenVoiceMode,
-  voiceDisabledReason,
 }: {
   pendingAttachments: PendingAttachment[];
   input: string;
@@ -63,8 +61,6 @@ export function WelcomeView({
   onUpload: (files: FileList) => Promise<void>;
   onRemoveAttachment: (attachmentId: Id<"attachments">) => void;
   onSuggestionClick: (prompt: string) => void;
-  onOpenVoiceMode?: () => void;
-  voiceDisabledReason?: string | null;
 }) {
   const { user } = useUser();
   const firstName = user?.firstName ?? "there";
@@ -100,9 +96,6 @@ export function WelcomeView({
             onUpload={onUpload}
             onRemoveAttachment={onRemoveAttachment}
             variant="welcome"
-            showVoiceButton
-            onOpenVoiceMode={onOpenVoiceMode}
-            voiceDisabledReason={voiceDisabledReason}
           />
         </div>
 

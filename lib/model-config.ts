@@ -2,8 +2,6 @@ export type ModelProfile = "balanced" | "fast" | "quality";
 
 export type ModelConfig = {
   studiAgent: string;
-  codiAgent: string;
-  shruAgent: string;
   sparkScene: string;
   sparkDesmos: string;
   sparkCode: string;
@@ -17,8 +15,6 @@ const defaultSparkModel = "anthropic/claude-haiku-4.5";
 const modelProfiles: Record<ModelProfile, ModelConfig> = {
   balanced: {
     studiAgent: defaultAgentModel,
-    codiAgent: defaultAgentModel,
-    shruAgent: defaultAgentModel,
     sparkScene: defaultSparkModel,
     sparkDesmos: defaultSparkModel,
     sparkCode: defaultSparkModel,
@@ -27,8 +23,6 @@ const modelProfiles: Record<ModelProfile, ModelConfig> = {
   },
   fast: {
     studiAgent: defaultAgentModel,
-    codiAgent: defaultAgentModel,
-    shruAgent: defaultAgentModel,
     sparkScene: defaultSparkModel,
     sparkDesmos: defaultSparkModel,
     sparkCode: defaultSparkModel,
@@ -37,8 +31,6 @@ const modelProfiles: Record<ModelProfile, ModelConfig> = {
   },
   quality: {
     studiAgent: defaultAgentModel,
-    codiAgent: defaultAgentModel,
-    shruAgent: defaultAgentModel,
     sparkScene: defaultSparkModel,
     sparkDesmos: defaultSparkModel,
     sparkCode: defaultSparkModel,
@@ -67,12 +59,4 @@ export function getActiveModelConfig(): ModelConfig {
 
 export function getStudiAgentName(profile: ModelProfile): string {
   return profile === activeModelProfile ? "studi" : `studi-${profile}`;
-}
-
-export function getCodiAgentName(profile: ModelProfile): string {
-  return profile === activeModelProfile ? "codi" : `codi-${profile}`;
-}
-
-export function getShruAgentName(profile: ModelProfile): string {
-  return profile === activeModelProfile ? "shru" : `shru-${profile}`;
 }

@@ -2,31 +2,12 @@
 
 import { v } from "convex/values";
 import type { FunctionReference } from "convex/server";
-import { activeModelProfile } from "../lib/model-config";
-import type { ActionCtx } from "./_generated/server";
-import { action, internalAction } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { api, components, internal } from "./_generated/api";
-import { capturePosthogEvent } from "./posthog";
-import {
-  buildCodiToolset,
-  buildShruToolset,
-  buildStudiToolset,
-  codiAgent,
-  shruAgent,
-  studiAgent,
-} from "./agent";
-import {
-  classifyLabRuntimeError,
-  formatErrorSummary,
-} from "../lib/lab-runtime/shared";
+import { activeModelProfile } from "../lib/model-config";
+import { buildStudiToolset, getStudiAgent } from "./agent";
 
 const internalApi = internal as unknown as {
-  labRuntime: {
-    execute: FunctionReference<"action", "internal">;
-  };
-  plans: {
-    getPlanSummaryForThreadInternal: FunctionReference<"query", "internal">;
-  };
   telemetry: {
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
   };
@@ -48,7 +29,7 @@ export const createThread = action({
   handler: async (ctx, args) => {
     const userId = await requireAuthenticatedUserId(ctx);
 
-    const { threadId } = await studiAgent.createThread(ctx, {
+    const { threadId } = await getStudiAgent().createThread(ctx, {
       userId,
       title: args.title,
     });
@@ -76,9 +57,7 @@ export const sendFirstMessage = action({
   handler: async (ctx, args) => {
     const userId = await requireAuthenticatedUserId(ctx);
 
-    const { threadId } = await studiAgent.createThread(ctx, {
-      userId,
-    });
+    const { threadId } = await getStudiAgent().createThread(ctx, { userId });
 
     await ctx.runMutation(internal.chat.createThreadRecord, {
       userId,
@@ -103,18 +82,14 @@ export const sendMessage = action({
     prompt: v.optional(v.string()),
     attachmentIds: v.optional(v.array(v.id("attachments"))),
     requestId: v.optional(v.string()),
-    source: v.optional(v.union(v.literal("text"), v.literal("voice"))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const requestId = args.requestId ?? crypto.randomUUID();
-
     await ctx.runMutation(api.chat.sendMessage, {
       threadId: args.threadId,
       prompt: args.prompt,
       attachmentIds: args.attachmentIds,
-      requestId,
-      source: args.source,
+      requestId: args.requestId ?? crypto.randomUUID(),
     });
 
     return null;
@@ -125,71 +100,16 @@ export const deleteThread: ReturnType<typeof action> = action({
   args: {
     threadId: v.string(),
   },
-  returns: v.union(
-    v.object({
-      status: v.literal("success"),
-      deleted: v.boolean(),
-      deletedLab: v.boolean(),
-      labCleanupWarning: v.optional(v.string()),
-    }),
-    v.object({
-      status: v.literal("failed"),
-      summary: v.string(),
-      error: v.object({
-        category: v.string(),
-        message: v.string(),
-        retriable: v.boolean(),
-        httpStatus: v.optional(v.number()),
-        endpoint: v.optional(v.string()),
-        requestId: v.optional(v.string()),
-        hint: v.optional(v.string()),
-        raw: v.optional(v.string()),
-        exitCode: v.optional(v.number()),
-      }),
-    }),
-  ),
-  handler: async (ctx, args) => {
+  returns: v.object({
+    deleted: v.boolean(),
+  }),
+  handler: async (ctx, args): Promise<{ deleted: boolean }> => {
     const userId = await requireAuthenticatedUserId(ctx);
 
     await ctx.runQuery(internal.chat.assertThreadOwner, {
       userId,
       threadId: args.threadId,
     });
-
-    const labSession = await ctx.runQuery(
-      internal.labs.getLabSessionByThreadForUserInternal,
-      {
-        userId,
-        threadId: args.threadId,
-      },
-    );
-
-    let labCleanupWarning: string | undefined;
-
-    if (labSession) {
-      try {
-        await ctx.runAction(internalApi.labRuntime.execute, {
-          operation: "deleteSandboxAndConfirm",
-          payload: {
-            sandboxId: labSession.sandboxId,
-          },
-        });
-      } catch (error) {
-        const detail = classifyLabRuntimeError(error);
-        if (detail.category !== "not_found") {
-          return {
-            status: "failed" as const,
-            summary: formatErrorSummary("delete thread", error),
-            error: detail,
-          };
-        }
-      }
-
-      await ctx.runMutation(internal.labs.deleteLabSessionInternal, {
-        userId,
-        threadId: args.threadId,
-      });
-    }
 
     const thread = await ctx.runQuery(components.agent.threads.getThread, {
       threadId: args.threadId,
@@ -200,7 +120,7 @@ export const deleteThread: ReturnType<typeof action> = action({
       });
     }
 
-    const deleted = await ctx.runMutation(
+    const deleted: boolean = await ctx.runMutation(
       internal.chat.deleteThreadRecordInternal,
       {
         userId,
@@ -208,12 +128,7 @@ export const deleteThread: ReturnType<typeof action> = action({
       },
     );
 
-    return {
-      status: "success" as const,
-      deleted,
-      deletedLab: Boolean(labSession),
-      labCleanupWarning,
-    };
+    return { deleted };
   },
 });
 
@@ -222,7 +137,6 @@ export const generateAssistantReply = internalAction({
     threadId: v.string(),
     userId: v.string(),
     promptMessageId: v.string(),
-    source: v.optional(v.union(v.literal("text"), v.literal("voice"))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -233,35 +147,8 @@ export const generateAssistantReply = internalAction({
       threadId: args.threadId,
     });
 
-    const labSession = await ctx.runQuery(
-      internal.labs.getLabSessionByThreadForUserInternal,
-      {
-        userId: args.userId,
-        threadId: args.threadId,
-      },
-    );
-
-    const isVoiceTurn = args.source === "voice";
-    const activeAgent = isVoiceTurn
-      ? shruAgent
-      : labSession && !labSession.archivedAt
-        ? codiAgent
-        : studiAgent;
-
-    const planSummary = await ctx.runQuery(
-      internalApi.plans.getPlanSummaryForThreadInternal,
-      {
-        userId: args.userId,
-        threadId: args.threadId,
-      },
-    );
-    const includePlanTools = isVoiceTurn ? false : Boolean(planSummary);
-
-    const tools = isVoiceTurn
-      ? buildShruToolset(activeModelProfile)
-      : labSession && !labSession.archivedAt
-        ? buildCodiToolset(includePlanTools)
-        : buildStudiToolset(activeModelProfile, includePlanTools);
+    const activeAgent = getStudiAgent();
+    const tools = buildStudiToolset(activeModelProfile);
 
     try {
       const { thread } = await activeAgent.continueThread(ctx, {
@@ -300,28 +187,10 @@ export const generateAssistantReply = internalAction({
           status: "success",
           durationMs,
           metadata: {
-            usedLabAgent: Boolean(labSession && !labSession.archivedAt),
-            usedVoiceAgent: isVoiceTurn,
-            includePlanTools,
             modelProfile: activeModelProfile,
-            source: args.source ?? "text",
           },
         },
       );
-
-      await capturePosthogEvent({
-        event: "agent_reply_completed",
-        distinctId: args.userId,
-        properties: {
-          thread_id: args.threadId,
-          duration_ms: durationMs,
-          used_lab_agent: Boolean(labSession && !labSession.archivedAt),
-          used_voice_agent: isVoiceTurn,
-          include_plan_tools: includePlanTools,
-          model_profile: activeModelProfile,
-          source: args.source ?? "text",
-        },
-      });
     } catch (error) {
       const durationMs = Date.now() - startedAt;
       await ctx.runMutation(
@@ -337,29 +206,10 @@ export const generateAssistantReply = internalAction({
           retriable: true,
           metadata: {
             error: error instanceof Error ? error.message : String(error),
-            usedLabAgent: Boolean(labSession && !labSession.archivedAt),
-            usedVoiceAgent: isVoiceTurn,
-            includePlanTools,
             modelProfile: activeModelProfile,
-            source: args.source ?? "text",
           },
         },
       );
-
-      await capturePosthogEvent({
-        event: "agent_reply_failed",
-        distinctId: args.userId,
-        properties: {
-          thread_id: args.threadId,
-          duration_ms: durationMs,
-          used_lab_agent: Boolean(labSession && !labSession.archivedAt),
-          used_voice_agent: isVoiceTurn,
-          include_plan_tools: includePlanTools,
-          model_profile: activeModelProfile,
-          source: args.source ?? "text",
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
 
       throw error;
     }

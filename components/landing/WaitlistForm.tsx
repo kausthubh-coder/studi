@@ -6,7 +6,6 @@ import { useState, useRef } from "react";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
-import posthog from "posthog-js";
 
 type FormState = "idle" | "loading" | "success" | "error";
 
@@ -44,22 +43,12 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
         setAlreadyOnList(isAlreadyOnList);
         setState("success");
         setShowModal(true);
-        if (isAlreadyOnList) {
-          posthog.capture("waitlist_already_on_list", { variant });
-        } else {
-          posthog.capture("waitlist_joined", { variant });
-        }
       } else {
         setErrorMsg(result.error ?? "Something went wrong. Please try again.");
         setState("error");
       }
     } catch (err) {
-      posthog.captureException(err, {
-        surface: "waitlist",
-        action: "join_waitlist",
-        variant,
-        already_on_list: alreadyOnList,
-      });
+      console.error("Join waitlist failed", err);
       setErrorMsg("Something went wrong. Please try again.");
       setState("error");
     }
@@ -189,7 +178,6 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
                   href={TALLY_FORM_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={() => posthog.capture("waitlist_tally_form_opened", { variant, already_on_list: alreadyOnList })}
                   className="inline-block w-full font-bold px-6 py-4 rounded-xl border-2 border-[#1c1208] bg-[#3a9e8a] text-white hover:bg-[#2c7a6a] transition-all shadow-[4px_4px_0px_#1c1208] text-lg mb-3"
                 >
                   Get ahead in line →

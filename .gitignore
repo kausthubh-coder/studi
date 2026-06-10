@@ -48,3 +48,7 @@ next-env.d.ts
 /examples/
 /examples/**
 .env.local
+
+# scratch / temp artifacts
+/.tmp/
+/.tmp/**

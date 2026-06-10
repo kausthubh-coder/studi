@@ -1,6 +1,0 @@
-{
-  "setup-worktree": [
-    "bun install",
-    "$mainRoot = Split-Path (git rev-parse --git-common-dir) -Parent; if (Test-Path \"$mainRoot\\.env.local\") { Copy-Item \"$mainRoot\\.env.local\" \".env.local\"; Write-Host '✅ Copied .env.local' } else { Write-Host '⚠️ No .env.local found' }"
-  ]
-}

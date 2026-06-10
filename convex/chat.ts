@@ -21,9 +21,6 @@ const internalApi = internal as unknown as {
     incrementFreeOnboardingUsageInternal: FunctionReference<"mutation", "internal">;
     recordTextAiCostInternal: FunctionReference<"mutation", "internal">;
   };
-  plans: {
-    deletePlanForThreadInternal: FunctionReference<"mutation", "internal">;
-  };
 };
 
 const threadSummaryValidator = v.object({
@@ -32,18 +29,6 @@ const threadSummaryValidator = v.object({
   threadId: v.string(),
   title: v.optional(v.string()),
   lastMessageAt: v.optional(v.number()),
-  hasLab: v.boolean(),
-  hasActiveLab: v.boolean(),
-  hasPlan: v.boolean(),
-  planProgressPercent: v.optional(v.number()),
-  planPhase: v.optional(
-    v.union(
-      v.literal("discovery"),
-      v.literal("draft_review"),
-      v.literal("active"),
-      v.literal("completed"),
-    ),
-  ),
 });
 
 const imageAttachmentForModelValidator = v.object({
@@ -65,15 +50,6 @@ const queuedSendResultValidator = v.object({
   deduped: v.boolean(),
 });
 
-const savedVoiceTurnResultValidator = v.object({
-  messageId: v.string(),
-});
-
-const voiceToolNameValidator = v.union(
-  v.literal("create_spark"),
-  v.literal("create_warning"),
-);
-
 function truncateTitle(value: string): string {
   return value.length > 60 ? `${value.slice(0, 60)}...` : value;
 }
@@ -93,66 +69,12 @@ export const listThreads = query({
       .order("desc")
       .take(100);
 
-    const labSessions = await ctx.db
-      .query("labSessions")
-      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
-      .collect();
-
-    const plans = await ctx.db
-      .query("learningPlans")
-      .withIndex("by_userId_and_updatedAt", (q) =>
-        q.eq("userId", identity.subject),
-      )
-      .collect();
-
-    const labStatusByThreadId = new Map<
-      string,
-      {
-        hasLab: boolean;
-        hasActiveLab: boolean;
-      }
-    >();
-
-    for (const session of labSessions) {
-      const existing = labStatusByThreadId.get(session.threadId) ?? {
-        hasLab: false,
-        hasActiveLab: false,
-      };
-      existing.hasLab = true;
-      existing.hasActiveLab = true;
-      labStatusByThreadId.set(session.threadId, existing);
-    }
-
-    const planByThreadId = new Map<
-      string,
-      {
-        hasPlan: boolean;
-        planProgressPercent?: number;
-        planPhase?: "discovery" | "draft_review" | "active" | "completed";
-      }
-    >();
-
-    for (const plan of plans) {
-      planByThreadId.set(plan.threadId, {
-        hasPlan: true,
-        planProgressPercent: plan.progressPercent,
-        planPhase: plan.phase,
-      });
-    }
-
     return threads.map((thread) => ({
       _id: thread._id,
       _creationTime: thread._creationTime,
       threadId: thread.threadId,
       title: thread.title,
       lastMessageAt: thread.lastMessageAt,
-      hasLab: labStatusByThreadId.get(thread.threadId)?.hasLab ?? false,
-      hasActiveLab:
-        labStatusByThreadId.get(thread.threadId)?.hasActiveLab ?? false,
-      hasPlan: planByThreadId.get(thread.threadId)?.hasPlan ?? false,
-      planProgressPercent: planByThreadId.get(thread.threadId)
-        ?.planProgressPercent,
-      planPhase: planByThreadId.get(thread.threadId)?.planPhase,
     }));
   },
 });
@@ -298,7 +220,6 @@ export const sendMessage = mutation({
     prompt: v.optional(v.string()),
     attachmentIds: v.optional(v.array(v.id("attachments"))),
     requestId: v.string(),
-    source: v.optional(v.union(v.literal("text"), v.literal("voice"))),
   },
   returns: queuedSendResultValidator,
   handler: async (ctx, args) => {
@@ -401,7 +322,6 @@ export const sendMessage = mutation({
         threadId: args.threadId,
         userId: identity.subject,
         promptMessageId: messageId,
-        source: args.source ?? "text",
       },
     );
 
@@ -424,124 +344,6 @@ export const sendMessage = mutation({
       promptMessageId: messageId,
       deduped: false,
     };
-  },
-});
-
-export const saveVoiceTranscriptTurn = mutation({
-  args: {
-    threadId: v.string(),
-    text: v.string(),
-    role: v.union(v.literal("user"), v.literal("assistant")),
-  },
-  returns: savedVoiceTurnResultValidator,
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthorized");
-    }
-
-    const text = args.text.trim();
-    if (!text) {
-      throw new Error("Voice transcript cannot be empty");
-    }
-
-    const ownedThread = await ctx.db
-      .query("userThreads")
-      .withIndex("by_userId_and_threadId", (q) =>
-        q.eq("userId", identity.subject).eq("threadId", args.threadId),
-      )
-      .unique();
-
-    if (!ownedThread) {
-      throw new Error("Thread not found");
-    }
-
-    const { messageId } = await saveMessage(ctx, components.agent, {
-      threadId: args.threadId,
-      userId: identity.subject,
-      message: {
-        role: args.role,
-        content: [{ type: "text", text }],
-      },
-    });
-
-    const now = Date.now();
-    await ctx.db.patch(ownedThread._id, {
-      lastMessageAt: now,
-      title:
-        args.role === "user" &&
-        text &&
-        (!ownedThread.title || ownedThread.title === "New Thread")
-          ? truncateTitle(text)
-          : ownedThread.title,
-    });
-
-    return { messageId };
-  },
-});
-
-function toToolResultOutput(
-  value: unknown,
-): { type: "text"; value: string } | { type: "json"; value: unknown } {
-  if (typeof value === "string") {
-    return {
-      type: "text",
-      value,
-    };
-  }
-
-  return {
-    type: "json",
-    value,
-  };
-}
-
-export const saveVoiceToolResultTurn = mutation({
-  args: {
-    threadId: v.string(),
-    callId: v.string(),
-    toolName: voiceToolNameValidator,
-    output: v.any(),
-  },
-  returns: savedVoiceTurnResultValidator,
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthorized");
-    }
-
-    const ownedThread = await ctx.db
-      .query("userThreads")
-      .withIndex("by_userId_and_threadId", (q) =>
-        q.eq("userId", identity.subject).eq("threadId", args.threadId),
-      )
-      .unique();
-
-    if (!ownedThread) {
-      throw new Error("Thread not found");
-    }
-
-    const { messageId } = await saveMessage(ctx, components.agent, {
-      threadId: args.threadId,
-      userId: identity.subject,
-      message: {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: args.callId,
-            toolName: args.toolName,
-            output: toToolResultOutput(args.output),
-          },
-        ],
-      },
-    });
-
-    await ctx.db.patch(ownedThread._id, {
-      lastMessageAt: Date.now(),
-    });
-
-    return { messageId };
   },
 });
 
@@ -578,28 +380,6 @@ export const createThreadRecord = internalMutation({
       title: args.title,
       lastMessageAt: args.lastMessageAt ?? Date.now(),
     });
-    return null;
-  },
-});
-
-export const updateThreadTitle = internalMutation({
-  args: {
-    userId: v.string(),
-    threadId: v.string(),
-    title: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const thread = await ctx.db
-      .query("userThreads")
-      .withIndex("by_userId_and_threadId", (q) =>
-        q.eq("userId", args.userId).eq("threadId", args.threadId),
-      )
-      .unique();
-    if (!thread) throw new Error("Thread not found");
-    if (!thread.title || thread.title === "New Thread") {
-      await ctx.db.patch(thread._id, { title: args.title });
-    }
     return null;
   },
 });
@@ -658,11 +438,6 @@ export const deleteThreadRecordInternal = internalMutation({
     for (const interaction of sparkInteractions) {
       await ctx.db.delete(interaction._id);
     }
-
-    await ctx.runMutation(internalApi.plans.deletePlanForThreadInternal, {
-      userId: args.userId,
-      threadId: args.threadId,
-    });
 
     await ctx.db.delete(thread._id);
     return true;
