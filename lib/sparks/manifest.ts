@@ -1,3 +1,5 @@
+import type { ModelRouteKey } from "../model-config";
+
 export const codePlaygroundLanguages = [
   "python",
   "javascript",
@@ -27,13 +29,15 @@ export type SparkRendererKey =
 
 export type SparkDefaultPlacement = "inline" | "side_panel";
 
-export type SparkWorkerModelKey =
+export type SparkWorkerModelKey = Extract<
+  ModelRouteKey,
   | "sparkSceneWorker"
   | "sparkDesmosWorker"
   | "sparkCodeWorker"
   | "sparkWebWorker"
   | "sparkQuizWorker"
-  | "sparkFlashWorker";
+  | "sparkFlashWorker"
+>;
 
 export type SparkManifestEntry = {
   id: string;

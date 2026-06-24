@@ -35,6 +35,7 @@ import { IconCompose } from "@/components/studi-chat/icons";
 import { PanelRightOpen, TerminalSquare } from "lucide-react";
 import type { ThreadTrackRecord } from "@/components/tracks/TrackCard";
 import type { TrackItemStatus } from "@/lib/tracks/contracts";
+import { VoiceControl } from "@/components/voice/VoiceControl";
 
 function makeRequestId(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -686,6 +687,10 @@ export default function StudiChat() {
                 onMarkTrackItem={(trackId, itemId, status) =>
                   void handleMarkTrackItem(trackId, itemId, status)
                 }
+              />
+              <VoiceControl
+                threadId={selectedThreadId}
+                disabled={isComposerBusy || hasActiveAgentWork}
               />
               <Composer
                 pendingAttachments={pendingAttachments}

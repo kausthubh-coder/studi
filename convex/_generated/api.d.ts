@@ -29,6 +29,8 @@ import type * as tracks from "../tracks.js";
 import type * as tracks_schemas from "../tracks/schemas.js";
 import type * as tracks_tools from "../tracks/tools.js";
 import type * as tracks_validators from "../tracks/validators.js";
+import type * as voice from "../voice.js";
+import type * as voiceActions from "../voiceActions.js";
 import type * as waitlist from "../waitlist.js";
 import type * as waitlistActions from "../waitlistActions.js";
 import type * as waitlistPublic from "../waitlistPublic.js";
@@ -61,6 +63,8 @@ declare const fullApi: ApiFromModules<{
   "tracks/schemas": typeof tracks_schemas;
   "tracks/tools": typeof tracks_tools;
   "tracks/validators": typeof tracks_validators;
+  voice: typeof voice;
+  voiceActions: typeof voiceActions;
   waitlist: typeof waitlist;
   waitlistActions: typeof waitlistActions;
   waitlistPublic: typeof waitlistPublic;

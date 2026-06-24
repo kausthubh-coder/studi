@@ -21,7 +21,8 @@
     "smoke:daytona": "bun scripts/daytona-smoke.ts",
     "prompts:sync": "bun lib/prompts/sync.ts",
     "prompts:check": "bun lib/prompts/sync.ts --check",
-    "playground": "bunx @convex-dev/agent-playground"
+    "playground": "bunx @convex-dev/agent-playground",
+    "smoke:voice": "bun scripts/smoke-voice.ts"
   },
   "dependencies": {
     "@clerk/backend": "^2.33.0",
