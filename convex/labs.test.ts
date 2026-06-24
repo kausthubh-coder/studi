@@ -162,6 +162,24 @@ describe("lab session Convex ownership", () => {
         labPreviewUrl: "https://preview.example/3000",
       });
 
+      const writeCountAfterSuccess = writes.length;
+      const escapedPathResult = await authed.action(
+        api.labActions.materializeCodeSpark,
+        {
+          threadId: "thread_a",
+          sparkInstanceId: "spark-escape",
+          language: "python",
+          files: [{ path: "../outside.py", content: "print(0)\n" }],
+          primaryFile: "../outside.py",
+          runCommand: "python outside.py",
+        },
+      );
+      expect(escapedPathResult).toMatchObject({
+        status: "error",
+        error: "Lab paths must stay within the workspace",
+      });
+      expect(writes).toHaveLength(writeCountAfterSuccess);
+
       await expect(
         t.withIdentity({ subject: "user_b" }).action(
           api.labActions.materializeCodeSpark,
