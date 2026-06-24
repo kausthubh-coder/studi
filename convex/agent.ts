@@ -11,6 +11,7 @@ import {
   type ModelProfile,
 } from "../lib/model-config";
 import { getCodeSparkContextTool } from "../lib/agent-tools/getCodeSparkContextTool";
+import { buildLabToolset } from "../lib/agent-tools/labTools";
 import { renderPrompt } from "../lib/prompts";
 import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
 import { components, internal } from "./_generated/api";
@@ -139,6 +140,7 @@ export function buildStudiToolset(profile: ModelProfile) {
   return {
     create_spark: createSparkToolForProfile(profile),
     get_code_spark_context: getCodeSparkContextTool,
+    ...buildLabToolset(),
   };
 }
 

@@ -54,6 +54,60 @@ export default defineSchema({
       "sparkInstanceId",
     ]),
 
+  labSessions: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    title: v.optional(v.string()),
+    provider: v.literal("daytona"),
+    sandboxId: v.string(),
+    workspacePath: v.string(),
+    language: v.optional(
+      v.union(
+        v.literal("python"),
+        v.literal("javascript"),
+        v.literal("typescript"),
+      ),
+    ),
+    status: v.union(
+      v.literal("starting"),
+      v.literal("ready"),
+      v.literal("error"),
+      v.literal("archived"),
+    ),
+    previewUrls: v.optional(
+      v.array(
+        v.object({
+          port: v.number(),
+          url: v.string(),
+          token: v.optional(v.string()),
+        }),
+      ),
+    ),
+    lastError: v.optional(
+      v.object({
+        message: v.string(),
+        category: v.optional(v.string()),
+        retriable: v.optional(v.boolean()),
+        occurredAt: v.number(),
+      }),
+    ),
+    lastActiveAt: v.number(),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_threadId_and_lastActiveAt", [
+      "userId",
+      "threadId",
+      "lastActiveAt",
+    ])
+    .index("by_userId_and_status_and_lastActiveAt", [
+      "userId",
+      "status",
+      "lastActiveAt",
+    ])
+    .index("by_sandboxId", ["sandboxId"]),
+
   billingProfiles: defineTable({
     userId: v.string(),
     planKey: v.union(
@@ -127,6 +181,7 @@ export default defineSchema({
       v.literal("agent_usage"),
       v.literal("agent_runtime"),
       v.literal("spark"),
+      v.literal("lab"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),

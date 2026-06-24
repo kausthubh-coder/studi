@@ -439,6 +439,17 @@ export const deleteThreadRecordInternal = internalMutation({
       await ctx.db.delete(interaction._id);
     }
 
+    const labSessions = await ctx.db
+      .query("labSessions")
+      .withIndex("by_userId_and_threadId_and_lastActiveAt", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .collect();
+
+    for (const labSession of labSessions) {
+      await ctx.db.delete(labSession._id);
+    }
+
     await ctx.db.delete(thread._id);
     return true;
   },
