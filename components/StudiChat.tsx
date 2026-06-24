@@ -31,6 +31,7 @@ import type {
 import { SparkPanel } from "@/components/sparks/SparkPanel";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { IconCompose } from "@/components/studi-chat/icons";
+import { VoiceControl } from "@/components/voice/VoiceControl";
 
 function makeRequestId(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -592,6 +593,10 @@ export default function StudiChat() {
                 messages={uiMessages.results}
                 onExpandSpark={handleExpandSpark}
                 expandedSparkInstanceId={expandedSpark?.sparkInstanceId ?? null}
+              />
+              <VoiceControl
+                threadId={selectedThreadId}
+                disabled={isComposerBusy || hasActiveAgentWork}
               />
               <Composer
                 pendingAttachments={pendingAttachments}
