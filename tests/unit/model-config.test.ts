@@ -23,6 +23,15 @@ const defaultOpus48RouteKeys: ModelRouteKey[] = [
   "sparkFlashWorker",
 ];
 
+const sparkWorkerRouteKeys: ModelRouteKey[] = [
+  "sparkSceneWorker",
+  "sparkDesmosWorker",
+  "sparkCodeWorker",
+  "sparkWebWorker",
+  "sparkQuizWorker",
+  "sparkFlashWorker",
+];
+
 describe("model config", () => {
   it("uses the verified OpenRouter Claude Opus 4.8 slug for active defaults", () => {
     expect(activeModelProfile).toBe("balanced");
@@ -43,8 +52,9 @@ describe("model config", () => {
     expect(fastConfig.codiAgent).toBe(openRouterClaudeOpus48Model);
     expect(fastConfig.voiceTextFallback).toBe(openRouterClaudeOpus48Model);
     expect(fastConfig.planAgent).toBe(openRouterClaudeOpus48Model);
-    expect(fastConfig.sparkSceneWorker).toBe(openRouterClaudeOpus48FastModel);
-    expect(fastConfig.sparkWebWorker).toBe(openRouterClaudeOpus48FastModel);
+    for (const routeKey of sparkWorkerRouteKeys) {
+      expect(fastConfig[routeKey]).toBe(openRouterClaudeOpus48FastModel);
+    }
     expect(getModelForRoute("sparkSceneWorker", "fast")).toBe(
       openRouterClaudeOpus48FastModel,
     );
