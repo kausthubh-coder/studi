@@ -21,6 +21,9 @@ const internalApi = internal as unknown as {
     incrementFreeOnboardingUsageInternal: FunctionReference<"mutation", "internal">;
     recordTextAiCostInternal: FunctionReference<"mutation", "internal">;
   };
+  tracks: {
+    deleteForThreadInternal: FunctionReference<"mutation", "internal">;
+  };
 };
 
 const threadSummaryValidator = v.object({
@@ -449,6 +452,11 @@ export const deleteThreadRecordInternal = internalMutation({
     for (const labSession of labSessions) {
       await ctx.db.delete(labSession._id);
     }
+
+    await ctx.runMutation(internalApi.tracks.deleteForThreadInternal, {
+      userId: args.userId,
+      threadId: args.threadId,
+    });
 
     await ctx.db.delete(thread._id);
     return true;

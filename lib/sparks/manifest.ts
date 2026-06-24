@@ -28,11 +28,12 @@ export type SparkRendererKey =
 export type SparkDefaultPlacement = "inline" | "side_panel";
 
 export type SparkWorkerModelKey =
-  | "sparkScene"
-  | "sparkDesmos"
-  | "sparkCode"
-  | "sparkQuiz"
-  | "sparkFlash";
+  | "sparkSceneWorker"
+  | "sparkDesmosWorker"
+  | "sparkCodeWorker"
+  | "sparkWebWorker"
+  | "sparkQuizWorker"
+  | "sparkFlashWorker";
 
 export type SparkManifestEntry = {
   id: string;
@@ -60,7 +61,7 @@ export const sparkManifest = [
     workerShape: "html",
     rendererKey: "html_css_js_sandbox",
     defaultPlacement: "side_panel",
-    workerModelKey: "sparkScene",
+    workerModelKey: "sparkSceneWorker",
   },
   {
     id: "quiz",
@@ -74,7 +75,7 @@ export const sparkManifest = [
     workerShape: "payload",
     rendererKey: "quiz",
     defaultPlacement: "inline",
-    workerModelKey: "sparkQuiz",
+    workerModelKey: "sparkQuizWorker",
   },
   {
     id: "flash_card",
@@ -88,7 +89,7 @@ export const sparkManifest = [
     workerShape: "payload",
     rendererKey: "flash_card",
     defaultPlacement: "inline",
-    workerModelKey: "sparkFlash",
+    workerModelKey: "sparkFlashWorker",
   },
   {
     id: "desmos_graph",
@@ -102,7 +103,7 @@ export const sparkManifest = [
     workerShape: "payload",
     rendererKey: "desmos_graph",
     defaultPlacement: "side_panel",
-    workerModelKey: "sparkDesmos",
+    workerModelKey: "sparkDesmosWorker",
   },
   {
     id: "code_playground",
@@ -116,7 +117,7 @@ export const sparkManifest = [
     workerShape: "payload",
     rendererKey: "code_playground",
     defaultPlacement: "side_panel",
-    workerModelKey: "sparkCode",
+    workerModelKey: "sparkCodeWorker",
   },
   {
     id: "web_playground",
@@ -130,7 +131,7 @@ export const sparkManifest = [
     workerShape: "payload",
     rendererKey: "web_playground",
     defaultPlacement: "side_panel",
-    workerModelKey: "sparkCode",
+    workerModelKey: "sparkWebWorker",
   },
 ] as const satisfies readonly SparkManifestEntry[];
 
