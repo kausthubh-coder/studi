@@ -31,6 +31,8 @@ import type {
 import { SparkPanel } from "@/components/sparks/SparkPanel";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { IconCompose } from "@/components/studi-chat/icons";
+import type { ThreadTrackRecord } from "@/components/tracks/TrackCard";
+import type { TrackItemStatus } from "@/lib/tracks/contracts";
 
 function makeRequestId(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -76,6 +78,8 @@ export default function StudiChat() {
   );
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
   const saveAttachment = useMutation(api.chat.saveAttachment);
+  const acceptTrack = useMutation(api.tracks.acceptDraft);
+  const markTrackItem = useMutation(api.tracks.markItem);
   const syncBillingProfile = useAction(
     api.billingActions.syncCurrentUserBillingProfile,
   );
@@ -91,6 +95,8 @@ export default function StudiChat() {
     "chat",
   );
   const [sparkChatWidth, setSparkChatWidth] = useState(420);
+  const [trackBusy, setTrackBusy] = useState(false);
+  const [trackError, setTrackError] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -98,6 +104,10 @@ export default function StudiChat() {
   const [pendingAttachments, setPendingAttachments] = useState<
     PendingAttachment[]
   >([]);
+  const currentTrack = useQuery(
+    api.tracks.getThreadTrack,
+    selectedThreadId ? { threadId: selectedThreadId } : "skip",
+  ) as ThreadTrackRecord | null | undefined;
 
   const didBackfillRef = useRef(false);
   const selectedThreadIdRef = useRef<string | null>(null);
@@ -315,6 +325,7 @@ export default function StudiChat() {
 
   const handleSelectThread = useCallback((id: string | null) => {
     setThreadDeleteError(null);
+    setTrackError(null);
     setSelectedThreadId(id);
     setExpandedSpark(null);
     setMobilePanelView("chat");
@@ -358,6 +369,49 @@ export default function StudiChat() {
       setMobilePanelView("spark");
     },
     [],
+  );
+
+  const handleAcceptTrack = useCallback(
+    async (trackId: Id<"learningTracks">) => {
+      setTrackError(null);
+      setTrackBusy(true);
+      try {
+        await acceptTrack({ trackId });
+      } catch (error) {
+        console.error("Accept track failed", error);
+        setTrackError(getErrorMessage(error));
+      } finally {
+        setTrackBusy(false);
+      }
+    },
+    [acceptTrack],
+  );
+
+  const handleReviseTrack = useCallback((track: ThreadTrackRecord) => {
+    setTrackError(null);
+    const title = track.draftTrack?.title ?? track.acceptedTrack?.title ?? "this Track";
+    setInput(`Revise "${title}" to `);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
+
+  const handleMarkTrackItem = useCallback(
+    async (
+      trackId: Id<"learningTracks">,
+      itemId: string,
+      status: TrackItemStatus,
+    ) => {
+      setTrackError(null);
+      setTrackBusy(true);
+      try {
+        await markTrackItem({ trackId, itemId, status });
+      } catch (error) {
+        console.error("Track progress update failed", error);
+        setTrackError(getErrorMessage(error));
+      } finally {
+        setTrackBusy(false);
+      }
+    },
+    [markTrackItem],
   );
 
   useEffect(() => {
@@ -592,6 +646,14 @@ export default function StudiChat() {
                 messages={uiMessages.results}
                 onExpandSpark={handleExpandSpark}
                 expandedSparkInstanceId={expandedSpark?.sparkInstanceId ?? null}
+                currentTrack={currentTrack ?? null}
+                trackBusy={trackBusy}
+                trackError={trackError}
+                onAcceptTrack={(trackId) => void handleAcceptTrack(trackId)}
+                onReviseTrack={handleReviseTrack}
+                onMarkTrackItem={(trackId, itemId, status) =>
+                  void handleMarkTrackItem(trackId, itemId, status)
+                }
               />
               <Composer
                 pendingAttachments={pendingAttachments}

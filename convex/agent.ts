@@ -16,6 +16,7 @@ import { renderPrompt } from "../lib/prompts";
 import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
 import { components, internal } from "./_generated/api";
 import { createSparkToolForProfile } from "./sparks/tools";
+import { buildTrackToolset } from "./tracks/tools";
 
 const internalApi = internal as unknown as {
   billing: {
@@ -140,6 +141,7 @@ export function buildStudiToolset(profile: ModelProfile) {
   return {
     create_spark: createSparkToolForProfile(profile),
     get_code_spark_context: getCodeSparkContextTool,
+    ...buildTrackToolset(),
   };
 }
 

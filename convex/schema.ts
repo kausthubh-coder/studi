@@ -1,5 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+  learningTrackValidator,
+  trackLinkedActivityValidator,
+  trackPhaseValidator,
+  trackProgressValidator,
+} from "./tracks/validators";
 
 export default defineSchema({
   userThreads: defineTable({
@@ -53,6 +59,22 @@ export default defineSchema({
       "threadId",
       "sparkInstanceId",
     ]),
+
+  learningTracks: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    phase: trackPhaseValidator,
+    revision: v.number(),
+    draftTrack: v.optional(learningTrackValidator),
+    acceptedTrack: v.optional(learningTrackValidator),
+    progress: trackProgressValidator,
+    linkedActivities: v.array(trackLinkedActivityValidator),
+    revisionNote: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_threadId", ["userId", "threadId"])
+    .index("by_userId_and_updatedAt", ["userId", "updatedAt"]),
 
   billingProfiles: defineTable({
     userId: v.string(),
