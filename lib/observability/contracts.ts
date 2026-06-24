@@ -6,6 +6,7 @@ export const telemetrySources = [
   "voice",
   "track",
   "quota",
+  "plan_tool",
 ] as const;
 
 export type TelemetrySource = (typeof telemetrySources)[number];

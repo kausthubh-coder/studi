@@ -35,6 +35,7 @@ const telemetrySourceValidator = v.union(
   v.literal("voice"),
   v.literal("track"),
   v.literal("quota"),
+  v.literal("plan_tool"),
 );
 
 const telemetryStatusValidator = v.union(

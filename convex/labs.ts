@@ -21,6 +21,7 @@ const labStatusValidator = v.union(
   v.literal("error"),
   v.literal("archived"),
 );
+type LabStatus = "starting" | "ready" | "error" | "archived";
 
 const labPreviewValidator = v.object({
   port: v.number(),
@@ -53,6 +54,41 @@ const labSessionValidator = v.object({
   createdAt: v.number(),
   updatedAt: v.number(),
 });
+
+type NormalizedLabSession = Omit<
+  Doc<"labSessions">,
+  "provider" | "workspacePath" | "status"
+> & {
+  provider: "daytona";
+  workspacePath: string;
+  status: LabStatus;
+};
+
+type ReusableLabSession = Doc<"labSessions"> & {
+  provider: "daytona";
+  workspacePath: string;
+  status: Exclude<LabStatus, "archived">;
+};
+
+function normalizeLabSession(session: Doc<"labSessions">): NormalizedLabSession {
+  return {
+    ...session,
+    provider: session.provider ?? "daytona",
+    workspacePath: session.workspacePath ?? "legacy-workspace",
+    status: session.status ?? "archived",
+  };
+}
+
+function isReusableLabSession(
+  session: Doc<"labSessions">,
+): session is ReusableLabSession {
+  return (
+    session.provider === "daytona" &&
+    typeof session.workspacePath === "string" &&
+    session.status !== undefined &&
+    session.status !== "archived"
+  );
+}
 
 async function requireThreadOwnership(
   ctx: QueryCtx | MutationCtx,
@@ -104,9 +140,10 @@ export const listLabSessions = query({
       .order("desc")
       .take(50);
 
-    return args.includeArchived
+    const visibleSessions = args.includeArchived
       ? sessions
-      : sessions.filter((session) => session.status !== "archived");
+      : sessions.filter((session) => (session.status ?? "archived") !== "archived");
+    return visibleSessions.map(normalizeLabSession);
   },
 });
 
@@ -123,7 +160,7 @@ export const getLabSession = query({
       userId: identity.subject,
       labSessionId: args.labSessionId,
     });
-    return session;
+    return normalizeLabSession(session);
   },
 });
 
@@ -164,7 +201,7 @@ export const createLabSessionInternal = internalMutation({
 
     const created = await ctx.db.get(id);
     if (!created) throw new Error("Failed to create lab session");
-    return created;
+    return normalizeLabSession(created);
   },
 });
 
@@ -182,8 +219,8 @@ export const patchLabSessionRuntimeInternal = internalMutation({
     const session = await getOwnedLabSession(ctx, args);
     const now = Date.now();
     await ctx.db.patch(session._id, {
-      workspacePath: args.workspacePath ?? session.workspacePath,
-      status: args.status ?? session.status,
+      workspacePath: args.workspacePath ?? session.workspacePath ?? "legacy-workspace",
+      status: args.status ?? session.status ?? "error",
       previewUrls: args.previewUrls ?? session.previewUrls,
       lastError: args.clearError ? undefined : session.lastError,
       lastActiveAt: now,
@@ -191,7 +228,7 @@ export const patchLabSessionRuntimeInternal = internalMutation({
     });
     const updated = await ctx.db.get(session._id);
     if (!updated) throw new Error("Lab session not found");
-    return updated;
+    return normalizeLabSession(updated);
   },
 });
 
@@ -219,7 +256,7 @@ export const recordLabErrorInternal = internalMutation({
     });
     const updated = await ctx.db.get(session._id);
     if (!updated) throw new Error("Lab session not found");
-    return updated;
+    return normalizeLabSession(updated);
   },
 });
 
@@ -239,7 +276,7 @@ export const archiveLabSessionInternal = internalMutation({
     });
     const updated = await ctx.db.get(session._id);
     if (!updated) throw new Error("Lab session not found");
-    return updated;
+    return normalizeLabSession(updated);
   },
 });
 
@@ -250,7 +287,8 @@ export const getLabSessionForUserInternal = internalQuery({
   },
   returns: labSessionValidator,
   handler: async (ctx, args) => {
-    return await getOwnedLabSession(ctx, args);
+    const session = await getOwnedLabSession(ctx, args);
+    return normalizeLabSession(session);
   },
 });
 
@@ -300,11 +338,11 @@ export const listLabSessionsForThreadInternal = internalQuery({
       .collect();
 
     return sessions
-      .filter((session) => session.status !== "archived")
+      .filter(isReusableLabSession)
       .map((session) => ({
         labSessionId: session._id,
         sandboxId: session.sandboxId,
-        provider: session.provider,
+        provider: "daytona" as const,
       }));
   },
 });
@@ -326,13 +364,13 @@ export const findReusableLabSessionForThreadInternal = internalQuery({
       .order("desc")
       .take(20);
 
-    return (
-      sessions.find(
-        (session) =>
-          session.status !== "archived" &&
-          (!args.language || !session.language || session.language === args.language),
-      ) ?? null
+    const reusableSession = sessions.find(
+      (session) =>
+        isReusableLabSession(session) &&
+        (!args.language || !session.language || session.language === args.language),
     );
+
+    return reusableSession ? normalizeLabSession(reusableSession) : null;
   },
 });
 
@@ -355,6 +393,6 @@ export const renameLabSession = mutation({
     });
     const updated = await ctx.db.get(session._id);
     if (!updated) throw new Error("Lab session not found");
-    return updated;
+    return normalizeLabSession(updated);
   },
 });

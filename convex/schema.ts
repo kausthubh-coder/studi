@@ -68,9 +68,9 @@ export default defineSchema({
     userId: v.string(),
     threadId: v.string(),
     title: v.optional(v.string()),
-    provider: v.literal("daytona"),
+    provider: v.optional(v.literal("daytona")),
     sandboxId: v.string(),
-    workspacePath: v.string(),
+    workspacePath: v.optional(v.string()),
     language: v.optional(
       v.union(
         v.literal("python"),
@@ -78,12 +78,15 @@ export default defineSchema({
         v.literal("typescript"),
       ),
     ),
-    status: v.union(
-      v.literal("starting"),
-      v.literal("ready"),
-      v.literal("error"),
-      v.literal("archived"),
+    status: v.optional(
+      v.union(
+        v.literal("starting"),
+        v.literal("ready"),
+        v.literal("error"),
+        v.literal("archived"),
+      ),
     ),
+    metadata: v.optional(v.any()),
     previewUrls: v.optional(
       v.array(
         v.object({
@@ -193,6 +196,12 @@ export default defineSchema({
     textPromptCount: v.number(),
     textAiCostUsd: v.number(),
     totalEstimatedCostUsd: v.number(),
+    labActiveSeconds: v.optional(v.number()),
+    labEstimatedCostUsd: v.optional(v.number()),
+    labSessionCount: v.optional(v.number()),
+    lastLabActivityAt: v.optional(v.number()),
+    voiceEstimatedCostUsd: v.optional(v.number()),
+    voiceSeconds: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_userId_and_billingPeriod", ["userId", "billingPeriod"]),
 
@@ -242,6 +251,7 @@ export default defineSchema({
       v.literal("voice"),
       v.literal("track"),
       v.literal("quota"),
+      v.literal("plan_tool"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),
