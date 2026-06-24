@@ -30,6 +30,7 @@ const telemetrySourceValidator = v.union(
   v.literal("agent_usage"),
   v.literal("agent_runtime"),
   v.literal("spark"),
+  v.literal("lab"),
 );
 
 const telemetryStatusValidator = v.union(

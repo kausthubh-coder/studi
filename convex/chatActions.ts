@@ -8,6 +8,12 @@ import { activeModelProfile } from "../lib/model-config";
 import { buildStudiToolset, getStudiAgent } from "./agent";
 
 const internalApi = internal as unknown as {
+  labActions: {
+    archiveThreadLabsInternal: FunctionReference<"action", "internal">;
+  };
+  labs: {
+    listLabSessionsForThreadInternal: FunctionReference<"query", "internal">;
+  };
   telemetry: {
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
   };
@@ -110,6 +116,25 @@ export const deleteThread: ReturnType<typeof action> = action({
       userId,
       threadId: args.threadId,
     });
+
+    const labsToArchive = await ctx.runQuery(
+      internalApi.labs.listLabSessionsForThreadInternal,
+      {
+        userId,
+        threadId: args.threadId,
+      },
+    );
+    if (labsToArchive.length > 0) {
+      await ctx.scheduler.runAfter(
+        0,
+        internalApi.labActions.archiveThreadLabsInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          labs: labsToArchive,
+        },
+      );
+    }
 
     const thread = await ctx.runQuery(components.agent.threads.getThread, {
       threadId: args.threadId,

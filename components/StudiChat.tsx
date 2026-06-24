@@ -29,8 +29,10 @@ import type {
   ThreadSummary,
 } from "@/components/studi-chat/types";
 import { SparkPanel } from "@/components/sparks/SparkPanel";
+import { LabWorkspace } from "@/components/labs/LabWorkspace";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { IconCompose } from "@/components/studi-chat/icons";
+import { PanelRightOpen, TerminalSquare } from "lucide-react";
 
 function makeRequestId(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -86,6 +88,7 @@ export default function StudiChat() {
   const [threadDeleteError, setThreadDeleteError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [expandedSpark, setExpandedSpark] = useState<ExpandedSpark | null>(null);
+  const [isLabPanelOpen, setIsLabPanelOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobilePanelView, setMobilePanelView] = useState<"chat" | "spark">(
     "chat",
@@ -303,6 +306,7 @@ export default function StudiChat() {
     setThreadDeleteError(null);
     setSelectedThreadId(null);
     setExpandedSpark(null);
+    setIsLabPanelOpen(false);
     setMobilePanelView("chat");
     setInput("");
     setPendingAttachments((previous) => {
@@ -317,6 +321,7 @@ export default function StudiChat() {
     setThreadDeleteError(null);
     setSelectedThreadId(id);
     setExpandedSpark(null);
+    setIsLabPanelOpen(false);
     setMobilePanelView("chat");
     setIsMobileSidebarOpen(false);
   }, []);
@@ -355,6 +360,7 @@ export default function StudiChat() {
       sparkInstanceId: string,
     ) => {
       setExpandedSpark({ artifact, threadId, sparkInstanceId });
+      setIsLabPanelOpen(false);
       setMobilePanelView("spark");
     },
     [],
@@ -533,6 +539,26 @@ export default function StudiChat() {
           </div>
         ) : null}
 
+        {!isOnWelcome ? (
+          <button
+            type="button"
+            className="lab-toggle-btn"
+            onClick={() => {
+              setExpandedSpark(null);
+              setIsLabPanelOpen((value) => !value);
+            }}
+            aria-pressed={isLabPanelOpen}
+            aria-label={isLabPanelOpen ? "Close lab panel" : "Open lab panel"}
+            title={isLabPanelOpen ? "Close lab" : "Open lab"}
+          >
+            {isLabPanelOpen ? (
+              <PanelRightOpen className="h-4 w-4" />
+            ) : (
+              <TerminalSquare className="h-4 w-4" />
+            )}
+          </button>
+        ) : null}
+
         {isOnWelcome ? (
           <WelcomeView
             pendingAttachments={pendingAttachments}
@@ -550,7 +576,7 @@ export default function StudiChat() {
         ) : (
           <div
             className={`flex flex-1 overflow-hidden ${
-              expandedSpark ? "flex-col lg:flex-row" : ""
+              expandedSpark || isLabPanelOpen ? "flex-col lg:flex-row" : ""
             }`}
           >
             {expandedSpark && isMobile ? (
@@ -576,6 +602,8 @@ export default function StudiChat() {
               className={`relative flex min-w-0 flex-col overflow-hidden ${
                 expandedSpark
                   ? `spark-chat-column flex-1 lg:flex-none ${isMobile && mobilePanelView !== "chat" ? "hidden" : ""}`
+                  : isLabPanelOpen
+                    ? "lab-chat-column flex-1 lg:flex-none"
                   : "flex-1"
               }`}
               style={
@@ -583,6 +611,10 @@ export default function StudiChat() {
                   ? ({
                       "--spark-chat-width": `${sparkChatWidth}px`,
                     } as React.CSSProperties)
+                  : isLabPanelOpen
+                    ? ({
+                        "--lab-chat-width": `${Math.max(360, sparkChatWidth)}px`,
+                      } as React.CSSProperties)
                   : undefined
               }
             >
@@ -621,6 +653,10 @@ export default function StudiChat() {
                   spark={expandedSpark}
                   onClose={() => setExpandedSpark(null)}
                 />
+              </div>
+            ) : isLabPanelOpen && selectedThreadId ? (
+              <div className="flex min-w-0 flex-1">
+                <LabWorkspace threadId={selectedThreadId} />
               </div>
             ) : null}
           </div>
