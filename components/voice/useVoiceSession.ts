@@ -1,7 +1,7 @@
 "use client";
 
 import { useAction, useMutation } from "convex/react";
-import { useCallback, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import {
   realtimeCallsUrl,
@@ -37,10 +37,18 @@ type VoiceToolResult = {
   error?: string;
 };
 
+type VoiceTranscriptAction =
+  | RealtimeTranscriptEvent
+  | { type: "session.reset" };
+
 function transcriptReducer(
   state: VoiceTranscriptState,
-  event: RealtimeTranscriptEvent,
+  event: VoiceTranscriptAction,
 ) {
+  if (event.type === "session.reset") {
+    return initialVoiceTranscriptState;
+  }
+
   return reduceVoiceTranscriptEvent(state, event);
 }
 
@@ -105,6 +113,7 @@ export function useVoiceSession(threadId: string | null) {
     initialVoiceTranscriptState,
   );
   const persistingRef = useRef(false);
+  const persistedSessionIdRef = useRef<string | null>(null);
 
   transcriptStateRef.current = transcriptState;
   credentialsRef.current = credentials;
@@ -124,22 +133,25 @@ export function useVoiceSession(threadId: string | null) {
   }, []);
 
   const persistFinalTranscript = useCallback(async () => {
-    if (!threadId || !credentialsRef.current || persistingRef.current) {
+    const activeCredentials = credentialsRef.current;
+    if (!threadId || !activeCredentials || persistingRef.current) {
+      return;
+    }
+
+    if (persistedSessionIdRef.current === activeCredentials.sessionId) {
       return;
     }
 
     const turns = normalizeVoiceTurnsForPersistence(transcriptStateRef.current);
-    if (turns.length === 0) {
-      return;
-    }
 
     persistingRef.current = true;
     try {
       await persistTranscript({
         threadId,
-        sessionId: credentialsRef.current.sessionId,
+        sessionId: activeCredentials.sessionId,
         turns,
       });
+      persistedSessionIdRef.current = activeCredentials.sessionId;
     } finally {
       persistingRef.current = false;
     }
@@ -178,6 +190,11 @@ export function useVoiceSession(threadId: string | null) {
     }
 
     setError(null);
+    setCredentials(null);
+    credentialsRef.current = null;
+    persistedSessionIdRef.current = null;
+    transcriptStateRef.current = initialVoiceTranscriptState;
+    dispatchTranscript({ type: "session.reset" });
     setStatus("requesting_credentials");
 
     try {
@@ -283,6 +300,15 @@ export function useVoiceSession(threadId: string | null) {
     }
     setStatus(shouldMute ? "muted" : "connected");
   }, [status]);
+
+  useEffect(() => {
+    return () => {
+      cleanupTransport();
+      void persistFinalTranscript().catch(() => {
+        // Component teardown cannot surface async persistence errors in the UI.
+      });
+    };
+  }, [cleanupTransport, persistFinalTranscript]);
 
   return {
     status,
