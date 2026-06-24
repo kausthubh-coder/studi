@@ -85,12 +85,6 @@ export function LabWorkspace({ threadId }: { threadId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!activeLabId && labs[0]) {
-      setActiveLabId(labs[0]._id);
-    }
-  }, [activeLabId, labs]);
-
   const refreshFiles = useCallback(async () => {
     if (!activeLab) return;
     setBusy("files");
@@ -109,7 +103,10 @@ export function LabWorkspace({ threadId }: { threadId: string }) {
   }, [activeLab, listFiles]);
 
   useEffect(() => {
-    void refreshFiles();
+    const timeoutId = window.setTimeout(() => {
+      void refreshFiles();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [refreshFiles]);
 
   const openFile = useCallback(

@@ -24,9 +24,11 @@ function getBadgeClass(kind: string): string {
 export const SparkPanel = memo(function SparkPanel({
   spark,
   onClose,
+  onOpenLab,
 }: {
   spark: ExpandedSpark;
   onClose: () => void;
+  onOpenLab?: () => void;
 }) {
   const { artifact, threadId, sparkInstanceId } = spark;
 
@@ -47,6 +49,7 @@ export const SparkPanel = memo(function SparkPanel({
         threadId={threadId}
         sparkTitle={artifact.title}
         sparkInstanceId={sparkInstanceId}
+        onOpenLab={onOpenLab}
         isExpanded
       />
     );

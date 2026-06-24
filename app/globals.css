@@ -2014,6 +2014,37 @@ body::after {
   font-style: italic;
 }
 
+.code-spark-file-list,
+.code-spark-command {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: 0.65rem;
+}
+
+.code-spark-file-list span,
+.code-spark-command span {
+  color: var(--fg-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.code-spark-file-list code,
+.code-spark-command code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border-faint);
+  border-radius: 6px;
+  padding: 0.22rem 0.35rem;
+  background: var(--bg-card);
+  color: var(--fg);
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
 .code-spark-editor-shell {
   overflow: hidden;
 }
@@ -2105,6 +2136,24 @@ body::after {
 
 .code-spark-error {
   color: #ffada6;
+}
+
+.code-spark-preview-link {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  color: #efe7dc;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.code-spark-preview-link:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  text-decoration: none;
 }
 
 .hljs {

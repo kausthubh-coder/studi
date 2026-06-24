@@ -54,6 +54,9 @@ describe("spark validators", () => {
       language: "python",
       instructions: "Implement add().",
       starterCode: "def add(a, b):\n    return a + b",
+      starterFiles: [{ path: "main.py", content: "def add(a, b):\n    return a + b" }],
+      primaryFile: "main.py",
+      runCommand: "python main.py",
     });
     expect(ok.ok).toBe(true);
 
@@ -61,8 +64,52 @@ describe("spark validators", () => {
       language: "python",
       instructions: "Implement add().",
       starterCode: "def add(a, b): return a + b",
+      runCommand: "python main.py",
     });
     expect(singleLine.ok).toBe(false);
+  });
+
+  it("accepts JavaScript and TypeScript code playground payloads with lab runtime metadata", () => {
+    const javascript = validateCodePlaygroundPayload({
+      language: "javascript",
+      instructions: "Edit the function and inspect the expected output.",
+      starterCode: "function double(n) { return n * 2; }",
+      starterFiles: [
+        { path: "main.js", content: "function double(n) { return n * 2; }" },
+      ],
+      primaryFile: "main.js",
+      runCommand: "node main.js",
+    });
+    expect(javascript.ok).toBe(true);
+
+    const typescript = validateCodePlaygroundPayload({
+      language: "typescript",
+      instructions: "Add a type-safe helper.",
+      starterCode: "const double = (n: number): number => n * 2;",
+      starterFiles: [
+        {
+          path: "main.ts",
+          content: "const double = (n: number): number => n * 2;",
+        },
+      ],
+      primaryFile: "main.ts",
+      runCommand: "bunx tsx main.ts",
+    });
+    expect(typescript.ok).toBe(true);
+
+    const invalid = validateCodePlaygroundPayload({
+      language: "javascript",
+      instructions: "Run it.",
+      starterCode: "console.log(1)",
+      starterFiles: [{ path: "../main.js", content: "console.log(1)" }],
+      primaryFile: "../main.js",
+      runCommand: "",
+      previewPort: 80_000,
+    });
+    expect(invalid.ok).toBe(false);
+    expect(invalid.errors.join(" ")).toMatch(/workspace-relative/);
+    expect(invalid.errors.join(" ")).toMatch(/runCommand/);
+    expect(invalid.errors.join(" ")).toMatch(/previewPort/);
   });
 
   it("requires html in web playgrounds", () => {

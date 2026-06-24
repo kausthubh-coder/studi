@@ -40,6 +40,10 @@ export default defineSchema({
     lastStdout: v.optional(v.string()),
     lastStderr: v.optional(v.string()),
     lastError: v.optional(v.string()),
+    lastExitCode: v.optional(v.number()),
+    lastRunCommand: v.optional(v.string()),
+    labSessionId: v.optional(v.id("labSessions")),
+    labPreviewUrl: v.optional(v.string()),
     lastRunAt: v.optional(v.number()),
     lastUpdatedAt: v.number(),
   })

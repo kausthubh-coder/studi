@@ -27,7 +27,7 @@ async function main() {
 
   const provider = createDaytonaLabRuntimeProvider();
   const session = await provider.create({
-    title: "studi-live-smoke",
+    title: "studi-code-spark-live-smoke",
     language: "python",
   });
   record({
@@ -39,12 +39,13 @@ async function main() {
   try {
     await provider.write({
       sandboxId: session.sandboxId,
-      path: "smoke/main.py",
-      content: "print('studi daytona python ok')\n",
+      path: "code-sparks/live-smoke/main.py",
+      content: "print('studi code spark python ok')\n",
     });
     const python = await provider.runCommand({
       sandboxId: session.sandboxId,
-      command: "python smoke/main.py",
+      command: "python main.py",
+      cwd: "code-sparks/live-smoke",
       timeoutSec: 30,
     });
     record({
@@ -55,12 +56,13 @@ async function main() {
 
     await provider.write({
       sandboxId: session.sandboxId,
-      path: "smoke/main.js",
-      content: "console.log('studi daytona javascript ok')\n",
+      path: "code-sparks/live-smoke/main.js",
+      content: "console.log('studi code spark javascript ok')\n",
     });
     const js = await provider.runCommand({
       sandboxId: session.sandboxId,
-      command: "node smoke/main.js",
+      command: "node main.js",
+      cwd: "code-sparks/live-smoke",
       timeoutSec: 30,
     });
     record({
@@ -71,13 +73,14 @@ async function main() {
 
     await provider.write({
       sandboxId: session.sandboxId,
-      path: "smoke/main.ts",
+      path: "code-sparks/live-smoke/main.ts",
       content:
-        "const value: string = 'studi daytona typescript ok'; console.log(value)\n",
+        "const value: string = 'studi code spark typescript ok'; console.log(value)\n",
     });
     const ts = await provider.runCommand({
       sandboxId: session.sandboxId,
-      command: "bun smoke/main.ts || npx tsx smoke/main.ts",
+      command: "bun main.ts || npx tsx main.ts",
+      cwd: "code-sparks/live-smoke",
       timeoutSec: 60,
     });
     record({
@@ -89,7 +92,7 @@ async function main() {
     await provider.runCommand({
       sandboxId: session.sandboxId,
       command:
-        "cd smoke && python -m http.server 8765 > /tmp/studi-smoke-preview.log 2>&1 &",
+        "cd code-sparks/live-smoke && python -m http.server 8765 > /tmp/studi-smoke-preview.log 2>&1 &",
       timeoutSec: 5,
     });
     const preview = await provider.getPreview({
@@ -113,7 +116,7 @@ async function main() {
   await mkdir(".tmp", { recursive: true });
   const reportPath = join(
     ".tmp",
-    `daytona-smoke-${new Date().toISOString().replaceAll(":", "-")}.json`,
+    `daytona-code-spark-smoke-${new Date().toISOString().replaceAll(":", "-")}.json`,
   );
   await writeFile(
     reportPath,
