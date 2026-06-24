@@ -3,8 +3,12 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import type { FunctionReference } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { activeModelProfile, getModelForRoute } from "../lib/model-config";
+import {
+  classifyProviderError,
+  toProviderErrorMessage,
+} from "../lib/observability/contracts";
 import {
   normalizeLearningTrackDraft,
   type TrackToolResult,
@@ -25,6 +29,12 @@ const internalApi = internal as unknown as {
   };
   tracks: {
     upsertDraftTrackInternal: FunctionReference<"mutation", "internal">;
+  };
+  telemetry: {
+    insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
+  };
+  quotas: {
+    reserveDailyQuotaInternal: FunctionReference<"mutation", "internal">;
   };
 };
 
@@ -52,6 +62,23 @@ async function requireUserId(ctx: ActionCtx): Promise<string> {
   return identity.subject;
 }
 
+function assertQuotaAllowed(quota: {
+  allowed: boolean;
+  action: string;
+  message?: string;
+  limit?: number;
+  resetAt?: number;
+}) {
+  if (quota.allowed) return;
+  throw new ConvexError({
+    code: "QUOTA_EXCEEDED",
+    action: quota.action,
+    message: quota.message ?? "Daily usage limit reached.",
+    limit: quota.limit,
+    resetAt: quota.resetAt,
+  });
+}
+
 export const draftTrackFromGoal = action({
   args: {
     threadId: v.string(),
@@ -70,6 +97,7 @@ export const draftTrackFromGoal = action({
   }),
   handler: async (ctx, args): Promise<TrackToolResult> => {
     const userId = await requireUserId(ctx);
+    const startedAt = Date.now();
     await ctx.runQuery(internalApi.chat.assertThreadOwner, {
       userId,
       threadId: args.threadId,
@@ -89,6 +117,23 @@ export const draftTrackFromGoal = action({
       .join("\n");
 
     try {
+      const quota = (await ctx.runMutation(
+        internalApi.quotas.reserveDailyQuotaInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          action: "track_generation",
+          name: "draft_track_from_goal",
+        },
+      )) as {
+        allowed: boolean;
+        action: string;
+        message?: string;
+        limit?: number;
+        resetAt?: number;
+      };
+      assertQuotaAllowed(quota);
+
       const result = await generateObject({
         model: getOpenRouter().chat(model),
         schema: learningTrackSchema,
@@ -105,6 +150,20 @@ export const draftTrackFromGoal = action({
         },
       );
 
+      await ctx.runMutation(
+        internalApi.telemetry.insertTelemetryEventInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          source: "track",
+          name: "draft_track_from_goal",
+          status: "success",
+          durationMs: Date.now() - startedAt,
+          model,
+          metadata: { phase: track.phase, revision: track.revision },
+        },
+      );
+
       return {
         status: "success",
         summary: "Drafted a Track for review.",
@@ -115,10 +174,28 @@ export const draftTrackFromGoal = action({
         progress: track.progress,
       };
     } catch (error) {
+      const fault = classifyProviderError(error);
+      await ctx
+        .runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
+          userId,
+          threadId: args.threadId,
+          source: "track",
+          name: "draft_track_from_goal",
+          status: "failed",
+          durationMs: Date.now() - startedAt,
+          errorCategory: fault.category,
+          retriable: fault.retriable,
+          model,
+          metadata: { error: fault.message },
+        })
+        .catch((telemetryError) => {
+          console.error("Failed to store track telemetry", telemetryError);
+        });
+
       return {
         status: "failed",
         summary: "Track draft failed.",
-        error: error instanceof Error ? error.message : String(error),
+        error: toProviderErrorMessage(error),
       };
     }
   },

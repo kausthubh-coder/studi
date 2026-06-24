@@ -12,6 +12,7 @@ import {
   type ModelProfile,
 } from "../../lib/model-config";
 import { renderPrompt } from "../../lib/prompts";
+import { toProviderErrorMessage } from "../../lib/observability/contracts";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
   getSparkTypeLabel,
@@ -67,6 +68,9 @@ const internalApi = internal as unknown as {
     insertRawUsageInternal: FunctionReference<"mutation", "internal">;
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
   };
+  quotas: {
+    reserveDailyQuotaInternal: FunctionReference<"mutation", "internal">;
+  };
 };
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -107,7 +111,9 @@ function readNumericCandidate(record: Record<string, unknown>, key: string) {
     : undefined;
 }
 
-function extractEstimatedCostUsd(providerMetadata: unknown): number | undefined {
+function extractEstimatedCostUsd(
+  providerMetadata: unknown,
+): number | undefined {
   if (!providerMetadata || typeof providerMetadata !== "object") {
     return undefined;
   }
@@ -328,7 +334,6 @@ function isAbortError(error: unknown): boolean {
   }
   return error.name === "AbortError" || /aborted/i.test(error.message);
 }
-
 
 function createTimeoutSignal(
   abortSignal?: AbortSignal,
@@ -1405,6 +1410,35 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
       const workerModelForSpark =
         workerModels[sparkManifestById[input.sparkId].workerModelKey];
 
+      if (ctx.userId) {
+        try {
+          const quota = (await ctx.runMutation(
+            internalApi.quotas.reserveDailyQuotaInternal,
+            {
+              userId: ctx.userId,
+              threadId: ctx.threadId,
+              action: "spark_create",
+              name: input.sparkId,
+            },
+          )) as { allowed: boolean; message?: string };
+          if (!quota.allowed) {
+            return {
+              status: "failed",
+              workerSummary: "Spark generation is paused by a usage limit.",
+              warnings: [],
+              error: quota.message ?? "Spark generation limit reached.",
+            };
+          }
+        } catch (error) {
+          return {
+            status: "failed",
+            workerSummary: "Spark generation is paused by a usage limit.",
+            warnings: [],
+            error: toProviderErrorMessage(error),
+          };
+        }
+      }
+
       try {
         if (input.sparkId === "scene") {
           result = await buildSceneSpark(
@@ -1491,12 +1525,12 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
           await ctx
             .runMutation(internalApi.billing.recordTextAiCostInternal, {
               userId: ctx.userId,
-              textAiCostUsd: extractEstimatedCostUsd(record.providerMetadata) ?? 0,
+              textAiCostUsd:
+                extractEstimatedCostUsd(record.providerMetadata) ?? 0,
             })
             .catch((error) => {
               console.error("Failed to store spark billing usage", error);
             });
-
         }
 
         await ctx

@@ -18,6 +18,7 @@ import type * as labActions from "../labActions.js";
 import type * as labs from "../labs.js";
 import type * as labs_daytonaProvider from "../labs/daytonaProvider.js";
 import type * as playground from "../playground.js";
+import type * as quotas from "../quotas.js";
 import type * as rateLimits from "../rateLimits.js";
 import type * as sparkFeedback from "../sparkFeedback.js";
 import type * as sparks_schemas from "../sparks/schemas.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   labs: typeof labs;
   "labs/daytonaProvider": typeof labs_daytonaProvider;
   playground: typeof playground;
+  quotas: typeof quotas;
   rateLimits: typeof rateLimits;
   sparkFeedback: typeof sparkFeedback;
   "sparks/schemas": typeof sparks_schemas;

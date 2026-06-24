@@ -240,6 +240,8 @@ export default defineSchema({
       v.literal("spark"),
       v.literal("lab"),
       v.literal("voice"),
+      v.literal("track"),
+      v.literal("quota"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),
@@ -261,6 +263,17 @@ export default defineSchema({
       "source",
       "createdAt",
     ]),
+
+  quotaCounters: defineTable({
+    userId: v.string(),
+    dayKey: v.string(),
+    action: v.string(),
+    count: v.number(),
+    limit: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_dayKey", ["userId", "dayKey"])
+    .index("by_userId_and_dayKey_and_action", ["userId", "dayKey", "action"]),
 
   waitlistWebhookEvents: defineTable({
     source: v.literal("tally_waitlist"),

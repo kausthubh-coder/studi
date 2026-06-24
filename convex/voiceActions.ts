@@ -3,12 +3,9 @@
 import { saveMessage } from "@convex-dev/agent";
 import { createHash } from "node:crypto";
 import type { FunctionReference } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import {
-  action,
-  type ActionCtx,
-} from "./_generated/server";
+import { action, type ActionCtx } from "./_generated/server";
 import {
   createOpenAIRealtimeClientSecret,
   toVoiceSessionError,
@@ -34,6 +31,9 @@ const internalApi = internal as unknown as {
   };
   voice: {
     recordVoiceSessionCreated: FunctionReference<"mutation", "internal">;
+  };
+  quotas: {
+    reserveDailyQuotaInternal: FunctionReference<"mutation", "internal">;
   };
 };
 
@@ -72,6 +72,23 @@ function safetyIdentifierForUser(userId: string): string {
   return createHash("sha256").update(`studi:${userId}`).digest("hex");
 }
 
+function assertQuotaAllowed(quota: {
+  allowed: boolean;
+  action: string;
+  message?: string;
+  limit?: number;
+  resetAt?: number;
+}) {
+  if (quota.allowed) return;
+  throw new ConvexError({
+    code: "QUOTA_EXCEEDED",
+    action: quota.action,
+    message: quota.message ?? "Daily usage limit reached.",
+    limit: quota.limit,
+    resetAt: quota.resetAt,
+  });
+}
+
 export const createOpenAIRealtimeSession = action({
   args: {
     threadId: v.string(),
@@ -96,6 +113,23 @@ export const createOpenAIRealtimeSession = action({
       throw new Error(JSON.stringify(error));
     }
 
+    const quota = (await ctx.runMutation(
+      internalApi.quotas.reserveDailyQuotaInternal,
+      {
+        userId,
+        threadId: args.threadId,
+        action: "voice_session",
+        name: "create_openai_realtime_session",
+      },
+    )) as {
+      allowed: boolean;
+      action: string;
+      message?: string;
+      limit?: number;
+      resetAt?: number;
+    };
+    assertQuotaAllowed(quota);
+
     try {
       const credentials = await createOpenAIRealtimeClientSecret({
         apiKey,
@@ -113,36 +147,42 @@ export const createOpenAIRealtimeSession = action({
         expiresAt: credentials.clientSecret.expiresAt,
       });
 
-      await ctx.runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
-        userId,
-        threadId: args.threadId,
-        source: "voice",
-        name: "create_openai_realtime_session",
-        status: "success",
-        model: credentials.model,
-        metadata: {
-          provider: credentials.provider,
-          expiresAt: credentials.clientSecret.expiresAt,
+      await ctx.runMutation(
+        internalApi.telemetry.insertTelemetryEventInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          source: "voice",
+          name: "create_openai_realtime_session",
+          status: "success",
+          model: credentials.model,
+          metadata: {
+            provider: credentials.provider,
+            expiresAt: credentials.clientSecret.expiresAt,
+          },
         },
-      });
+      );
 
       return credentials;
     } catch (error) {
       const voiceError = toVoiceSessionError(error);
-      await ctx.runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
-        userId,
-        threadId: args.threadId,
-        source: "voice",
-        name: "create_openai_realtime_session",
-        status: "failed",
-        errorCategory: voiceError.code,
-        retriable: voiceError.retriable,
-        model: defaultRealtimeVoiceModel,
-        metadata: {
-          provider: voiceError.provider,
-          status: voiceError.status,
+      await ctx.runMutation(
+        internalApi.telemetry.insertTelemetryEventInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          source: "voice",
+          name: "create_openai_realtime_session",
+          status: "failed",
+          errorCategory: voiceError.code,
+          retriable: voiceError.retriable,
+          model: defaultRealtimeVoiceModel,
+          metadata: {
+            provider: voiceError.provider,
+            status: voiceError.status,
+          },
         },
-      });
+      );
       throw new Error(JSON.stringify(voiceError));
     }
   },
@@ -240,7 +280,9 @@ export const runVoiceTool = action({
 
     try {
       const sparkInput = parseCreateSparkInput(args.input);
-      const sparkTool = createSparkToolForProfile(activeModelProfile) as unknown as {
+      const sparkTool = createSparkToolForProfile(
+        activeModelProfile,
+      ) as unknown as {
         ctx?: unknown;
         execute: (
           input: CreateSparkToolInput,
