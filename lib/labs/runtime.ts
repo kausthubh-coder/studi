@@ -109,8 +109,22 @@ export type LabRuntimeProvider = {
 };
 
 export function normalizeLabPath(path: string | undefined, fallback = ".") {
-  const trimmed = path?.trim() || fallback;
-  return trimmed.replaceAll("\\", "/").replace(/^\/+/, "") || fallback;
+  const trimmed = path?.trim();
+  if (!trimmed) return fallback;
+
+  const normalized = trimmed.replaceAll("\\", "/");
+  if (normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized)) {
+    throw new Error("Lab paths must be workspace-relative");
+  }
+
+  const parts = normalized
+    .split("/")
+    .filter((part) => part.length > 0 && part !== ".");
+  if (parts.some((part) => part === "..")) {
+    throw new Error("Lab paths must stay within the workspace");
+  }
+
+  return parts.join("/") || fallback;
 }
 
 export function makeLabSessionName(title: string | undefined) {

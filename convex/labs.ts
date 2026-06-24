@@ -266,6 +266,18 @@ export const assertLabSessionOwnerInternal = internalQuery({
   },
 });
 
+export const assertThreadOwnerInternal = internalQuery({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireThreadOwnership(ctx, args);
+    return null;
+  },
+});
+
 export const listLabSessionsForThreadInternal = internalQuery({
   args: {
     userId: v.string(),

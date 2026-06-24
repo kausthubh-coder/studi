@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createMockLabRuntimeProvider } from "@/lib/labs/mockRuntimeProvider";
+import { normalizeLabPath } from "@/lib/labs/runtime";
 
 describe("LabRuntimeProvider mock contract", () => {
   it("creates a lab, edits files, searches, runs commands, previews, and archives", async () => {
@@ -85,5 +86,24 @@ describe("LabRuntimeProvider mock contract", () => {
     await expect(
       provider.read({ sandboxId: session.sandboxId, path: "lesson/new.txt" }),
     ).rejects.toThrow("Mock file not found");
+  });
+});
+
+describe("normalizeLabPath", () => {
+  it("normalizes workspace-relative paths", () => {
+    expect(normalizeLabPath(undefined)).toBe(".");
+    expect(normalizeLabPath(" ./src//main.py ")).toBe("src/main.py");
+    expect(normalizeLabPath("src\\main.py")).toBe("src/main.py");
+  });
+
+  it("rejects paths that escape the lab workspace", () => {
+    for (const path of [
+      "../secret.txt",
+      "src/../../secret.txt",
+      "/etc/passwd",
+      "C:\\Users\\learner\\secret.txt",
+    ]) {
+      expect(() => normalizeLabPath(path)).toThrow(/workspace/);
+    }
   });
 });

@@ -14,6 +14,31 @@ function testConvex() {
 }
 
 describe("lab session Convex ownership", () => {
+  it("preflights thread ownership before provider work", async () => {
+    const t = testConvex();
+
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: "thread_a",
+      title: "Derivatives",
+      lastMessageAt: 1,
+    });
+
+    await expect(
+      t.query(internal.labs.assertThreadOwnerInternal, {
+        userId: "user_a",
+        threadId: "thread_a",
+      }),
+    ).resolves.toBeNull();
+
+    await expect(
+      t.query(internal.labs.assertThreadOwnerInternal, {
+        userId: "user_b",
+        threadId: "thread_a",
+      }),
+    ).rejects.toThrow("Thread not found");
+  });
+
   it("stores and lists lab sessions only for the owning thread", async () => {
     const t = testConvex();
 

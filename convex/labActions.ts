@@ -6,7 +6,11 @@ import type { Id } from "./_generated/dataModel";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { createDaytonaLabRuntimeProvider } from "./labs/daytonaProvider";
-import type { LabLanguage, LabRuntimeProvider } from "../lib/labs/runtime";
+import type {
+  LabLanguage,
+  LabRuntimeProvider,
+  LabRuntimeSession,
+} from "../lib/labs/runtime";
 import { normalizeLabPath } from "../lib/labs/runtime";
 
 const internalApi = internal as unknown as {
@@ -14,6 +18,7 @@ const internalApi = internal as unknown as {
     assertCanUseLabsInternal: FunctionReference<"mutation", "internal">;
   };
   labs: {
+    assertThreadOwnerInternal: FunctionReference<"query", "internal">;
     createLabSessionInternal: FunctionReference<"mutation", "internal">;
     patchLabSessionRuntimeInternal: FunctionReference<"mutation", "internal">;
     recordLabErrorInternal: FunctionReference<"mutation", "internal">;
@@ -198,9 +203,14 @@ export const createLab = action({
     await ctx.runMutation(internalApi.billing.assertCanUseLabsInternal, {
       userId,
     });
+    await ctx.runQuery(internalApi.labs.assertThreadOwnerInternal, {
+      userId,
+      threadId: args.threadId,
+    });
 
+    let runtimeSession: LabRuntimeSession | null = null;
     try {
-      const runtimeSession = await getRuntimeProvider().create({
+      runtimeSession = await getRuntimeProvider().create({
         title: args.title,
         language: args.language as LabLanguage | undefined,
         labels: {
@@ -233,6 +243,16 @@ export const createLab = action({
       });
       return session;
     } catch (error) {
+      if (runtimeSession) {
+        await getRuntimeProvider()
+          .archive({ sandboxId: runtimeSession.sandboxId })
+          .catch((archiveError) => {
+            console.error("Failed to clean up orphaned lab runtime", {
+              sandboxId: runtimeSession?.sandboxId,
+              error: toMessage(archiveError),
+            });
+          });
+      }
       await recordLabTelemetry(ctx, {
         userId,
         threadId: args.threadId,
@@ -491,7 +511,7 @@ export const runCommand = action({
       const result = await getRuntimeProvider().runCommand({
         sandboxId: session.sandboxId,
         command: args.command,
-        cwd: args.cwd,
+        cwd: args.cwd ? normalizeLabPath(args.cwd) : undefined,
         timeoutSec: args.timeoutSec,
       });
       await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
@@ -597,7 +617,7 @@ export const createPty = action({
       const result = await getRuntimeProvider().createPty({
         sandboxId: session.sandboxId,
         ptyId: args.ptyId,
-        cwd: args.cwd,
+        cwd: args.cwd ? normalizeLabPath(args.cwd) : undefined,
         cols: args.cols,
         rows: args.rows,
       });
