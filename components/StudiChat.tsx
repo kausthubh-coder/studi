@@ -366,12 +366,6 @@ export default function StudiChat() {
     [],
   );
 
-  useEffect(() => {
-    if (!expandedSpark) {
-      setMobilePanelView("chat");
-    }
-  }, [expandedSpark]);
-
   const handleSparkResizeStart = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -545,6 +539,7 @@ export default function StudiChat() {
             className="lab-toggle-btn"
             onClick={() => {
               setExpandedSpark(null);
+              setMobilePanelView("chat");
               setIsLabPanelOpen((value) => !value);
             }}
             aria-pressed={isLabPanelOpen}
@@ -623,6 +618,11 @@ export default function StudiChat() {
                 selectedThreadId={selectedThreadId}
                 messages={uiMessages.results}
                 onExpandSpark={handleExpandSpark}
+                onOpenLab={() => {
+                  setExpandedSpark(null);
+                  setMobilePanelView("chat");
+                  setIsLabPanelOpen(true);
+                }}
                 expandedSparkInstanceId={expandedSpark?.sparkInstanceId ?? null}
               />
               <Composer
@@ -651,7 +651,15 @@ export default function StudiChat() {
                 />
                 <SparkPanel
                   spark={expandedSpark}
-                  onClose={() => setExpandedSpark(null)}
+                  onClose={() => {
+                    setExpandedSpark(null);
+                    setMobilePanelView("chat");
+                  }}
+                  onOpenLab={() => {
+                    setExpandedSpark(null);
+                    setMobilePanelView("chat");
+                    setIsLabPanelOpen(true);
+                  }}
                 />
               </div>
             ) : isLabPanelOpen && selectedThreadId ? (

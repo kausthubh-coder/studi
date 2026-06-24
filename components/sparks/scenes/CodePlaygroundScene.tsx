@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import type { ComponentType } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
@@ -9,6 +9,10 @@ import type {
   CodePlaygroundLanguage,
   CodePlaygroundPayload,
 } from "@/lib/sparks/contracts";
+import {
+  buildCodeSparkRuntimeFiles,
+  getCodeSparkPrimaryFile,
+} from "@/lib/sparks/code-runtime";
 import { IconSparkle, IconExpand } from "@/components/studi-chat/icons";
 
 type MonacoEditorProps = {
@@ -36,6 +40,7 @@ type CodePlaygroundSceneProps = {
   sparkInstanceId: string;
   threadId?: string | null;
   onExpand?: () => void;
+  onOpenLab?: () => void;
   isExpanded?: boolean;
 };
 
@@ -85,6 +90,7 @@ export default function CodePlaygroundScene({
   sparkInstanceId,
   threadId,
   onExpand,
+  onOpenLab,
   isExpanded,
 }: CodePlaygroundSceneProps) {
   const persisted = useQuery(
@@ -96,6 +102,7 @@ export default function CodePlaygroundScene({
     api.sparkFeedback.upsertCodeSparkDraft,
   );
   const recordCodeSparkRun = useMutation(api.sparkFeedback.recordCodeSparkRun);
+  const materializeCodeSpark = useAction(api.labActions.materializeCodeSpark);
 
   const [draftCode, setDraftCode] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
@@ -103,6 +110,8 @@ export default function CodePlaygroundScene({
   const [stderr, setStderr] = useState("");
   const [errorText, setErrorText] = useState<string | null>(null);
   const [durationMs, setDurationMs] = useState<number | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [labSessionId, setLabSessionId] = useState<string | null>(null);
 
   const workerRef = useRef<Worker | null>(null);
   const workerReadyPromiseRef = useRef<Promise<void> | null>(null);
@@ -110,9 +119,20 @@ export default function CodePlaygroundScene({
   const lastSavedCodeRef = useRef<string | null>(null);
 
   const code = draftCode ?? persisted?.code ?? payload.starterCode;
-  const canRunCode = payload.language === "python";
-  const runtimePendingMessage = `${languageLabel[payload.language]} execution is pending runtime-provider integration. You can edit the spark now, but running it needs the execution provider to be wired.`;
+  const primaryFile = getCodeSparkPrimaryFile(payload);
+  const canRunInLab = Boolean(threadId && payload.runCommand);
+  const canRunCode = canRunInLab || payload.language === "python";
+  const runtimePendingMessage = threadId
+    ? `${languageLabel[payload.language]} lab execution needs a run command on this Spark.`
+    : "Open this Spark inside a saved thread to run it in a Lab.";
   const pendingRuntimeMessage = canRunCode ? undefined : runtimePendingMessage;
+  const visiblePreviewUrl = previewUrl ?? persisted?.labPreviewUrl ?? null;
+  const visibleLabSessionId = labSessionId ?? persisted?.labSessionId ?? null;
+
+  const starterFiles = useMemo(
+    () => buildCodeSparkRuntimeFiles(payload, code).files,
+    [code, payload],
+  );
 
   const terminateWorker = useCallback(() => {
     if (workerRef.current) {
@@ -299,8 +319,34 @@ export default function CodePlaygroundScene({
   const onRunClick = useCallback(async () => {
     setRunStatus("running");
     setErrorText(null);
+    setPreviewUrl(null);
 
     try {
+      if (canRunInLab && threadId && payload.runCommand) {
+        const startedAt = Date.now();
+        const labResult = await materializeCodeSpark({
+          threadId,
+          sparkInstanceId,
+          sparkTitle,
+          language: payload.language,
+          files: starterFiles,
+          primaryFile,
+          runCommand: payload.runCommand,
+          previewPort: payload.previewPort,
+        });
+        const nextStatus: RunStatus =
+          labResult.status === "success" ? "success" : "error";
+
+        setRunStatus(nextStatus);
+        setStdout(labResult.result?.stdout ?? "");
+        setStderr(labResult.result?.stderr ?? "");
+        setErrorText(labResult.error ?? null);
+        setDurationMs(Date.now() - startedAt);
+        setPreviewUrl(labResult.preview?.url ?? null);
+        setLabSessionId(labResult.labSessionId ?? null);
+        return;
+      }
+
       const result = await runProvider.run(code);
       const nextStatus: RunStatus = result.error ? "error" : "success";
 
@@ -354,8 +400,15 @@ export default function CodePlaygroundScene({
     }
   }, [
     code,
+    canRunInLab,
+    materializeCodeSpark,
+    payload.language,
+    payload.previewPort,
+    payload.runCommand,
+    primaryFile,
     recordCodeSparkRun,
     runProvider,
+    starterFiles,
     sparkInstanceId,
     sparkTitle,
     threadId,
@@ -368,6 +421,7 @@ export default function CodePlaygroundScene({
     setStderr("");
     setErrorText(null);
     setDurationMs(null);
+    setPreviewUrl(null);
   }, [payload.starterCode]);
 
   return (
@@ -426,10 +480,21 @@ export default function CodePlaygroundScene({
           >
             {runStatus === "running"
               ? "Running\u2026"
-              : canRunCode
-                ? "\u25b6 Run"
+              : canRunInLab
+                ? "\u25b6 Run in Lab"
+                : canRunCode
+                  ? "\u25b6 Run"
                 : "Runtime pending"}
           </button>
+          {visibleLabSessionId && onOpenLab ? (
+            <button
+              type="button"
+              className="code-spark-reset-btn"
+              onClick={onOpenLab}
+            >
+              Open Lab
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -443,6 +508,18 @@ export default function CodePlaygroundScene({
           {payload.runHint && (
             <p className="code-spark-hint">{payload.runHint}</p>
           )}
+          <div className="code-spark-file-list">
+            <span>Files</span>
+            {starterFiles.slice(0, 4).map((file) => (
+              <code key={file.path}>{file.path}</code>
+            ))}
+          </div>
+          {payload.runCommand ? (
+            <div className="code-spark-command">
+              <span>Command</span>
+              <code>{payload.runCommand}</code>
+            </div>
+          ) : null}
         </div>
 
         <div className="code-spark-editor-shell">
@@ -475,6 +552,16 @@ export default function CodePlaygroundScene({
           ) : null}
           {stdout ? <pre className="code-spark-stdout">{stdout}</pre> : null}
           {stderr ? <pre className="code-spark-stderr">{stderr}</pre> : null}
+          {visiblePreviewUrl ? (
+            <a
+              className="code-spark-preview-link"
+              href={visiblePreviewUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open preview
+            </a>
+          ) : null}
           {!stdout && !stderr && !errorText && pendingRuntimeMessage ? (
             <p className="code-spark-placeholder">
               {pendingRuntimeMessage}

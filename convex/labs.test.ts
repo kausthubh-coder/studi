@@ -3,8 +3,10 @@ import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api, internal } from "./_generated/api";
+import { __setLabRuntimeProviderForTesting } from "./labActions";
 import schema from "./schema";
 import { modules } from "./test.setup";
+import type { LabRuntimeProvider } from "../lib/labs/runtime";
 
 function testConvex() {
   const t = convexTest(schema, modules);
@@ -37,6 +39,145 @@ describe("lab session Convex ownership", () => {
         threadId: "thread_a",
       }),
     ).rejects.toThrow("Thread not found");
+  });
+
+  it("materializes a code spark through the lab runtime with ownership and mocks", async () => {
+    const t = testConvex();
+    const writes: Array<{ path: string; content: string }> = [];
+    const commands: Array<{ command: string; cwd?: string }> = [];
+    const provider: LabRuntimeProvider = {
+      async create() {
+        return {
+          provider: "daytona",
+          sandboxId: "sandbox_code_spark",
+          workspacePath: "/workspace",
+          status: "ready",
+          previewUrls: [],
+        };
+      },
+      async resume() {
+        return {
+          provider: "daytona",
+          sandboxId: "sandbox_code_spark",
+          workspacePath: "/workspace",
+          status: "ready",
+          previewUrls: [],
+        };
+      },
+      async list() {
+        return [];
+      },
+      async read() {
+        return "";
+      },
+      async write(input) {
+        writes.push({ path: input.path, content: input.content });
+      },
+      async createFile() {},
+      async rename() {},
+      async delete() {},
+      async search() {
+        return [];
+      },
+      async runCommand(input) {
+        commands.push({ command: input.command, cwd: input.cwd });
+        return {
+          command: input.command,
+          cwd: input.cwd,
+          exitCode: 0,
+          stdout: "42\n",
+          stderr: "",
+          output: "42\n",
+        };
+      },
+      async createSession(input) {
+        return { sessionId: input.sessionId };
+      },
+      async runSessionCommand(input) {
+        return { command: input.command, commandId: "cmd_1", exitCode: 0 };
+      },
+      async createPty(input) {
+        return { ptyId: input.ptyId };
+      },
+      async getPreview(input) {
+        return {
+          port: input.port,
+          url: `https://preview.example/${input.port}`,
+        };
+      },
+      async archive() {},
+    };
+    __setLabRuntimeProviderForTesting(provider);
+
+    try {
+      await t.mutation(internal.chat.createThreadRecord, {
+        userId: "user_a",
+        threadId: "thread_a",
+        title: "Code",
+        lastMessageAt: 1,
+      });
+      await t.mutation(internal.billing.syncBillingProfileInternal, {
+        userId: "user_a",
+        planKey: "intro",
+        status: "active",
+      });
+
+      const authed = t.withIdentity({ subject: "user_a" });
+      const result = await authed.action(api.labActions.materializeCodeSpark, {
+        threadId: "thread_a",
+        sparkInstanceId: "spark-a",
+        sparkTitle: "Answer lab",
+        language: "python",
+        files: [{ path: "main.py", content: "print(42)\n" }],
+        primaryFile: "main.py",
+        runCommand: "python main.py",
+        previewPort: 3000,
+      });
+
+      expect(result).toMatchObject({
+        status: "success",
+        reusedLab: false,
+        command: "python main.py",
+        preview: { url: "https://preview.example/3000" },
+      });
+      expect(writes).toEqual([
+        {
+          path: "code-sparks/spark-a/main.py",
+          content: "print(42)\n",
+        },
+      ]);
+      expect(commands).toEqual([
+        { command: "python main.py", cwd: "code-sparks/spark-a" },
+      ]);
+
+      await expect(
+        authed.query(api.sparkFeedback.getCodeSparkState, {
+          threadId: "thread_a",
+          sparkInstanceId: "spark-a",
+        }),
+      ).resolves.toMatchObject({
+        lastStatus: "success",
+        lastStdout: "42\n",
+        lastRunCommand: "python main.py",
+        labPreviewUrl: "https://preview.example/3000",
+      });
+
+      await expect(
+        t.withIdentity({ subject: "user_b" }).action(
+          api.labActions.materializeCodeSpark,
+          {
+            threadId: "thread_a",
+            sparkInstanceId: "spark-b",
+            language: "python",
+            files: [{ path: "main.py", content: "print(0)\n" }],
+            primaryFile: "main.py",
+            runCommand: "python main.py",
+          },
+        ),
+      ).rejects.toThrow("Thread not found");
+    } finally {
+      __setLabRuntimeProviderForTesting(null);
+    }
   });
 
   it("stores and lists lab sessions only for the owning thread", async () => {

@@ -985,6 +985,7 @@ function AssistantParts({
   message,
   threadId,
   onExpandSpark,
+  onOpenLab,
   expandedSparkInstanceId,
 }: {
   message: UIMessage;
@@ -994,6 +995,7 @@ function AssistantParts({
     threadId: string | null,
     sparkInstanceId: string,
   ) => void;
+  onOpenLab?: () => void;
   expandedSparkInstanceId: string | null;
 }) {
   const parts = useMemo(() => message.parts ?? [], [message.parts]);
@@ -1108,6 +1110,7 @@ function AssistantParts({
               `${message.key}-spark-${partIndex}`
             }
             onExpandSpark={onExpandSpark}
+            onOpenLab={onOpenLab}
             expandedSparkInstanceId={expandedSparkInstanceId}
           />
         </div>
@@ -1196,6 +1199,7 @@ export const ArticleMessage = memo(function ArticleMessage({
   index,
   threadId,
   onExpandSpark,
+  onOpenLab,
   expandedSparkInstanceId,
 }: {
   message: UIMessage;
@@ -1206,6 +1210,7 @@ export const ArticleMessage = memo(function ArticleMessage({
     threadId: string | null,
     sparkInstanceId: string,
   ) => void;
+  onOpenLab?: () => void;
   expandedSparkInstanceId: string | null;
 }) {
   const fileParts = useMemo(
@@ -1287,6 +1292,7 @@ export const ArticleMessage = memo(function ArticleMessage({
           message={message}
           threadId={threadId}
           onExpandSpark={onExpandSpark}
+          onOpenLab={onOpenLab}
           expandedSparkInstanceId={expandedSparkInstanceId}
         />
       </div>

@@ -24,6 +24,13 @@ const internalApi = internal as unknown as {
     recordLabErrorInternal: FunctionReference<"mutation", "internal">;
     archiveLabSessionInternal: FunctionReference<"mutation", "internal">;
     getLabSessionForUserInternal: FunctionReference<"query", "internal">;
+    findReusableLabSessionForThreadInternal: FunctionReference<
+      "query",
+      "internal"
+    >;
+  };
+  sparkFeedback: {
+    recordCodeSparkLabRunInternal: FunctionReference<"mutation", "internal">;
   };
   telemetry: {
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
@@ -53,6 +60,11 @@ const commandResultValidator = v.object({
   output: v.optional(v.string()),
 });
 
+const codeSparkFileValidator = v.object({
+  path: v.string(),
+  content: v.string(),
+});
+
 const sessionCommandResultValidator = v.object({
   command: v.string(),
   commandId: v.optional(v.string()),
@@ -73,6 +85,17 @@ const previewValidator = v.object({
   port: v.number(),
   url: v.string(),
   token: v.optional(v.string()),
+});
+
+const codeSparkMaterializeResultValidator = v.object({
+  status: v.union(v.literal("success"), v.literal("error")),
+  labSessionId: v.optional(v.id("labSessions")),
+  reusedLab: v.boolean(),
+  files: v.array(v.string()),
+  command: v.string(),
+  result: v.optional(commandResultValidator),
+  preview: v.optional(previewValidator),
+  error: v.optional(v.string()),
 });
 
 const labSessionActionValidator = v.object({
@@ -113,6 +136,15 @@ function getRuntimeProvider() {
   return runtimeProvider;
 }
 
+export function __setLabRuntimeProviderForTesting(
+  provider: LabRuntimeProvider | null,
+) {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("Test runtime provider override is only available in tests");
+  }
+  runtimeProvider = provider;
+}
+
 function toMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : String(error);
 }
@@ -124,6 +156,16 @@ function classifyProviderError(error: unknown) {
   if (message.includes("auth")) return "auth";
   if (message.includes("not found")) return "not_found";
   return "provider_error";
+}
+
+function safeSparkDirectory(sparkInstanceId: string) {
+  const slug = sparkInstanceId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return `code-sparks/${slug || "spark"}`;
 }
 
 async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
@@ -262,6 +304,222 @@ export const createLab = action({
         error,
       });
       throw error;
+    }
+  },
+});
+
+export const materializeCodeSpark = action({
+  args: {
+    threadId: v.string(),
+    sparkInstanceId: v.string(),
+    sparkTitle: v.optional(v.string()),
+    language: labLanguageValidator,
+    files: v.array(codeSparkFileValidator),
+    primaryFile: v.string(),
+    runCommand: v.string(),
+    previewPort: v.optional(v.number()),
+  },
+  returns: codeSparkMaterializeResultValidator,
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const startedAt = Date.now();
+    const provider = getRuntimeProvider();
+    await ctx.runQuery(internalApi.labs.assertThreadOwnerInternal, {
+      userId,
+      threadId: args.threadId,
+    });
+    await ctx.runMutation(internalApi.billing.assertCanUseLabsInternal, {
+      userId,
+    });
+
+    let session = await ctx.runQuery(
+      internalApi.labs.findReusableLabSessionForThreadInternal,
+      {
+        userId,
+        threadId: args.threadId,
+        language: args.language,
+      },
+    );
+    let reusedLab = Boolean(session);
+
+    try {
+      if (!session) {
+        const runtimeSession = await provider.create({
+          title: args.sparkTitle ?? "Code Spark",
+          language: args.language,
+          labels: {
+            threadId: args.threadId,
+            userId,
+            sparkInstanceId: args.sparkInstanceId,
+          },
+        });
+        session = await ctx.runMutation(
+          internalApi.labs.createLabSessionInternal,
+          {
+            userId,
+            threadId: args.threadId,
+            title: args.sparkTitle,
+            provider: runtimeSession.provider,
+            sandboxId: runtimeSession.sandboxId,
+            workspacePath: runtimeSession.workspacePath,
+            language: args.language,
+            status: runtimeSession.status,
+            previewUrls: runtimeSession.previewUrls,
+          },
+        );
+        reusedLab = false;
+      } else {
+        await provider.resume({ sandboxId: session.sandboxId });
+      }
+
+      const sparkDir = safeSparkDirectory(args.sparkInstanceId);
+      const writtenFiles: string[] = [];
+      for (const file of args.files.slice(0, 12)) {
+        const relativePath = normalizeLabPath(file.path);
+        const labPath = normalizeLabPath(`${sparkDir}/${relativePath}`);
+        await provider.write({
+          sandboxId: session.sandboxId,
+          path: labPath,
+          content: file.content.slice(0, 22_000),
+        });
+        writtenFiles.push(labPath);
+      }
+
+      const result = await provider.runCommand({
+        sandboxId: session.sandboxId,
+        command: args.runCommand.slice(0, 240),
+        cwd: sparkDir,
+        timeoutSec: 20,
+      });
+
+      let preview: { port: number; url: string; token?: string } | undefined;
+      if (args.previewPort) {
+        preview = await provider.getPreview({
+          sandboxId: session.sandboxId,
+          port: args.previewPort,
+          signed: true,
+        });
+        const previews = [
+          ...(session.previewUrls ?? []).filter(
+            (item: { port: number }) => item.port !== args.previewPort,
+          ),
+          preview,
+        ];
+        await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+          userId,
+          labSessionId: session._id,
+          previewUrls: previews,
+          clearError: true,
+        });
+      } else {
+        await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+          userId,
+          labSessionId: session._id,
+          clearError: true,
+        });
+      }
+
+      const status: "success" | "error" =
+        result.exitCode === 0 ? "success" : "error";
+      await ctx.runMutation(
+        internalApi.sparkFeedback.recordCodeSparkLabRunInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          sparkInstanceId: args.sparkInstanceId,
+          sparkTitle: args.sparkTitle,
+          language: args.language,
+          code:
+            args.files.find((file) => file.path === args.primaryFile)
+              ?.content ?? args.files[0]?.content ?? "",
+          labSessionId: session._id,
+          command: args.runCommand,
+          previewUrl: preview?.url,
+          result: {
+            status,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            error:
+              status === "error"
+                ? result.stderr || result.output || "Command failed."
+                : undefined,
+            exitCode: result.exitCode,
+          },
+        },
+      );
+
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: args.threadId,
+        name: "materialize_code_spark",
+        status: status === "success" ? "success" : "failed",
+        startedAt,
+        metadata: {
+          labSessionId: session._id,
+          reusedLab,
+          command: args.runCommand,
+          fileCount: writtenFiles.length,
+        },
+      });
+
+      return {
+        status,
+        labSessionId: session._id,
+        reusedLab,
+        files: writtenFiles,
+        command: args.runCommand,
+        result,
+        preview,
+        error:
+          status === "error"
+            ? result.stderr || result.output || "Command failed."
+            : undefined,
+      };
+    } catch (error) {
+      if (session) {
+        await recordSessionError(ctx, userId, session._id, error).catch(
+          (recordError) => {
+            console.error("Failed to record code spark lab error", recordError);
+          },
+        );
+        await ctx
+          .runMutation(internalApi.sparkFeedback.recordCodeSparkLabRunInternal, {
+            userId,
+            threadId: args.threadId,
+            sparkInstanceId: args.sparkInstanceId,
+            sparkTitle: args.sparkTitle,
+            language: args.language,
+            code:
+              args.files.find((file) => file.path === args.primaryFile)
+                ?.content ?? args.files[0]?.content ?? "",
+            labSessionId: session._id,
+            command: args.runCommand,
+            result: {
+              status: "error",
+              error: toMessage(error),
+            },
+          })
+          .catch((recordError) => {
+            console.error("Failed to record code spark run error", recordError);
+          });
+      }
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: args.threadId,
+        name: "materialize_code_spark",
+        status: "failed",
+        startedAt,
+        error,
+        metadata: { reusedLab },
+      });
+      return {
+        status: "error" as const,
+        labSessionId: session?._id,
+        reusedLab,
+        files: [] as string[],
+        command: args.runCommand,
+        error: toMessage(error),
+      };
     }
   },
 });

@@ -91,6 +91,30 @@ const codePlaygroundPayloadSchema: z.ZodType<CodePlaygroundPayload> = z.object({
   starterCode: z.string().min(1),
   testCode: z.string().optional(),
   runHint: z.string().optional(),
+  starterFiles: z
+    .array(
+      z.object({
+        path: z.string().min(1),
+        content: z.string(),
+      }),
+    )
+    .optional(),
+  primaryFile: z.string().min(1).optional(),
+  runCommand: z.string().min(1).optional(),
+  previewPort: z.number().int().positive().max(65_535).optional(),
+  runtime: z
+    .object({
+      status: z.enum(["idle", "pending", "running", "success", "error"]),
+      labSessionId: z.string().optional(),
+      command: z.string().optional(),
+      exitCode: z.number().optional(),
+      stdout: z.string().optional(),
+      stderr: z.string().optional(),
+      error: z.string().optional(),
+      previewUrl: z.string().optional(),
+      updatedAt: z.number().optional(),
+    })
+    .optional(),
 });
 
 const webPlaygroundPayloadSchema: z.ZodType<WebPlaygroundPayload> = z.object({

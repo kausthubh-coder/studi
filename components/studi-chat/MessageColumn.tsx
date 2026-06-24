@@ -8,6 +8,7 @@ export function MessageColumn({
   selectedThreadId,
   messages,
   onExpandSpark,
+  onOpenLab,
   expandedSparkInstanceId,
 }: {
   listRef: RefObject<HTMLDivElement | null>;
@@ -18,6 +19,7 @@ export function MessageColumn({
     threadId: string | null,
     sparkInstanceId: string,
   ) => void;
+  onOpenLab?: () => void;
   expandedSparkInstanceId: string | null;
 }) {
   return (
@@ -41,6 +43,7 @@ export function MessageColumn({
             index={index}
             threadId={selectedThreadId}
             onExpandSpark={onExpandSpark}
+            onOpenLab={onOpenLab}
             expandedSparkInstanceId={expandedSparkInstanceId}
           />
         ))}

@@ -19,6 +19,7 @@ type SparkSceneRendererProps = {
     threadId: string | null,
     sparkInstanceId: string,
   ) => void;
+  onOpenLab?: () => void;
   expandedSparkInstanceId: string | null;
 };
 
@@ -37,6 +38,7 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
   threadId,
   sparkInstanceId,
   onExpandSpark,
+  onOpenLab,
   expandedSparkInstanceId,
 }: SparkSceneRendererProps) {
   const isExpandable =
@@ -90,6 +92,7 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
         sparkInstanceId={sparkInstanceId}
         isExpanded={false}
         onExpand={handleExpand}
+        onOpenLab={onOpenLab}
       />
     );
 

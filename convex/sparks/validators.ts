@@ -214,10 +214,6 @@ export function validateCodePlaygroundPayload(
     errors.push(
       "Code playground language must be python, javascript, or typescript.",
     );
-  } else if (payload.language !== "python") {
-    warnings.push(
-      `${payload.language} execution is pending runtime provider integration.`,
-    );
   }
 
   if (!payload.instructions.trim()) {
@@ -248,6 +244,61 @@ export function validateCodePlaygroundPayload(
 
   if (payload.starterCode.length > 22_000) {
     errors.push("Code playground starterCode is too large.");
+  }
+
+  const starterFiles = payload.starterFiles ?? [];
+  if (starterFiles.length > 12) {
+    errors.push("Code playground starterFiles has too many files.");
+  }
+
+  const filePaths = new Set<string>();
+  for (const file of starterFiles) {
+    if (!file.path.trim()) {
+      errors.push("Code playground starterFiles paths are required.");
+      continue;
+    }
+    if (
+      file.path.startsWith("/") ||
+      file.path.includes("..") ||
+      /^[A-Za-z]:[\\/]/.test(file.path)
+    ) {
+      errors.push("Code playground starterFiles must stay workspace-relative.");
+    }
+    if (filePaths.has(file.path)) {
+      errors.push(`Duplicate code playground starter file: ${file.path}.`);
+    }
+    filePaths.add(file.path);
+    if (file.content.length > 22_000) {
+      errors.push(`Code playground file is too large: ${file.path}.`);
+    }
+  }
+
+  if (payload.primaryFile) {
+    if (
+      payload.primaryFile.startsWith("/") ||
+      payload.primaryFile.includes("..") ||
+      /^[A-Za-z]:[\\/]/.test(payload.primaryFile)
+    ) {
+      errors.push("Code playground primaryFile must stay workspace-relative.");
+    }
+    if (starterFiles.length > 0 && !filePaths.has(payload.primaryFile)) {
+      errors.push("Code playground primaryFile must match a starter file.");
+    }
+  }
+
+  if (!payload.runCommand?.trim()) {
+    errors.push("Code playground runCommand is required for lab execution.");
+  } else if (payload.runCommand.length > 240) {
+    errors.push("Code playground runCommand is too long.");
+  }
+
+  if (
+    payload.previewPort !== undefined &&
+    (!Number.isInteger(payload.previewPort) ||
+      payload.previewPort < 1 ||
+      payload.previewPort > 65_535)
+  ) {
+    errors.push("Code playground previewPort must be between 1 and 65535.");
   }
 
   if (payload.testCode && payload.testCode.length > 22_000) {

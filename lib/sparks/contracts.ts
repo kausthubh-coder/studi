@@ -81,6 +81,28 @@ export type CodePlaygroundPayload = {
   starterCode: string;
   testCode?: string;
   runHint?: string;
+  starterFiles?: CodeSparkStarterFile[];
+  primaryFile?: string;
+  runCommand?: string;
+  previewPort?: number;
+  runtime?: CodeSparkRuntimeMetadata;
+};
+
+export type CodeSparkStarterFile = {
+  path: string;
+  content: string;
+};
+
+export type CodeSparkRuntimeMetadata = {
+  status: "idle" | "pending" | "running" | "success" | "error";
+  labSessionId?: string;
+  command?: string;
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+  previewUrl?: string;
+  updatedAt?: number;
 };
 
 export type WebPlaygroundPayload = {
@@ -247,6 +269,10 @@ const maxCodePlaygroundLength = 22_000;
 const maxInstructionsLength = 1_200;
 const maxRunHintLength = 240;
 const maxHintLength = 180;
+const maxCodeSparkFiles = 12;
+const maxCodeSparkPathLength = 160;
+const maxCommandLength = 240;
+const maxRuntimeTextLength = 4_000;
 const maxExpressions = 40;
 const maxQuizQuestions = 8;
 const minQuizQuestions = 3;
@@ -322,6 +348,126 @@ function normalizeCodePlaygroundLanguage(
     return value;
   }
   return "python";
+}
+
+function defaultPrimaryFile(language: CodePlaygroundLanguage): string {
+  if (language === "javascript") return "main.js";
+  if (language === "typescript") return "main.ts";
+  return "main.py";
+}
+
+function defaultRunCommand(
+  language: CodePlaygroundLanguage,
+  primaryFile: string,
+): string {
+  if (language === "javascript") return `node ${primaryFile}`;
+  if (language === "typescript") return `bunx tsx ${primaryFile}`;
+  return `python ${primaryFile}`;
+}
+
+function normalizeCodeSparkPath(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().replaceAll("\\", "/");
+  if (
+    !normalized ||
+    normalized.startsWith("/") ||
+    /^[A-Za-z]:\//.test(normalized)
+  ) {
+    return undefined;
+  }
+  const parts = normalized
+    .split("/")
+    .filter((part) => part.length > 0 && part !== ".");
+  if (parts.length === 0 || parts.some((part) => part === "..")) {
+    return undefined;
+  }
+  return parts.join("/").slice(0, maxCodeSparkPathLength);
+}
+
+function normalizeCodeSparkStarterFiles(params: {
+  input: unknown;
+  language: CodePlaygroundLanguage;
+  starterCode: string;
+}): CodeSparkStarterFile[] {
+  const fallbackPath = defaultPrimaryFile(params.language);
+  const fallback = [{ path: fallbackPath, content: params.starterCode }];
+
+  if (!Array.isArray(params.input)) {
+    return fallback;
+  }
+
+  const seen = new Set<string>();
+  const files: CodeSparkStarterFile[] = [];
+  for (const item of params.input.slice(0, maxCodeSparkFiles)) {
+    if (!isPlainObject(item)) continue;
+    const path = normalizeCodeSparkPath(item.path);
+    const content =
+      typeof item.content === "string" ? clampPlaygroundCode(item.content) : "";
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    files.push({ path, content });
+  }
+
+  return files.length > 0 ? files : fallback;
+}
+
+function normalizePreviewPort(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    return undefined;
+  }
+  if (value < 1 || value > 65_535) {
+    return undefined;
+  }
+  return value;
+}
+
+function normalizeCodeSparkRuntimeMetadata(
+  value: unknown,
+): CodeSparkRuntimeMetadata | undefined {
+  if (!isPlainObject(value)) return undefined;
+  const status =
+    value.status === "pending" ||
+    value.status === "running" ||
+    value.status === "success" ||
+    value.status === "error"
+      ? value.status
+      : "idle";
+
+  return {
+    status,
+    labSessionId:
+      typeof value.labSessionId === "string"
+        ? clampText(value.labSessionId, 120)
+        : undefined,
+    command:
+      typeof value.command === "string"
+        ? clampText(value.command, maxCommandLength)
+        : undefined,
+    exitCode:
+      typeof value.exitCode === "number" && Number.isFinite(value.exitCode)
+        ? value.exitCode
+        : undefined,
+    stdout:
+      typeof value.stdout === "string"
+        ? value.stdout.slice(0, maxRuntimeTextLength)
+        : undefined,
+    stderr:
+      typeof value.stderr === "string"
+        ? value.stderr.slice(0, maxRuntimeTextLength)
+        : undefined,
+    error:
+      typeof value.error === "string"
+        ? value.error.slice(0, maxRuntimeTextLength)
+        : undefined,
+    previewUrl:
+      typeof value.previewUrl === "string"
+        ? clampText(value.previewUrl, 600)
+        : undefined,
+    updatedAt:
+      typeof value.updatedAt === "number" && Number.isFinite(value.updatedAt)
+        ? value.updatedAt
+        : undefined,
+  };
 }
 
 function normalizeDesmosExpressions(input: unknown): DesmosExpressionState[] {
@@ -864,17 +1010,35 @@ export function normalizeSparkCodePlaygroundDraft(
       : undefined;
 
   const payload = draft.payload;
+  const language = normalizeCodePlaygroundLanguage(payload.language);
+  const starterCode = clampPlaygroundCode(
+    typeof payload.starterCode === "string" ? payload.starterCode : "",
+  );
+  const starterFiles = normalizeCodeSparkStarterFiles({
+    input: payload.starterFiles,
+    language,
+    starterCode,
+  });
+  const requestedPrimaryFile = normalizeCodeSparkPath(payload.primaryFile);
+  const primaryFile =
+    requestedPrimaryFile &&
+    starterFiles.some((file) => file.path === requestedPrimaryFile)
+      ? requestedPrimaryFile
+      : starterFiles[0]?.path ?? defaultPrimaryFile(language);
+  const runCommand =
+    typeof payload.runCommand === "string" &&
+    payload.runCommand.trim().length > 0
+      ? clampText(payload.runCommand, maxCommandLength)
+      : defaultRunCommand(language, primaryFile);
 
   const normalizedPayload: CodePlaygroundPayload = {
-    language: normalizeCodePlaygroundLanguage(payload.language),
+    language,
     instructions:
       typeof payload.instructions === "string" &&
       payload.instructions.trim().length > 0
         ? clampText(payload.instructions, maxInstructionsLength)
         : "Run the code and modify it to test your understanding.",
-    starterCode: clampPlaygroundCode(
-      typeof payload.starterCode === "string" ? payload.starterCode : "",
-    ),
+    starterCode,
     testCode:
       typeof payload.testCode === "string" && payload.testCode.trim().length > 0
         ? clampPlaygroundCode(payload.testCode)
@@ -883,6 +1047,11 @@ export function normalizeSparkCodePlaygroundDraft(
       typeof payload.runHint === "string" && payload.runHint.trim().length > 0
         ? clampText(payload.runHint, maxRunHintLength)
         : undefined,
+    starterFiles,
+    primaryFile,
+    runCommand,
+    previewPort: normalizePreviewPort(payload.previewPort),
+    runtime: normalizeCodeSparkRuntimeMetadata(payload.runtime),
   };
 
   return {
@@ -1143,7 +1312,19 @@ function isCodePlaygroundPayload(
     typeof value.instructions === "string" &&
     typeof value.starterCode === "string" &&
     (value.testCode === undefined || typeof value.testCode === "string") &&
-    (value.runHint === undefined || typeof value.runHint === "string")
+    (value.runHint === undefined || typeof value.runHint === "string") &&
+    (value.starterFiles === undefined ||
+      (Array.isArray(value.starterFiles) &&
+        value.starterFiles.every(
+          (file) =>
+            isPlainObject(file) &&
+            typeof file.path === "string" &&
+            typeof file.content === "string",
+        ))) &&
+    (value.primaryFile === undefined || typeof value.primaryFile === "string") &&
+    (value.runCommand === undefined || typeof value.runCommand === "string") &&
+    (value.previewPort === undefined || typeof value.previewPort === "number") &&
+    (value.runtime === undefined || isPlainObject(value.runtime))
   );
 }
 

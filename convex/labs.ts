@@ -309,6 +309,33 @@ export const listLabSessionsForThreadInternal = internalQuery({
   },
 });
 
+export const findReusableLabSessionForThreadInternal = internalQuery({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    language: v.optional(labLanguageValidator),
+  },
+  returns: v.union(v.null(), labSessionValidator),
+  handler: async (ctx, args) => {
+    await requireThreadOwnership(ctx, args);
+    const sessions = await ctx.db
+      .query("labSessions")
+      .withIndex("by_userId_and_threadId_and_lastActiveAt", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .order("desc")
+      .take(20);
+
+    return (
+      sessions.find(
+        (session) =>
+          session.status !== "archived" &&
+          (!args.language || !session.language || session.language === args.language),
+      ) ?? null
+    );
+  },
+});
+
 export const renameLabSession = mutation({
   args: {
     labSessionId: v.id("labSessions"),

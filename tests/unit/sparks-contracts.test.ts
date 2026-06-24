@@ -91,4 +91,38 @@ describe("spark contracts", () => {
       }).payload.language,
     ).toBe("typescript");
   });
+
+  it("normalizes code playground files, primary file, and run command", () => {
+    const artifact = normalizeSparkCodePlaygroundDraft({
+      title: "Runnable TS",
+      payload: {
+        language: "typescript",
+        instructions: "Run the function and inspect the output.",
+        starterCode: "const double = (n: number) => n * 2;\nconsole.log(double(3));",
+        starterFiles: [
+          {
+            path: "/bad.ts",
+            content: "bad",
+          },
+          {
+            path: "src/main.ts",
+            content: "const double = (n: number) => n * 2;\nconsole.log(double(3));",
+          },
+        ],
+        primaryFile: "../escape.ts",
+        previewPort: 70000,
+      },
+    });
+
+    expect(artifact.payload.starterFiles).toEqual([
+      {
+        path: "src/main.ts",
+        content: "const double = (n: number) => n * 2;\nconsole.log(double(3));",
+      },
+    ]);
+    expect(artifact.payload.primaryFile).toBe("src/main.ts");
+    expect(artifact.payload.runCommand).toBe("bunx tsx src/main.ts");
+    expect(artifact.payload.previewPort).toBeUndefined();
+    expect(isSparkArtifact(artifact)).toBe(true);
+  });
 });
