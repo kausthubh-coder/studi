@@ -65,6 +65,24 @@ describe("spark validators", () => {
     expect(singleLine.ok).toBe(false);
   });
 
+  it("accepts JavaScript and TypeScript code playground payloads as pending-runtime contracts", () => {
+    const javascript = validateCodePlaygroundPayload({
+      language: "javascript",
+      instructions: "Edit the function and inspect the expected output.",
+      starterCode: "function double(n) { return n * 2; }",
+    });
+    expect(javascript.ok).toBe(true);
+    expect(javascript.warnings.join(" ")).toMatch(/pending runtime/i);
+
+    const typescript = validateCodePlaygroundPayload({
+      language: "typescript",
+      instructions: "Add a type-safe helper.",
+      starterCode: "const double = (n: number): number => n * 2;",
+    });
+    expect(typescript.ok).toBe(true);
+    expect(typescript.warnings.join(" ")).toMatch(/pending runtime/i);
+  });
+
   it("requires html in web playgrounds", () => {
     expect(validateWebPlaygroundPayload({ html: "<h1>Hi</h1>" }).ok).toBe(true);
     expect(validateWebPlaygroundPayload({ html: "   " }).ok).toBe(false);

@@ -8,6 +8,7 @@ import type {
   SparkValidationResult,
   WebPlaygroundPayload,
 } from "../../lib/sparks/contracts";
+import { isCodePlaygroundLanguage } from "../../lib/sparks/manifest";
 import { tailwindBrowserScriptSrc } from "./schemas";
 
 export function createArtifactId(): string {
@@ -209,8 +210,14 @@ export function validateCodePlaygroundPayload(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (payload.language !== "python") {
-    errors.push("Code playground currently supports only python.");
+  if (!isCodePlaygroundLanguage(payload.language)) {
+    errors.push(
+      "Code playground language must be python, javascript, or typescript.",
+    );
+  } else if (payload.language !== "python") {
+    warnings.push(
+      `${payload.language} execution is pending runtime provider integration.`,
+    );
   }
 
   if (!payload.instructions.trim()) {
@@ -222,15 +229,17 @@ export function validateCodePlaygroundPayload(
   }
 
   const starterLines = payload.starterCode.split(/\r?\n/);
-  if (starterLines.length < 2) {
+  if (payload.language === "python" && starterLines.length < 2) {
     errors.push(
       "Code playground starterCode must be multi-line Python code with proper indentation.",
     );
   }
 
-  const hasInlineCommentedFunctionBody = starterLines.some((line) =>
-    /^\s*def\s+[A-Za-z_]\w*\([^)]*\):\s*#/.test(line),
-  );
+  const hasInlineCommentedFunctionBody =
+    payload.language === "python" &&
+    starterLines.some((line) =>
+      /^\s*def\s+[A-Za-z_]\w*\([^)]*\):\s*#/.test(line),
+    );
   if (hasInlineCommentedFunctionBody) {
     errors.push(
       "Function definitions must not place TODO comments inline after ':'. Put comments on the next indented line.",
