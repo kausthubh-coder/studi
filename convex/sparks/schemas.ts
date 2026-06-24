@@ -6,22 +6,19 @@ import type {
   QuizSparkPayload,
   WebPlaygroundPayload,
 } from "../../lib/sparks/contracts";
+import {
+  codePlaygroundLanguages,
+  sparkTypes,
+} from "../../lib/sparks/manifest";
 
 export const tailwindBrowserScriptSrc =
   "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4";
 
 export const createSparkInputSchema = z.object({
   sparkId: z
-    .enum([
-      "scene",
-      "quiz",
-      "flash_card",
-      "desmos_graph",
-      "code_playground",
-      "web_playground",
-    ])
+    .enum(sparkTypes)
     .describe(
-      "Spark id to generate. Use scene, quiz, flash_card, desmos_graph, code_playground, or web_playground.",
+      `Spark id to generate. Use ${sparkTypes.join(", ")}.`,
     ),
   context: z
     .string()
@@ -89,7 +86,7 @@ const desmosPayloadSchema: z.ZodType<DesmosGraphPayload> = z.object({
 });
 
 const codePlaygroundPayloadSchema: z.ZodType<CodePlaygroundPayload> = z.object({
-  language: z.literal("python"),
+  language: z.enum(codePlaygroundLanguages),
   instructions: z.string().min(1),
   starterCode: z.string().min(1),
   testCode: z.string().optional(),

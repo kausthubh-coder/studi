@@ -1,15 +1,23 @@
+import {
+  isCodePlaygroundLanguage,
+  isSparkType as isManifestSparkType,
+  sparkManifestById,
+} from "./manifest";
+export {
+  codePlaygroundLanguages,
+  sparkManifest,
+  sparkManifestById,
+  sparkTypes,
+  type CodePlaygroundLanguage,
+  type SparkDefaultPlacement,
+  type SparkManifestEntry,
+  type SparkRendererKey,
+  type SparkType,
+} from "./manifest";
+import type { CodePlaygroundLanguage, SparkType } from "./manifest";
+
 export const sparkSceneVersion = 1 as const;
 
-export const sparkTypes = [
-  "scene",
-  "quiz",
-  "flash_card",
-  "desmos_graph",
-  "code_playground",
-  "web_playground",
-] as const;
-
-export type SparkType = (typeof sparkTypes)[number];
 export type SparkMode = "readonly" | "editable";
 
 export type JsonPrimitive = string | number | boolean | null;
@@ -66,10 +74,6 @@ export type DesmosGraphPayload = {
   viewport?: DesmosGraphViewport;
   hint?: string;
 };
-
-export const codePlaygroundLanguages = ["python"] as const;
-
-export type CodePlaygroundLanguage = (typeof codePlaygroundLanguages)[number];
 
 export type CodePlaygroundPayload = {
   language: CodePlaygroundLanguage;
@@ -254,15 +258,6 @@ const maxQuestionLength = 280;
 const maxChoiceLength = 180;
 const maxCardFaceLength = 280;
 
-const sparkTypeLabels: Record<SparkType, string> = {
-  scene: "Scene",
-  quiz: "Quiz",
-  flash_card: "Flash Card",
-  desmos_graph: "Desmos Graph",
-  code_playground: "Code Playground",
-  web_playground: "Web Playground",
-};
-
 function clampText(value: string, maxLength: number): string {
   return value.trim().slice(0, maxLength);
 }
@@ -314,22 +309,7 @@ function normalizeJsonValue(value: unknown): JsonValue | undefined {
 }
 
 function normalizeSparkType(sparkType: string | undefined): SparkType {
-  if (sparkType === "scene") {
-    return sparkType;
-  }
-  if (sparkType === "quiz") {
-    return sparkType;
-  }
-  if (sparkType === "flash_card") {
-    return sparkType;
-  }
-  if (sparkType === "desmos_graph") {
-    return sparkType;
-  }
-  if (sparkType === "code_playground") {
-    return sparkType;
-  }
-  if (sparkType === "web_playground") {
+  if (isManifestSparkType(sparkType)) {
     return sparkType;
   }
   return "scene";
@@ -338,7 +318,7 @@ function normalizeSparkType(sparkType: string | undefined): SparkType {
 function normalizeCodePlaygroundLanguage(
   value: unknown,
 ): CodePlaygroundLanguage {
-  if (value === "python") {
+  if (isCodePlaygroundLanguage(value)) {
     return value;
   }
   return "python";
@@ -490,7 +470,7 @@ function isDesmosGraphPayload(value: unknown): value is DesmosGraphPayload {
 }
 
 export function getSparkTypeLabel(sparkType: SparkType): string {
-  return sparkTypeLabels[sparkType];
+  return sparkManifestById[sparkType].label;
 }
 
 export function normalizeSparkSceneDraft(
@@ -968,7 +948,7 @@ export function normalizeCreateSparkInput(
 }
 
 export function isSparkType(value: unknown): value is SparkType {
-  return typeof value === "string" && sparkTypes.includes(value as SparkType);
+  return isManifestSparkType(value);
 }
 
 export function isSparkSceneArtifact(
@@ -1159,7 +1139,7 @@ function isCodePlaygroundPayload(
   }
 
   return (
-    value.language === "python" &&
+    isCodePlaygroundLanguage(value.language) &&
     typeof value.instructions === "string" &&
     typeof value.starterCode === "string" &&
     (value.testCode === undefined || typeof value.testCode === "string") &&

@@ -30,6 +30,7 @@ import {
   type SparkType,
   type WebPlaygroundSparkDraft,
 } from "../../lib/sparks/contracts";
+import { sparkManifestById } from "../../lib/sparks/manifest";
 import { internal } from "../_generated/api";
 import {
   codePlaygroundWorkerOutputSchema,
@@ -1396,17 +1397,7 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
       let result: CreateSparkToolResultWithUsage;
 
       const workerModelForSpark =
-        input.sparkId === "scene"
-          ? workerModels.sparkScene
-          : input.sparkId === "desmos_graph"
-            ? workerModels.sparkDesmos
-            : input.sparkId === "code_playground"
-              ? workerModels.sparkCode
-              : input.sparkId === "web_playground"
-                ? workerModels.sparkCode
-                : input.sparkId === "quiz"
-                  ? workerModels.sparkQuiz
-                  : workerModels.sparkFlash;
+        workerModels[sparkManifestById[input.sparkId].workerModelKey];
 
       try {
         if (input.sparkId === "scene") {
