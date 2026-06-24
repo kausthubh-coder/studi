@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { render, screen } from "@testing-library/react";
 import {
+  ArticleMessage,
   deriveAgentUiState,
   deriveAssistantRenderSequence,
 } from "@/components/studi-chat/MessageRenderer";
@@ -148,5 +151,34 @@ describe("deriveAssistantRenderSequence", () => {
       "intro_text",
       "spark_failure",
     ]);
+  });
+});
+
+describe("ArticleMessage Spark rendering", () => {
+  it("does not show a failure card while a Spark is still pending", () => {
+    const message = assistantMessage([
+      { type: "text", text: "I'll build a quick visual." } as never,
+      {
+        type: "tool-create_spark",
+        state: "input-available",
+        input: { sparkId: "scene", context: "Slope visual" },
+      } as never,
+    ]);
+
+    render(
+      createElement(ArticleMessage, {
+        message,
+        index: 0,
+        threadId: null,
+        onExpandSpark: () => undefined,
+        expandedSparkInstanceId: null,
+      }),
+    );
+
+    expect(screen.getByText("Building spark")).toBeInTheDocument();
+    expect(screen.queryByText(/failed to build/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Spark returned an unexpected output shape."),
+    ).not.toBeInTheDocument();
   });
 });

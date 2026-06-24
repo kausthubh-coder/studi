@@ -1064,10 +1064,11 @@ function AssistantParts({
       }
 
       const sparkResult = extractCreateSparkToolResult(toolState);
-      if (
-        toolState.state !== "output-available" ||
-        !sparkResult
-      ) {
+      if (toolState.state !== "output-available") {
+        return null;
+      }
+
+      if (!sparkResult) {
         const outputText = getToolOutputText(toolState.output)?.trim();
         if (outputText && /^spark created/i.test(outputText)) {
           return null;
