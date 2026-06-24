@@ -1,9 +1,22 @@
-always use `bun` / `bunx`.
+# Studi Worker Notes
 
-do test driven devlopment
+Always use `bun` / `bunx`; do not switch package managers.
 
-close the loop always test with browser and other methods of testing
+Do test-driven development where practical, then close the loop with lint, tests, build, and browser verification for UI changes.
 
-use cli or browser to get configurations or api keys for thrid party libraries when required
+Use CLI or browser docs to get current third-party configuration names when required, but never commit or print real API keys.
 
-we are building studi, the best experience possible to learn. we use a couple of principles: one-on-one tutoring is the best; don't give answers, but ask the right question, so the user feels like they invented the concept themselves instead of memorizing it; prioritize time-to-aha-moment — the shorter the time and the more aha moments, the better the product. since text alone does not suffice for the best learning experience, we implemented sparks: a way for the agent to represent info other than text (interactive scenes, graphs, code playgrounds, quizzes, flashcards). there is a single agent, `studi`. core surfaces are auth, chat, sparks, billing, and the waitlist.
+We are building Studi, the best experience possible to learn. The product principles are: one-on-one tutoring is best; do not just give answers, ask the right question so the learner feels like they invented the concept; prioritize time-to-aha. Text alone is not enough, so Sparks represent learning material beyond text: interactive scenes, graphs, code playgrounds, quizzes, flashcards, and future whiteboards.
+
+There is a single agent, `studi`. Current core surfaces are auth, chat, Sparks, billing/limits, and the waitlist.
+
+## Restoration Workflow
+
+- Treat `origin/main` as the clean baseline.
+- Treat `demo-old-pre-refactor` and `older-studi` as reference-only archaeology, not copy-paste targets.
+- Create each restoration branch from `origin/main` and keep PRs scoped to one restoration lane.
+- This safety baseline owns `human.md`, `.env.example`, and `bun run secrets:check`.
+- Run `bun run secrets:check` before committing and before opening PRs.
+- Keep real values in `.env.local` or provider dashboards only. The objective/planning material included pasted credentials, so assume those values are compromised and use placeholders in committed files.
+
+Do not implement model routing, Sparks V2, Labs, Tracks, or Voice inside the safety baseline PR.
