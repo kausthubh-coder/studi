@@ -14,6 +14,7 @@ import {
   normalizeLearningTrackDraft,
   normalizeLinkedActivityReference,
   normalizeTrackProgress,
+  selectTrackForPhase,
   type LearningTrack,
   type TrackItemStatus,
 } from "../lib/tracks/contracts";
@@ -191,7 +192,10 @@ export const acceptDraft = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     const track = await getOwnedTrackById(ctx, userId, args.trackId);
-    const draftTrack = track.draftTrack ?? track.acceptedTrack;
+    const draftTrack =
+      track.phase === "draft_review"
+        ? track.draftTrack
+        : selectTrackForPhase(track);
     if (!draftTrack) {
       throw new Error("No track draft to accept");
     }
@@ -331,7 +335,10 @@ export const acceptCurrentTrackInternal = internalMutation({
       throw new Error("Track not found");
     }
 
-    const draftTrack = track.draftTrack ?? track.acceptedTrack;
+    const draftTrack =
+      track.phase === "draft_review"
+        ? track.draftTrack
+        : selectTrackForPhase(track);
     if (!draftTrack) {
       throw new Error("No track draft to accept");
     }

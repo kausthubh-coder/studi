@@ -4,6 +4,7 @@ import {
   isTrackComplete,
   normalizeLearningTrackDraft,
   normalizeTrackProgress,
+  selectTrackForPhase,
 } from "@/lib/tracks/contracts";
 
 describe("track contracts", () => {
@@ -74,5 +75,30 @@ describe("track contracts", () => {
     });
     expect(isTrackComplete(track, completeProgress)).toBe(true);
   });
-});
 
+  it("selects drafts during review and accepted tracks after start", () => {
+    const acceptedTrack = normalizeLearningTrackDraft({
+      title: "Accepted path",
+      milestones: [{ title: "Old", items: [{ title: "Old step" }] }],
+    });
+    const draftTrack = normalizeLearningTrackDraft({
+      title: "Revised path",
+      milestones: [{ title: "New", items: [{ title: "New step" }] }],
+    });
+
+    expect(
+      selectTrackForPhase({
+        phase: "draft_review",
+        acceptedTrack,
+        draftTrack,
+      })?.title,
+    ).toBe("Revised path");
+    expect(
+      selectTrackForPhase({
+        phase: "active",
+        acceptedTrack,
+        draftTrack,
+      })?.title,
+    ).toBe("Accepted path");
+  });
+});

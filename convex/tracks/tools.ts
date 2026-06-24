@@ -6,6 +6,7 @@ import type { Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import {
   normalizeLearningTrackDraft,
+  selectTrackForPhase,
   type TrackToolResult,
 } from "../../lib/tracks/contracts";
 import {
@@ -49,7 +50,7 @@ function toTrackToolResult(
   },
   summary: string,
 ): TrackToolResult {
-  const learningTrack = track.acceptedTrack ?? track.draftTrack;
+  const learningTrack = selectTrackForPhase(track);
   return {
     status: "success",
     summary,

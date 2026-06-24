@@ -311,6 +311,16 @@ export function listTrackItemIds(track: LearningTrack): string[] {
   );
 }
 
+export function selectTrackForPhase<T>(track: {
+  phase?: TrackPhase;
+  draftTrack?: T;
+  acceptedTrack?: T;
+}): T | undefined {
+  return track.phase === "draft_review"
+    ? track.draftTrack ?? track.acceptedTrack
+    : track.acceptedTrack ?? track.draftTrack;
+}
+
 export function normalizeTrackProgress(
   track: LearningTrack,
   progress?: Partial<TrackProgress>,

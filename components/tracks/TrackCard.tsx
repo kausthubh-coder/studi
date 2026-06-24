@@ -2,11 +2,13 @@
 
 import { Check, Circle, Play, RotateCcw, SkipForward } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
-import type {
-  LearningTrack,
-  TrackItemStatus,
-  TrackPhase,
-  TrackProgress,
+import {
+  listTrackItemIds,
+  selectTrackForPhase,
+  type LearningTrack,
+  type TrackItemStatus,
+  type TrackPhase,
+  type TrackProgress,
 } from "@/lib/tracks/contracts";
 
 export type ThreadTrackRecord = {
@@ -24,13 +26,12 @@ export function summarizeTrackProgress(track: ThreadTrackRecord): {
   total: number;
   label: string;
 } {
-  const activeTrack = track.acceptedTrack ?? track.draftTrack;
-  const total =
-    activeTrack?.milestones.reduce(
-      (sum, milestone) => sum + milestone.items.length,
-      0,
-    ) ?? 0;
-  const completed = track.progress.completedItemIds.length;
+  const activeTrack = selectTrackForPhase(track);
+  const itemIds = new Set(activeTrack ? listTrackItemIds(activeTrack) : []);
+  const total = itemIds.size;
+  const completed = track.progress.completedItemIds.filter((id) =>
+    itemIds.has(id),
+  ).length;
   return {
     completed,
     total,
@@ -71,7 +72,7 @@ export function TrackCard({
     status: TrackItemStatus,
   ) => void;
 }) {
-  const activeTrack = track.acceptedTrack ?? track.draftTrack;
+  const activeTrack = selectTrackForPhase(track);
   if (!activeTrack) {
     return null;
   }
@@ -184,4 +185,3 @@ export function TrackCard({
     </section>
   );
 }
-

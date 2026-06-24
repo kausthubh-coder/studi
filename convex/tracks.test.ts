@@ -154,5 +154,54 @@ describe("learning tracks Convex API", () => {
     expect(second.revision).toBe(2);
     expect(second.draftTrack?.title).toBe("Short calculus track");
   });
-});
 
+  it("keeps revised drafts reviewable after a track has progress", async () => {
+    const t = testConvex();
+
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: "thread_a",
+      title: "Calculus",
+      lastMessageAt: 1,
+    });
+    const first = await t.mutation(internal.tracks.upsertDraftTrackInternal, {
+      userId: "user_a",
+      threadId: "thread_a",
+      draftTrack,
+    });
+
+    const authed = t.withIdentity({ subject: "user_a" });
+    const accepted = await authed.mutation(api.tracks.acceptDraft, {
+      trackId: first._id,
+    });
+    const firstItemId = accepted.acceptedTrack!.milestones[0]!.items[0]!.id;
+    await authed.mutation(api.tracks.markItem, {
+      trackId: first._id,
+      itemId: firstItemId,
+      status: "completed",
+    });
+
+    const revised = await t.mutation(internal.tracks.upsertDraftTrackInternal, {
+      userId: "user_a",
+      threadId: "thread_a",
+      draftTrack: {
+        ...draftTrack,
+        title: "Revised calculus path",
+      },
+      revisionNote: "Adjust after progress.",
+    });
+
+    expect(revised.phase).toBe("draft_review");
+    expect(revised.acceptedTrack?.title).toBe("Calculus foundations");
+    expect(revised.draftTrack?.title).toBe("Revised calculus path");
+    expect(revised.progress.completedItemIds).toEqual([firstItemId]);
+
+    const reaccepted = await authed.mutation(api.tracks.acceptDraft, {
+      trackId: first._id,
+    });
+
+    expect(reaccepted.phase).toBe("active");
+    expect(reaccepted.acceptedTrack?.title).toBe("Revised calculus path");
+    expect(reaccepted.progress.completedItemIds).toEqual([]);
+  });
+});
