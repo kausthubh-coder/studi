@@ -1,5 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+  learningTrackValidator,
+  trackLinkedActivityValidator,
+  trackPhaseValidator,
+  trackProgressValidator,
+} from "./tracks/validators";
 
 export default defineSchema({
   userThreads: defineTable({
@@ -40,6 +46,10 @@ export default defineSchema({
     lastStdout: v.optional(v.string()),
     lastStderr: v.optional(v.string()),
     lastError: v.optional(v.string()),
+    lastExitCode: v.optional(v.number()),
+    lastRunCommand: v.optional(v.string()),
+    labSessionId: v.optional(v.id("labSessions")),
+    labPreviewUrl: v.optional(v.string()),
     lastRunAt: v.optional(v.number()),
     lastUpdatedAt: v.number(),
   })
@@ -53,6 +63,110 @@ export default defineSchema({
       "threadId",
       "sparkInstanceId",
     ]),
+
+  labSessions: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    title: v.optional(v.string()),
+    provider: v.optional(v.literal("daytona")),
+    sandboxId: v.string(),
+    workspacePath: v.optional(v.string()),
+    language: v.optional(
+      v.union(
+        v.literal("python"),
+        v.literal("javascript"),
+        v.literal("typescript"),
+      ),
+    ),
+    status: v.optional(
+      v.union(
+        v.literal("starting"),
+        v.literal("ready"),
+        v.literal("error"),
+        v.literal("archived"),
+      ),
+    ),
+    metadata: v.optional(v.any()),
+    previewUrls: v.optional(
+      v.array(
+        v.object({
+          port: v.number(),
+          url: v.string(),
+          token: v.optional(v.string()),
+        }),
+      ),
+    ),
+    lastError: v.optional(
+      v.object({
+        message: v.string(),
+        category: v.optional(v.string()),
+        retriable: v.optional(v.boolean()),
+        occurredAt: v.number(),
+      }),
+    ),
+    lastActiveAt: v.number(),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_threadId_and_lastActiveAt", [
+      "userId",
+      "threadId",
+      "lastActiveAt",
+    ])
+    .index("by_userId_and_status_and_lastActiveAt", [
+      "userId",
+      "status",
+      "lastActiveAt",
+    ])
+    .index("by_sandboxId", ["sandboxId"]),
+
+  learningTracks: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    phase: trackPhaseValidator,
+    revision: v.number(),
+    draftTrack: v.optional(learningTrackValidator),
+    acceptedTrack: v.optional(learningTrackValidator),
+    progress: trackProgressValidator,
+    linkedActivities: v.array(trackLinkedActivityValidator),
+    revisionNote: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_threadId", ["userId", "threadId"])
+    .index("by_userId_and_updatedAt", ["userId", "updatedAt"]),
+
+  voiceSessions: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    provider: v.literal("openai_realtime"),
+    model: v.string(),
+    status: v.union(
+      v.literal("created"),
+      v.literal("connected"),
+      v.literal("ended"),
+      v.literal("failed"),
+    ),
+    clientSessionId: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+    lastError: v.optional(
+      v.object({
+        code: v.string(),
+        message: v.string(),
+        retriable: v.boolean(),
+        status: v.optional(v.number()),
+      }),
+    ),
+  })
+    .index("by_userId_and_threadId_and_createdAt", [
+      "userId",
+      "threadId",
+      "createdAt",
+    ])
+    .index("by_clientSessionId", ["clientSessionId"]),
 
   billingProfiles: defineTable({
     userId: v.string(),
@@ -82,6 +196,12 @@ export default defineSchema({
     textPromptCount: v.number(),
     textAiCostUsd: v.number(),
     totalEstimatedCostUsd: v.number(),
+    labActiveSeconds: v.optional(v.number()),
+    labEstimatedCostUsd: v.optional(v.number()),
+    labSessionCount: v.optional(v.number()),
+    lastLabActivityAt: v.optional(v.number()),
+    voiceEstimatedCostUsd: v.optional(v.number()),
+    voiceSeconds: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_userId_and_billingPeriod", ["userId", "billingPeriod"]),
 
@@ -127,6 +247,11 @@ export default defineSchema({
       v.literal("agent_usage"),
       v.literal("agent_runtime"),
       v.literal("spark"),
+      v.literal("lab"),
+      v.literal("voice"),
+      v.literal("track"),
+      v.literal("quota"),
+      v.literal("plan_tool"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),
@@ -148,6 +273,17 @@ export default defineSchema({
       "source",
       "createdAt",
     ]),
+
+  quotaCounters: defineTable({
+    userId: v.string(),
+    dayKey: v.string(),
+    action: v.string(),
+    count: v.number(),
+    limit: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_dayKey", ["userId", "dayKey"])
+    .index("by_userId_and_dayKey_and_action", ["userId", "dayKey", "action"]),
 
   waitlistWebhookEvents: defineTable({
     source: v.literal("tally_waitlist"),

@@ -17,10 +17,13 @@
     "test:convex": "vitest run --config vitest.convex.config.ts",
     "test:e2e": "playwright test",
     "test:all": "bun run test && bun run test:e2e",
-    "check": "bun run prompts:check && bun run lint && bun run test && bun run build",
+    "check": "bun run secrets:check && bun run prompts:check && bun run lint && bun run test && bun run build",
+    "smoke:daytona": "bun scripts/daytona-smoke.ts",
     "prompts:sync": "bun lib/prompts/sync.ts",
     "prompts:check": "bun lib/prompts/sync.ts --check",
-    "playground": "bunx @convex-dev/agent-playground"
+    "secrets:check": "bun scripts/secrets-check.ts",
+    "playground": "bunx @convex-dev/agent-playground",
+    "smoke:voice": "bun scripts/smoke-voice.ts"
   },
   "dependencies": {
     "@clerk/backend": "^2.33.0",
@@ -28,6 +31,8 @@
     "@clerk/nextjs": "^6.37.3",
     "@convex-dev/agent": "^0.3.2",
     "@convex-dev/rate-limiter": "^0.3.2",
+    "@daytona/sdk": "^0.190.1",
+    "@monaco-editor/react": "^4.7.0",
     "@openrouter/ai-sdk-provider": "1.2.0",
     "ai": "5.0.82",
     "clsx": "^2.1.1",
@@ -36,6 +41,7 @@
     "highlight.js": "^11.11.1",
     "katex": "^0.16.28",
     "lucide-react": "^0.575.0",
+    "monaco-editor": "^0.55.1",
     "next": "^16.1.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

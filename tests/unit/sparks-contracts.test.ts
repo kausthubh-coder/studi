@@ -3,6 +3,7 @@ import {
   isCreateSparkToolResult,
   isSparkArtifact,
   normalizeCreateSparkInput,
+  normalizeSparkCodePlaygroundDraft,
   normalizeSparkQuizDraft,
   normalizeSparkSceneDraft,
 } from "@/lib/sparks/contracts";
@@ -65,5 +66,63 @@ describe("spark contracts", () => {
     expect(artifact.payload.questions[0]?.choices.length).toBeGreaterThanOrEqual(
       2,
     );
+  });
+
+  it("normalizes JavaScript and TypeScript code playground languages", () => {
+    expect(
+      normalizeSparkCodePlaygroundDraft({
+        title: "JS loop",
+        payload: {
+          language: "javascript",
+          instructions: "Predict the output, then edit the loop.",
+          starterCode: "for (let i = 0; i < 3; i++) console.log(i);",
+        },
+      }).payload.language,
+    ).toBe("javascript");
+
+    expect(
+      normalizeSparkCodePlaygroundDraft({
+        title: "TS type",
+        payload: {
+          language: "typescript",
+          instructions: "Add the missing type annotation.",
+          starterCode: "const double = (n: number) => n * 2;",
+        },
+      }).payload.language,
+    ).toBe("typescript");
+  });
+
+  it("normalizes code playground files, primary file, and run command", () => {
+    const artifact = normalizeSparkCodePlaygroundDraft({
+      title: "Runnable TS",
+      payload: {
+        language: "typescript",
+        instructions: "Run the function and inspect the output.",
+        starterCode: "const double = (n: number) => n * 2;\nconsole.log(double(3));",
+        starterFiles: [
+          {
+            path: "/bad.ts",
+            content: "bad",
+          },
+          {
+            path: "src/main.ts",
+            content: "const double = (n: number) => n * 2;\nconsole.log(double(3));",
+          },
+        ],
+        primaryFile: "../escape.ts",
+        previewPort: 70000,
+      },
+    });
+
+    expect(artifact.payload.starterFiles).toEqual([
+      {
+        path: "src/main.ts",
+        content: "const double = (n: number) => n * 2;\nconsole.log(double(3));",
+      },
+    ]);
+    expect(artifact.payload.primaryFile).toBe("src/main.ts");
+    expect(artifact.payload.runCommand).toBe("bunx tsx src/main.ts");
+    expect(artifact.payload.previewPort).toBeUndefined();
+    expect(isSparkArtifact(artifact)).toBe(true);
   });
 });

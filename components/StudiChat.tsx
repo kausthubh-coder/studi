@@ -29,8 +29,13 @@ import type {
   ThreadSummary,
 } from "@/components/studi-chat/types";
 import { SparkPanel } from "@/components/sparks/SparkPanel";
+import { LabWorkspace } from "@/components/labs/LabWorkspace";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { IconCompose } from "@/components/studi-chat/icons";
+import { PanelRightOpen, TerminalSquare } from "lucide-react";
+import type { ThreadTrackRecord } from "@/components/tracks/TrackCard";
+import type { TrackItemStatus } from "@/lib/tracks/contracts";
+import { VoiceControl } from "@/components/voice/VoiceControl";
 
 function makeRequestId(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -76,6 +81,8 @@ export default function StudiChat() {
   );
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
   const saveAttachment = useMutation(api.chat.saveAttachment);
+  const acceptTrack = useMutation(api.tracks.acceptDraft);
+  const markTrackItem = useMutation(api.tracks.markItem);
   const syncBillingProfile = useAction(
     api.billingActions.syncCurrentUserBillingProfile,
   );
@@ -86,11 +93,14 @@ export default function StudiChat() {
   const [threadDeleteError, setThreadDeleteError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [expandedSpark, setExpandedSpark] = useState<ExpandedSpark | null>(null);
+  const [isLabPanelOpen, setIsLabPanelOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobilePanelView, setMobilePanelView] = useState<"chat" | "spark">(
     "chat",
   );
   const [sparkChatWidth, setSparkChatWidth] = useState(420);
+  const [trackBusy, setTrackBusy] = useState(false);
+  const [trackError, setTrackError] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -98,6 +108,10 @@ export default function StudiChat() {
   const [pendingAttachments, setPendingAttachments] = useState<
     PendingAttachment[]
   >([]);
+  const currentTrack = useQuery(
+    api.tracks.getThreadTrack,
+    selectedThreadId ? { threadId: selectedThreadId } : "skip",
+  ) as ThreadTrackRecord | null | undefined;
 
   const didBackfillRef = useRef(false);
   const selectedThreadIdRef = useRef<string | null>(null);
@@ -303,6 +317,7 @@ export default function StudiChat() {
     setThreadDeleteError(null);
     setSelectedThreadId(null);
     setExpandedSpark(null);
+    setIsLabPanelOpen(false);
     setMobilePanelView("chat");
     setInput("");
     setPendingAttachments((previous) => {
@@ -315,8 +330,10 @@ export default function StudiChat() {
 
   const handleSelectThread = useCallback((id: string | null) => {
     setThreadDeleteError(null);
+    setTrackError(null);
     setSelectedThreadId(id);
     setExpandedSpark(null);
+    setIsLabPanelOpen(false);
     setMobilePanelView("chat");
     setIsMobileSidebarOpen(false);
   }, []);
@@ -355,16 +372,54 @@ export default function StudiChat() {
       sparkInstanceId: string,
     ) => {
       setExpandedSpark({ artifact, threadId, sparkInstanceId });
+      setIsLabPanelOpen(false);
       setMobilePanelView("spark");
     },
     [],
   );
 
-  useEffect(() => {
-    if (!expandedSpark) {
-      setMobilePanelView("chat");
-    }
-  }, [expandedSpark]);
+  const handleAcceptTrack = useCallback(
+    async (trackId: Id<"learningTracks">) => {
+      setTrackError(null);
+      setTrackBusy(true);
+      try {
+        await acceptTrack({ trackId });
+      } catch (error) {
+        console.error("Accept track failed", error);
+        setTrackError(getErrorMessage(error));
+      } finally {
+        setTrackBusy(false);
+      }
+    },
+    [acceptTrack],
+  );
+
+  const handleReviseTrack = useCallback((track: ThreadTrackRecord) => {
+    setTrackError(null);
+    const title = track.draftTrack?.title ?? track.acceptedTrack?.title ?? "this Track";
+    setInput(`Revise "${title}" to `);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
+
+  const handleMarkTrackItem = useCallback(
+    async (
+      trackId: Id<"learningTracks">,
+      itemId: string,
+      status: TrackItemStatus,
+    ) => {
+      setTrackError(null);
+      setTrackBusy(true);
+      try {
+        await markTrackItem({ trackId, itemId, status });
+      } catch (error) {
+        console.error("Track progress update failed", error);
+        setTrackError(getErrorMessage(error));
+      } finally {
+        setTrackBusy(false);
+      }
+    },
+    [markTrackItem],
+  );
 
   const handleSparkResizeStart = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -533,6 +588,27 @@ export default function StudiChat() {
           </div>
         ) : null}
 
+        {!isOnWelcome ? (
+          <button
+            type="button"
+            className="lab-toggle-btn"
+            onClick={() => {
+              setExpandedSpark(null);
+              setMobilePanelView("chat");
+              setIsLabPanelOpen((value) => !value);
+            }}
+            aria-pressed={isLabPanelOpen}
+            aria-label={isLabPanelOpen ? "Close lab panel" : "Open lab panel"}
+            title={isLabPanelOpen ? "Close lab" : "Open lab"}
+          >
+            {isLabPanelOpen ? (
+              <PanelRightOpen className="h-4 w-4" />
+            ) : (
+              <TerminalSquare className="h-4 w-4" />
+            )}
+          </button>
+        ) : null}
+
         {isOnWelcome ? (
           <WelcomeView
             pendingAttachments={pendingAttachments}
@@ -550,7 +626,7 @@ export default function StudiChat() {
         ) : (
           <div
             className={`flex flex-1 overflow-hidden ${
-              expandedSpark ? "flex-col lg:flex-row" : ""
+              expandedSpark || isLabPanelOpen ? "flex-col lg:flex-row" : ""
             }`}
           >
             {expandedSpark && isMobile ? (
@@ -576,6 +652,8 @@ export default function StudiChat() {
               className={`relative flex min-w-0 flex-col overflow-hidden ${
                 expandedSpark
                   ? `spark-chat-column flex-1 lg:flex-none ${isMobile && mobilePanelView !== "chat" ? "hidden" : ""}`
+                  : isLabPanelOpen
+                    ? "lab-chat-column flex-1 lg:flex-none"
                   : "flex-1"
               }`}
               style={
@@ -583,6 +661,10 @@ export default function StudiChat() {
                   ? ({
                       "--spark-chat-width": `${sparkChatWidth}px`,
                     } as React.CSSProperties)
+                  : isLabPanelOpen
+                    ? ({
+                        "--lab-chat-width": `${Math.max(360, sparkChatWidth)}px`,
+                      } as React.CSSProperties)
                   : undefined
               }
             >
@@ -591,7 +673,24 @@ export default function StudiChat() {
                 selectedThreadId={selectedThreadId}
                 messages={uiMessages.results}
                 onExpandSpark={handleExpandSpark}
+                onOpenLab={() => {
+                  setExpandedSpark(null);
+                  setMobilePanelView("chat");
+                  setIsLabPanelOpen(true);
+                }}
                 expandedSparkInstanceId={expandedSpark?.sparkInstanceId ?? null}
+                currentTrack={currentTrack ?? null}
+                trackBusy={trackBusy}
+                trackError={trackError}
+                onAcceptTrack={(trackId) => void handleAcceptTrack(trackId)}
+                onReviseTrack={handleReviseTrack}
+                onMarkTrackItem={(trackId, itemId, status) =>
+                  void handleMarkTrackItem(trackId, itemId, status)
+                }
+              />
+              <VoiceControl
+                threadId={selectedThreadId}
+                disabled={isComposerBusy || hasActiveAgentWork}
               />
               <Composer
                 pendingAttachments={pendingAttachments}
@@ -619,8 +718,20 @@ export default function StudiChat() {
                 />
                 <SparkPanel
                   spark={expandedSpark}
-                  onClose={() => setExpandedSpark(null)}
+                  onClose={() => {
+                    setExpandedSpark(null);
+                    setMobilePanelView("chat");
+                  }}
+                  onOpenLab={() => {
+                    setExpandedSpark(null);
+                    setMobilePanelView("chat");
+                    setIsLabPanelOpen(true);
+                  }}
                 />
+              </div>
+            ) : isLabPanelOpen && selectedThreadId ? (
+              <div className="flex min-w-0 flex-1">
+                <LabWorkspace threadId={selectedThreadId} />
               </div>
             ) : null}
           </div>

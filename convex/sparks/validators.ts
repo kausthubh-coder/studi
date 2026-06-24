@@ -8,6 +8,7 @@ import type {
   SparkValidationResult,
   WebPlaygroundPayload,
 } from "../../lib/sparks/contracts";
+import { isCodePlaygroundLanguage } from "../../lib/sparks/manifest";
 import { tailwindBrowserScriptSrc } from "./schemas";
 
 export function createArtifactId(): string {
@@ -209,8 +210,10 @@ export function validateCodePlaygroundPayload(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (payload.language !== "python") {
-    errors.push("Code playground currently supports only python.");
+  if (!isCodePlaygroundLanguage(payload.language)) {
+    errors.push(
+      "Code playground language must be python, javascript, or typescript.",
+    );
   }
 
   if (!payload.instructions.trim()) {
@@ -222,15 +225,17 @@ export function validateCodePlaygroundPayload(
   }
 
   const starterLines = payload.starterCode.split(/\r?\n/);
-  if (starterLines.length < 2) {
+  if (payload.language === "python" && starterLines.length < 2) {
     errors.push(
       "Code playground starterCode must be multi-line Python code with proper indentation.",
     );
   }
 
-  const hasInlineCommentedFunctionBody = starterLines.some((line) =>
-    /^\s*def\s+[A-Za-z_]\w*\([^)]*\):\s*#/.test(line),
-  );
+  const hasInlineCommentedFunctionBody =
+    payload.language === "python" &&
+    starterLines.some((line) =>
+      /^\s*def\s+[A-Za-z_]\w*\([^)]*\):\s*#/.test(line),
+    );
   if (hasInlineCommentedFunctionBody) {
     errors.push(
       "Function definitions must not place TODO comments inline after ':'. Put comments on the next indented line.",
@@ -239,6 +244,61 @@ export function validateCodePlaygroundPayload(
 
   if (payload.starterCode.length > 22_000) {
     errors.push("Code playground starterCode is too large.");
+  }
+
+  const starterFiles = payload.starterFiles ?? [];
+  if (starterFiles.length > 12) {
+    errors.push("Code playground starterFiles has too many files.");
+  }
+
+  const filePaths = new Set<string>();
+  for (const file of starterFiles) {
+    if (!file.path.trim()) {
+      errors.push("Code playground starterFiles paths are required.");
+      continue;
+    }
+    if (
+      file.path.startsWith("/") ||
+      file.path.includes("..") ||
+      /^[A-Za-z]:[\\/]/.test(file.path)
+    ) {
+      errors.push("Code playground starterFiles must stay workspace-relative.");
+    }
+    if (filePaths.has(file.path)) {
+      errors.push(`Duplicate code playground starter file: ${file.path}.`);
+    }
+    filePaths.add(file.path);
+    if (file.content.length > 22_000) {
+      errors.push(`Code playground file is too large: ${file.path}.`);
+    }
+  }
+
+  if (payload.primaryFile) {
+    if (
+      payload.primaryFile.startsWith("/") ||
+      payload.primaryFile.includes("..") ||
+      /^[A-Za-z]:[\\/]/.test(payload.primaryFile)
+    ) {
+      errors.push("Code playground primaryFile must stay workspace-relative.");
+    }
+    if (starterFiles.length > 0 && !filePaths.has(payload.primaryFile)) {
+      errors.push("Code playground primaryFile must match a starter file.");
+    }
+  }
+
+  if (!payload.runCommand?.trim()) {
+    errors.push("Code playground runCommand is required for lab execution.");
+  } else if (payload.runCommand.length > 240) {
+    errors.push("Code playground runCommand is too long.");
+  }
+
+  if (
+    payload.previewPort !== undefined &&
+    (!Number.isInteger(payload.previewPort) ||
+      payload.previewPort < 1 ||
+      payload.previewPort > 65_535)
+  ) {
+    errors.push("Code playground previewPort must be between 1 and 65535.");
   }
 
   if (payload.testCode && payload.testCode.length > 22_000) {

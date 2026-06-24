@@ -1,0 +1,1071 @@
+"use node";
+
+import { ConvexError, v } from "convex/values";
+import type { FunctionReference } from "convex/server";
+import type { Id } from "./_generated/dataModel";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { createDaytonaLabRuntimeProvider } from "./labs/daytonaProvider";
+import type {
+  LabLanguage,
+  LabRuntimeProvider,
+  LabRuntimeSession,
+} from "../lib/labs/runtime";
+import { normalizeLabPath } from "../lib/labs/runtime";
+
+const internalApi = internal as unknown as {
+  billing: {
+    assertCanUseLabsInternal: FunctionReference<"mutation", "internal">;
+  };
+  labs: {
+    assertThreadOwnerInternal: FunctionReference<"query", "internal">;
+    createLabSessionInternal: FunctionReference<"mutation", "internal">;
+    patchLabSessionRuntimeInternal: FunctionReference<"mutation", "internal">;
+    recordLabErrorInternal: FunctionReference<"mutation", "internal">;
+    archiveLabSessionInternal: FunctionReference<"mutation", "internal">;
+    getLabSessionForUserInternal: FunctionReference<"query", "internal">;
+    findReusableLabSessionForThreadInternal: FunctionReference<
+      "query",
+      "internal"
+    >;
+  };
+  sparkFeedback: {
+    recordCodeSparkLabRunInternal: FunctionReference<"mutation", "internal">;
+  };
+  telemetry: {
+    insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
+  };
+  quotas: {
+    reserveDailyQuotaInternal: FunctionReference<"mutation", "internal">;
+  };
+};
+
+const labLanguageValidator = v.union(
+  v.literal("python"),
+  v.literal("javascript"),
+  v.literal("typescript"),
+);
+
+const fileEntryValidator = v.object({
+  path: v.string(),
+  name: v.string(),
+  type: v.union(v.literal("file"), v.literal("directory")),
+  size: v.optional(v.number()),
+  modifiedAt: v.optional(v.number()),
+});
+
+const commandResultValidator = v.object({
+  command: v.string(),
+  cwd: v.optional(v.string()),
+  exitCode: v.optional(v.number()),
+  stdout: v.optional(v.string()),
+  stderr: v.optional(v.string()),
+  output: v.optional(v.string()),
+});
+
+const codeSparkFileValidator = v.object({
+  path: v.string(),
+  content: v.string(),
+});
+
+const sessionCommandResultValidator = v.object({
+  command: v.string(),
+  commandId: v.optional(v.string()),
+  cwd: v.optional(v.string()),
+  exitCode: v.optional(v.number()),
+  stdout: v.optional(v.string()),
+  stderr: v.optional(v.string()),
+  output: v.optional(v.string()),
+});
+
+const searchMatchValidator = v.object({
+  path: v.string(),
+  line: v.optional(v.number()),
+  content: v.optional(v.string()),
+});
+
+const previewValidator = v.object({
+  port: v.number(),
+  url: v.string(),
+  token: v.optional(v.string()),
+});
+
+const codeSparkMaterializeResultValidator = v.object({
+  status: v.union(v.literal("success"), v.literal("error")),
+  labSessionId: v.optional(v.id("labSessions")),
+  reusedLab: v.boolean(),
+  files: v.array(v.string()),
+  command: v.string(),
+  result: v.optional(commandResultValidator),
+  preview: v.optional(previewValidator),
+  error: v.optional(v.string()),
+});
+
+const labSessionActionValidator = v.object({
+  _id: v.id("labSessions"),
+  _creationTime: v.number(),
+  userId: v.string(),
+  threadId: v.string(),
+  title: v.optional(v.string()),
+  provider: v.literal("daytona"),
+  sandboxId: v.string(),
+  workspacePath: v.string(),
+  language: v.optional(labLanguageValidator),
+  status: v.union(
+    v.literal("starting"),
+    v.literal("ready"),
+    v.literal("error"),
+    v.literal("archived"),
+  ),
+  previewUrls: v.optional(v.array(previewValidator)),
+  lastError: v.optional(
+    v.object({
+      message: v.string(),
+      category: v.optional(v.string()),
+      retriable: v.optional(v.boolean()),
+      occurredAt: v.number(),
+    }),
+  ),
+  lastActiveAt: v.number(),
+  archivedAt: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+});
+
+let runtimeProvider: LabRuntimeProvider | null = null;
+
+function getRuntimeProvider() {
+  runtimeProvider ??= createDaytonaLabRuntimeProvider();
+  return runtimeProvider;
+}
+
+export function __setLabRuntimeProviderForTesting(
+  provider: LabRuntimeProvider | null,
+) {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error(
+      "Test runtime provider override is only available in tests",
+    );
+  }
+  runtimeProvider = provider;
+}
+
+function toMessage(error: unknown) {
+  return error instanceof Error && error.message
+    ? error.message
+    : String(error);
+}
+
+function classifyProviderError(error: unknown) {
+  const message = toMessage(error).toLowerCase();
+  if (message.includes("timeout")) return "timeout";
+  if (message.includes("rate")) return "rate_limit";
+  if (message.includes("auth")) return "auth";
+  if (message.includes("not found")) return "not_found";
+  return "provider_error";
+}
+
+function safeSparkDirectory(sparkInstanceId: string) {
+  const slug = sparkInstanceId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return `code-sparks/${slug || "spark"}`;
+}
+
+async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthorized");
+  return identity.subject;
+}
+
+type QuotaReservation = {
+  allowed: boolean;
+  action: string;
+  message?: string;
+  limit?: number;
+  resetAt?: number;
+};
+
+function assertQuotaAllowed(quota: QuotaReservation) {
+  if (quota.allowed) return;
+  throw new ConvexError({
+    code: "QUOTA_EXCEEDED",
+    action: quota.action,
+    message: quota.message ?? "Daily usage limit reached.",
+    limit: quota.limit,
+    resetAt: quota.resetAt,
+  });
+}
+
+async function reserveLabRuntime(
+  ctx: ActionCtx,
+  args: { userId: string; threadId: string; name: string },
+) {
+  const quota = (await ctx.runMutation(
+    internalApi.quotas.reserveDailyQuotaInternal,
+    {
+      userId: args.userId,
+      threadId: args.threadId,
+      action: "lab_runtime",
+      name: args.name,
+    },
+  )) as QuotaReservation;
+  assertQuotaAllowed(quota);
+}
+
+async function recordLabTelemetry(
+  ctx: ActionCtx,
+  args: {
+    userId: string;
+    threadId: string;
+    name: string;
+    status: "success" | "failed";
+    startedAt: number;
+    error?: unknown;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  await ctx
+    .runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
+      userId: args.userId,
+      threadId: args.threadId,
+      source: "lab",
+      name: args.name,
+      status: args.status,
+      durationMs: Date.now() - args.startedAt,
+      errorCategory: args.error ? classifyProviderError(args.error) : undefined,
+      retriable: args.error ? true : undefined,
+      metadata: {
+        ...args.metadata,
+        error: args.error ? toMessage(args.error).slice(0, 500) : undefined,
+      },
+    })
+    .catch((telemetryError) => {
+      console.error("Failed to store lab telemetry", telemetryError);
+    });
+}
+
+async function getOwnedSession(
+  ctx: ActionCtx,
+  userId: string,
+  labSessionId: Id<"labSessions">,
+) {
+  return await ctx.runQuery(internalApi.labs.getLabSessionForUserInternal, {
+    userId,
+    labSessionId,
+  });
+}
+
+async function recordSessionError(
+  ctx: ActionCtx,
+  userId: string,
+  labSessionId: Id<"labSessions">,
+  error: unknown,
+) {
+  await ctx.runMutation(internalApi.labs.recordLabErrorInternal, {
+    userId,
+    labSessionId,
+    message: toMessage(error),
+    category: classifyProviderError(error),
+    retriable: true,
+  });
+}
+
+export const createLab = action({
+  args: {
+    threadId: v.string(),
+    title: v.optional(v.string()),
+    language: v.optional(labLanguageValidator),
+  },
+  returns: labSessionActionValidator,
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const startedAt = Date.now();
+    await ctx.runMutation(internalApi.billing.assertCanUseLabsInternal, {
+      userId,
+    });
+    await ctx.runQuery(internalApi.labs.assertThreadOwnerInternal, {
+      userId,
+      threadId: args.threadId,
+    });
+    await reserveLabRuntime(ctx, {
+      userId,
+      threadId: args.threadId,
+      name: "create_lab",
+    });
+
+    let runtimeSession: LabRuntimeSession | null = null;
+    try {
+      runtimeSession = await getRuntimeProvider().create({
+        title: args.title,
+        language: args.language as LabLanguage | undefined,
+        labels: {
+          threadId: args.threadId,
+          userId,
+        },
+      });
+      const session = await ctx.runMutation(
+        internalApi.labs.createLabSessionInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          title: args.title,
+          provider: runtimeSession.provider,
+          sandboxId: runtimeSession.sandboxId,
+          workspacePath: runtimeSession.workspacePath,
+          language: args.language,
+          status: runtimeSession.status,
+          previewUrls: runtimeSession.previewUrls,
+        },
+      );
+
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: args.threadId,
+        name: "create_lab",
+        status: "success",
+        startedAt,
+        metadata: { labSessionId: session._id, provider: session.provider },
+      });
+      return session;
+    } catch (error) {
+      if (runtimeSession) {
+        await getRuntimeProvider()
+          .archive({ sandboxId: runtimeSession.sandboxId })
+          .catch((archiveError) => {
+            console.error("Failed to clean up orphaned lab runtime", {
+              sandboxId: runtimeSession?.sandboxId,
+              error: toMessage(archiveError),
+            });
+          });
+      }
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: args.threadId,
+        name: "create_lab",
+        status: "failed",
+        startedAt,
+        error,
+      });
+      throw error;
+    }
+  },
+});
+
+export const materializeCodeSpark = action({
+  args: {
+    threadId: v.string(),
+    sparkInstanceId: v.string(),
+    sparkTitle: v.optional(v.string()),
+    language: labLanguageValidator,
+    files: v.array(codeSparkFileValidator),
+    primaryFile: v.string(),
+    runCommand: v.string(),
+    previewPort: v.optional(v.number()),
+  },
+  returns: codeSparkMaterializeResultValidator,
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const startedAt = Date.now();
+    const provider = getRuntimeProvider();
+    await ctx.runQuery(internalApi.labs.assertThreadOwnerInternal, {
+      userId,
+      threadId: args.threadId,
+    });
+    await ctx.runMutation(internalApi.billing.assertCanUseLabsInternal, {
+      userId,
+    });
+    await reserveLabRuntime(ctx, {
+      userId,
+      threadId: args.threadId,
+      name: "materialize_code_spark",
+    });
+
+    let session = await ctx.runQuery(
+      internalApi.labs.findReusableLabSessionForThreadInternal,
+      {
+        userId,
+        threadId: args.threadId,
+        language: args.language,
+      },
+    );
+    let reusedLab = Boolean(session);
+
+    try {
+      if (!session) {
+        const runtimeSession = await provider.create({
+          title: args.sparkTitle ?? "Code Spark",
+          language: args.language,
+          labels: {
+            threadId: args.threadId,
+            userId,
+            sparkInstanceId: args.sparkInstanceId,
+          },
+        });
+        session = await ctx.runMutation(
+          internalApi.labs.createLabSessionInternal,
+          {
+            userId,
+            threadId: args.threadId,
+            title: args.sparkTitle,
+            provider: runtimeSession.provider,
+            sandboxId: runtimeSession.sandboxId,
+            workspacePath: runtimeSession.workspacePath,
+            language: args.language,
+            status: runtimeSession.status,
+            previewUrls: runtimeSession.previewUrls,
+          },
+        );
+        reusedLab = false;
+      } else {
+        await provider.resume({ sandboxId: session.sandboxId });
+      }
+
+      const sparkDir = safeSparkDirectory(args.sparkInstanceId);
+      const writtenFiles: string[] = [];
+      for (const file of args.files.slice(0, 12)) {
+        const relativePath = normalizeLabPath(file.path);
+        const labPath = normalizeLabPath(`${sparkDir}/${relativePath}`);
+        await provider.write({
+          sandboxId: session.sandboxId,
+          path: labPath,
+          content: file.content.slice(0, 22_000),
+        });
+        writtenFiles.push(labPath);
+      }
+
+      const result = await provider.runCommand({
+        sandboxId: session.sandboxId,
+        command: args.runCommand.slice(0, 240),
+        cwd: sparkDir,
+        timeoutSec: 20,
+      });
+
+      let preview: { port: number; url: string; token?: string } | undefined;
+      if (args.previewPort) {
+        preview = await provider.getPreview({
+          sandboxId: session.sandboxId,
+          port: args.previewPort,
+          signed: true,
+        });
+        const previews = [
+          ...(session.previewUrls ?? []).filter(
+            (item: { port: number }) => item.port !== args.previewPort,
+          ),
+          preview,
+        ];
+        await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+          userId,
+          labSessionId: session._id,
+          previewUrls: previews,
+          clearError: true,
+        });
+      } else {
+        await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+          userId,
+          labSessionId: session._id,
+          clearError: true,
+        });
+      }
+
+      const status: "success" | "error" =
+        result.exitCode === 0 ? "success" : "error";
+      await ctx.runMutation(
+        internalApi.sparkFeedback.recordCodeSparkLabRunInternal,
+        {
+          userId,
+          threadId: args.threadId,
+          sparkInstanceId: args.sparkInstanceId,
+          sparkTitle: args.sparkTitle,
+          language: args.language,
+          code:
+            args.files.find((file) => file.path === args.primaryFile)
+              ?.content ??
+            args.files[0]?.content ??
+            "",
+          labSessionId: session._id,
+          command: args.runCommand,
+          previewUrl: preview?.url,
+          result: {
+            status,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            error:
+              status === "error"
+                ? result.stderr || result.output || "Command failed."
+                : undefined,
+            exitCode: result.exitCode,
+          },
+        },
+      );
+
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: args.threadId,
+        name: "materialize_code_spark",
+        status: status === "success" ? "success" : "failed",
+        startedAt,
+        metadata: {
+          labSessionId: session._id,
+          reusedLab,
+          command: args.runCommand,
+          fileCount: writtenFiles.length,
+        },
+      });
+
+      return {
+        status,
+        labSessionId: session._id,
+        reusedLab,
+        files: writtenFiles,
+        command: args.runCommand,
+        result,
+        preview,
+        error:
+          status === "error"
+            ? result.stderr || result.output || "Command failed."
+            : undefined,
+      };
+    } catch (error) {
+      if (session) {
+        await recordSessionError(ctx, userId, session._id, error).catch(
+          (recordError) => {
+            console.error("Failed to record code spark lab error", recordError);
+          },
+        );
+        await ctx
+          .runMutation(
+            internalApi.sparkFeedback.recordCodeSparkLabRunInternal,
+            {
+              userId,
+              threadId: args.threadId,
+              sparkInstanceId: args.sparkInstanceId,
+              sparkTitle: args.sparkTitle,
+              language: args.language,
+              code:
+                args.files.find((file) => file.path === args.primaryFile)
+                  ?.content ??
+                args.files[0]?.content ??
+                "",
+              labSessionId: session._id,
+              command: args.runCommand,
+              result: {
+                status: "error",
+                error: toMessage(error),
+              },
+            },
+          )
+          .catch((recordError) => {
+            console.error("Failed to record code spark run error", recordError);
+          });
+      }
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: args.threadId,
+        name: "materialize_code_spark",
+        status: "failed",
+        startedAt,
+        error,
+        metadata: { reusedLab },
+      });
+      return {
+        status: "error" as const,
+        labSessionId: session?._id,
+        reusedLab,
+        files: [] as string[],
+        command: args.runCommand,
+        error: toMessage(error),
+      };
+    }
+  },
+});
+
+export const resumeLab = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+  },
+  returns: labSessionActionValidator,
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    const startedAt = Date.now();
+    await reserveLabRuntime(ctx, {
+      userId,
+      threadId: session.threadId,
+      name: "resume_lab",
+    });
+
+    try {
+      const runtimeSession = await getRuntimeProvider().resume({
+        sandboxId: session.sandboxId,
+      });
+      const updated = await ctx.runMutation(
+        internalApi.labs.patchLabSessionRuntimeInternal,
+        {
+          userId,
+          labSessionId: args.labSessionId,
+          workspacePath: runtimeSession.workspacePath,
+          status: runtimeSession.status,
+          clearError: true,
+        },
+      );
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: session.threadId,
+        name: "resume_lab",
+        status: "success",
+        startedAt,
+        metadata: { labSessionId: session._id },
+      });
+      return updated;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: session.threadId,
+        name: "resume_lab",
+        status: "failed",
+        startedAt,
+        error,
+      });
+      throw error;
+    }
+  },
+});
+
+export const listFiles = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    path: v.optional(v.string()),
+  },
+  returns: v.array(fileEntryValidator),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      return await getRuntimeProvider().list({
+        sandboxId: session.sandboxId,
+        path: normalizeLabPath(args.path),
+      });
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const readFile = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    path: v.string(),
+  },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      return await getRuntimeProvider().read({
+        sandboxId: session.sandboxId,
+        path: normalizeLabPath(args.path),
+      });
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const writeFile = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    path: v.string(),
+    content: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      await getRuntimeProvider().write({
+        sandboxId: session.sandboxId,
+        path: normalizeLabPath(args.path),
+        content: args.content,
+      });
+      await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+        userId,
+        labSessionId: args.labSessionId,
+        clearError: true,
+      });
+      return null;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const createFile = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    path: v.string(),
+    content: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      await getRuntimeProvider().createFile({
+        sandboxId: session.sandboxId,
+        path: normalizeLabPath(args.path),
+        content: args.content,
+      });
+      await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+        userId,
+        labSessionId: args.labSessionId,
+        clearError: true,
+      });
+      return null;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const renamePath = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    oldPath: v.string(),
+    newPath: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      await getRuntimeProvider().rename({
+        sandboxId: session.sandboxId,
+        oldPath: normalizeLabPath(args.oldPath),
+        newPath: normalizeLabPath(args.newPath),
+      });
+      await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+        userId,
+        labSessionId: args.labSessionId,
+        clearError: true,
+      });
+      return null;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const deletePath = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    path: v.string(),
+    recursive: v.optional(v.boolean()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      await getRuntimeProvider().delete({
+        sandboxId: session.sandboxId,
+        path: normalizeLabPath(args.path),
+        recursive: args.recursive,
+      });
+      await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+        userId,
+        labSessionId: args.labSessionId,
+        clearError: true,
+      });
+      return null;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const search = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    path: v.optional(v.string()),
+    query: v.string(),
+  },
+  returns: v.array(searchMatchValidator),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      return await getRuntimeProvider().search({
+        sandboxId: session.sandboxId,
+        path: normalizeLabPath(args.path),
+        query: args.query,
+      });
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const runCommand = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    command: v.string(),
+    cwd: v.optional(v.string()),
+    timeoutSec: v.optional(v.number()),
+  },
+  returns: commandResultValidator,
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    const startedAt = Date.now();
+    await reserveLabRuntime(ctx, {
+      userId,
+      threadId: session.threadId,
+      name: "run_command",
+    });
+    try {
+      const result = await getRuntimeProvider().runCommand({
+        sandboxId: session.sandboxId,
+        command: args.command,
+        cwd: args.cwd ? normalizeLabPath(args.cwd) : undefined,
+        timeoutSec: args.timeoutSec,
+      });
+      await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+        userId,
+        labSessionId: args.labSessionId,
+        clearError: true,
+      });
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: session.threadId,
+        name: "run_command",
+        status: result.exitCode === 0 ? "success" : "failed",
+        startedAt,
+        metadata: { labSessionId: session._id, command: args.command },
+      });
+      return result;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: session.threadId,
+        name: "run_command",
+        status: "failed",
+        startedAt,
+        error,
+        metadata: { labSessionId: session._id, command: args.command },
+      });
+      throw error;
+    }
+  },
+});
+
+export const createTerminalSession = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    sessionId: v.string(),
+  },
+  returns: v.object({
+    sessionId: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      return await getRuntimeProvider().createSession({
+        sandboxId: session.sandboxId,
+        sessionId: args.sessionId,
+      });
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const runSessionCommand = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    sessionId: v.string(),
+    command: v.string(),
+    timeoutSec: v.optional(v.number()),
+  },
+  returns: sessionCommandResultValidator,
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      const result = await getRuntimeProvider().runSessionCommand({
+        sandboxId: session.sandboxId,
+        sessionId: args.sessionId,
+        command: args.command,
+        timeoutSec: args.timeoutSec,
+      });
+      await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+        userId,
+        labSessionId: args.labSessionId,
+        clearError: true,
+      });
+      return result;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const createPty = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    ptyId: v.string(),
+    cwd: v.optional(v.string()),
+    cols: v.optional(v.number()),
+    rows: v.optional(v.number()),
+  },
+  returns: v.object({
+    ptyId: v.string(),
+    initialOutput: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      const result = await getRuntimeProvider().createPty({
+        sandboxId: session.sandboxId,
+        ptyId: args.ptyId,
+        cwd: args.cwd ? normalizeLabPath(args.cwd) : undefined,
+        cols: args.cols,
+        rows: args.rows,
+      });
+      await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+        userId,
+        labSessionId: args.labSessionId,
+        clearError: true,
+      });
+      return result;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const getPreview = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+    port: v.number(),
+    signed: v.optional(v.boolean()),
+  },
+  returns: previewValidator,
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    try {
+      const preview = await getRuntimeProvider().getPreview({
+        sandboxId: session.sandboxId,
+        port: args.port,
+        signed: args.signed,
+      });
+      const previews = [
+        ...(session.previewUrls ?? []).filter(
+          (item: { port: number }) => item.port !== args.port,
+        ),
+        preview,
+      ];
+      await ctx.runMutation(internalApi.labs.patchLabSessionRuntimeInternal, {
+        userId,
+        labSessionId: args.labSessionId,
+        previewUrls: previews,
+        clearError: true,
+      });
+      return preview;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      throw error;
+    }
+  },
+});
+
+export const archiveLab = action({
+  args: {
+    labSessionId: v.id("labSessions"),
+  },
+  returns: labSessionActionValidator,
+  handler: async (ctx, args) => {
+    const userId = await requireAuthenticatedUserId(ctx);
+    const session = await getOwnedSession(ctx, userId, args.labSessionId);
+    const startedAt = Date.now();
+    try {
+      await getRuntimeProvider().archive({ sandboxId: session.sandboxId });
+      const archived = await ctx.runMutation(
+        internalApi.labs.archiveLabSessionInternal,
+        {
+          userId,
+          labSessionId: args.labSessionId,
+        },
+      );
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: session.threadId,
+        name: "archive_lab",
+        status: "success",
+        startedAt,
+        metadata: { labSessionId: session._id },
+      });
+      return archived;
+    } catch (error) {
+      await recordSessionError(ctx, userId, args.labSessionId, error);
+      await recordLabTelemetry(ctx, {
+        userId,
+        threadId: session.threadId,
+        name: "archive_lab",
+        status: "failed",
+        startedAt,
+        error,
+        metadata: { labSessionId: session._id },
+      });
+      throw error;
+    }
+  },
+});
+
+export const archiveThreadLabsInternal = internalAction({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    labs: v.array(
+      v.object({
+        labSessionId: v.id("labSessions"),
+        sandboxId: v.string(),
+        provider: v.literal("daytona"),
+      }),
+    ),
+  },
+  returns: v.null(),
+  handler: async (_ctx, args) => {
+    for (const lab of args.labs) {
+      try {
+        await getRuntimeProvider().archive({ sandboxId: lab.sandboxId });
+      } catch (error) {
+        console.error("Best-effort lab archive failed", {
+          userId: args.userId,
+          threadId: args.threadId,
+          labSessionId: lab.labSessionId,
+          error: toMessage(error),
+        });
+      }
+    }
+    return null;
+  },
+});

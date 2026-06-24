@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { PricingTable, UserProfile, useUser, SignOutButton } from "@clerk/nextjs";
+import {
+  PricingTable,
+  UserProfile,
+  useUser,
+  SignOutButton,
+} from "@clerk/nextjs";
 import { useAction, useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -45,11 +50,10 @@ function UsageMeter({
   detail: string;
   icon: ReactNode;
 }) {
-  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const percent =
+    limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   const isWarning = percent >= 80;
-  const barColor = isWarning
-    ? "var(--accent)"
-    : "var(--accent2)";
+  const barColor = isWarning ? "var(--accent)" : "var(--accent2)";
 
   return (
     <article
@@ -66,7 +70,9 @@ function UsageMeter({
           <span
             className="flex h-10 w-10 items-center justify-center rounded-xl text-lg"
             style={{
-              background: isWarning ? "var(--accent-dim)" : "var(--accent2-dim)",
+              background: isWarning
+                ? "var(--accent-dim)"
+                : "var(--accent2-dim)",
               color: isWarning ? "var(--accent)" : "var(--accent2)",
             }}
           >
@@ -121,11 +127,12 @@ function SectionLabel({ children }: { children: ReactNode }) {
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
-type TabId = "usage" | "billing" | "account";
+type TabId = "usage" | "billing" | "debug" | "account";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "usage", label: "Usage", icon: "📊" },
   { id: "billing", label: "Billing", icon: "💳" },
+  { id: "debug", label: "Debug", icon: "!" },
   { id: "account", label: "Account", icon: "👤" },
 ];
 
@@ -195,7 +202,7 @@ const pricingAppearance = {
       border: "none",
       background: "transparent",
       padding: 0,
-    }
+    },
   },
 };
 
@@ -204,7 +211,9 @@ const pricingAppearance = {
 function UsageTab({
   billing,
 }: {
-  billing: ReturnType<typeof useQuery<typeof api.billing.getViewerBillingState>>;
+  billing: ReturnType<
+    typeof useQuery<typeof api.billing.getViewerBillingState>
+  >;
 }) {
   if (billing === undefined) {
     return (
@@ -212,11 +221,17 @@ function UsageTab({
         <div className="flex flex-col items-center gap-3">
           <div
             className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-            style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+            style={{
+              borderColor: "var(--accent)",
+              borderTopColor: "transparent",
+            }}
           />
           <p
             className="text-sm"
-            style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-faint)" }}
+            style={{
+              fontFamily: "var(--font-jakarta)",
+              color: "var(--fg-faint)",
+            }}
           >
             Loading usage data…
           </p>
@@ -229,11 +244,17 @@ function UsageTab({
     return (
       <div
         className="rounded-2xl border p-6 text-center"
-        style={{ background: "var(--bg-alt)", borderColor: "var(--border-faint)" }}
+        style={{
+          background: "var(--bg-alt)",
+          borderColor: "var(--border-faint)",
+        }}
       >
         <p
           className="text-sm"
-          style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+          style={{
+            fontFamily: "var(--font-jakarta)",
+            color: "var(--fg-muted)",
+          }}
         >
           Usage information unavailable.
         </p>
@@ -261,10 +282,12 @@ function UsageTab({
           </h2>
           <p
             className="mt-2 text-sm"
-            style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+            style={{
+              fontFamily: "var(--font-jakarta)",
+              color: "var(--fg-muted)",
+            }}
           >
-            {billing.upgradeReason ??
-              "Your usage is tracked monthly."}
+            {billing.upgradeReason ?? "Your usage is tracked monthly."}
           </p>
         </div>
       </div>
@@ -275,7 +298,8 @@ function UsageTab({
           className="rounded-2xl border p-6"
           style={{
             background: "color-mix(in srgb, var(--accent3) 8%, var(--bg-card))",
-            borderColor: "color-mix(in srgb, var(--accent3) 30%, var(--border-faint))",
+            borderColor:
+              "color-mix(in srgb, var(--accent3) 30%, var(--border-faint))",
           }}
         >
           <SectionLabel>Guided preview</SectionLabel>
@@ -287,9 +311,13 @@ function UsageTab({
           </h3>
           <p
             className="mt-2 max-w-lg text-sm"
-            style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+            style={{
+              fontFamily: "var(--font-jakarta)",
+              color: "var(--fg-muted)",
+            }}
           >
-            Try a few text chats first. Uploads unlock after you pick a paid plan.
+            Try a few text chats first. Uploads unlock after you pick a paid
+            plan.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <span
@@ -297,7 +325,8 @@ function UsageTab({
               style={{
                 fontFamily: "var(--font-jakarta)",
                 background: "var(--bg-card)",
-                borderColor: "color-mix(in srgb, var(--accent3) 40%, var(--border-faint))",
+                borderColor:
+                  "color-mix(in srgb, var(--accent3) 40%, var(--border-faint))",
                 color: "var(--fg-muted)",
               }}
             >
@@ -311,7 +340,10 @@ function UsageTab({
       <div>
         <h3
           className="mb-4 text-base font-semibold"
-          style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+          style={{
+            fontFamily: "var(--font-jakarta)",
+            color: "var(--fg-muted)",
+          }}
         >
           This month&apos;s usage
         </h3>
@@ -335,10 +367,12 @@ function BillingTab() {
       <div>
         <p
           className="text-sm"
-          style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+          style={{
+            fontFamily: "var(--font-jakarta)",
+            color: "var(--fg-muted)",
+          }}
         >
-          Intro gives you full text tutoring. Pro unlocks higher monthly
-          limits.
+          Intro gives you full text tutoring. Pro unlocks higher monthly limits.
         </p>
       </div>
 
@@ -365,9 +399,13 @@ function AccountTab() {
       <div>
         <p
           className="text-sm"
-          style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+          style={{
+            fontFamily: "var(--font-jakarta)",
+            color: "var(--fg-muted)",
+          }}
         >
-          Manage your profile, email addresses, security settings, and connected accounts.
+          Manage your profile, email addresses, security settings, and connected
+          accounts.
         </p>
       </div>
       <div
@@ -383,11 +421,209 @@ function AccountTab() {
   );
 }
 
+function formatEventTime(value: number): string {
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function stringifyMetadata(value: unknown): string {
+  if (!value) return "";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function DebugTab() {
+  const quotas = useQuery(api.quotas.getCurrentUserDailyQuotaUsage);
+  const events = useQuery(api.telemetry.getCurrentUserRecentEvents, {
+    limit: 12,
+  });
+
+  if (quotas === undefined || events === undefined) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
+          style={{
+            borderColor: "var(--accent)",
+            borderTopColor: "transparent",
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <SectionLabel>Daily quotas</SectionLabel>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {quotas.map((quota) => (
+            <article
+              key={quota.action}
+              className="rounded-2xl border p-4"
+              style={{
+                background: "var(--bg-card)",
+                borderColor: "var(--border-faint)",
+              }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h3
+                  className="text-sm font-semibold"
+                  style={{
+                    fontFamily: "var(--font-jakarta)",
+                    color: "var(--fg)",
+                  }}
+                >
+                  {quota.label}
+                </h3>
+                <span
+                  className="text-xs font-bold tabular-nums"
+                  style={{
+                    fontFamily: "var(--font-jakarta)",
+                    color:
+                      quota.remaining === 0
+                        ? "var(--accent)"
+                        : "var(--fg-faint)",
+                  }}
+                >
+                  {quota.count}/{quota.limit}
+                </span>
+              </div>
+              <div
+                className="mt-3 h-2 overflow-hidden rounded-full"
+                style={{ background: "var(--bg-alt)" }}
+              >
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, (quota.count / quota.limit) * 100)}%`,
+                    background:
+                      quota.remaining === 0
+                        ? "var(--accent)"
+                        : "var(--accent2)",
+                  }}
+                />
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <SectionLabel>Recent events</SectionLabel>
+        <div
+          className="mt-3 overflow-hidden rounded-2xl border"
+          style={{
+            background: "var(--bg-card)",
+            borderColor: "var(--border-faint)",
+          }}
+        >
+          {events.length === 0 ? (
+            <p
+              className="p-5 text-sm"
+              style={{
+                fontFamily: "var(--font-jakarta)",
+                color: "var(--fg-muted)",
+              }}
+            >
+              No recent events.
+            </p>
+          ) : (
+            <div
+              className="divide-y"
+              style={{ borderColor: "var(--border-faint)" }}
+            >
+              {events.map((event) => (
+                <article
+                  key={event._id}
+                  className="grid gap-2 p-4 sm:grid-cols-[10rem_1fr]"
+                >
+                  <div
+                    className="text-xs"
+                    style={{
+                      fontFamily: "var(--font-jakarta)",
+                      color: "var(--fg-faint)",
+                    }}
+                  >
+                    {formatEventTime(event.createdAt)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className="rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase"
+                        style={{
+                          fontFamily: "var(--font-jakarta)",
+                          borderColor:
+                            event.status === "failed"
+                              ? "color-mix(in srgb, var(--accent) 35%, var(--border-faint))"
+                              : "var(--border-faint)",
+                          color:
+                            event.status === "failed"
+                              ? "var(--accent)"
+                              : "var(--fg-muted)",
+                        }}
+                      >
+                        {event.status}
+                      </span>
+                      <span
+                        className="truncate text-sm font-semibold"
+                        style={{
+                          fontFamily: "var(--font-jakarta)",
+                          color: "var(--fg)",
+                        }}
+                      >
+                        {event.source}:{event.name}
+                      </span>
+                    </div>
+                    {event.errorCategory ? (
+                      <p
+                        className="mt-1 text-xs"
+                        style={{
+                          fontFamily: "var(--font-jakarta)",
+                          color: "var(--fg-muted)",
+                        }}
+                      >
+                        {event.errorCategory}
+                        {event.retriable ? " · retriable" : ""}
+                      </p>
+                    ) : null}
+                    {event.metadata ? (
+                      <p
+                        className="mt-1 truncate text-xs"
+                        title={stringifyMetadata(event.metadata)}
+                        style={{
+                          fontFamily: "var(--font-jakarta)",
+                          color: "var(--fg-faint)",
+                        }}
+                      >
+                        {stringifyMetadata(event.metadata)}
+                      </p>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function UsagePanel() {
   const billing = useQuery(api.billing.getViewerBillingState);
-  const syncBillingProfile = useAction(api.billingActions.syncCurrentUserBillingProfile);
+  const syncBillingProfile = useAction(
+    api.billingActions.syncCurrentUserBillingProfile,
+  );
   const { user } = useUser();
   const [activeTab, setActiveTab] = useState<TabId>("usage");
 
@@ -412,7 +648,10 @@ export function UsagePanel() {
             <Link
               href="/chat"
               className="inline-flex items-center gap-1.5 text-xs transition hover:opacity-70"
-              style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-faint)" }}
+              style={{
+                fontFamily: "var(--font-jakarta)",
+                color: "var(--fg-faint)",
+              }}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path
@@ -433,13 +672,18 @@ export function UsagePanel() {
             </h1>
             <p
               className="mt-1 text-sm"
-              style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
+              style={{
+                fontFamily: "var(--font-jakarta)",
+                color: "var(--fg-muted)",
+              }}
             >
-              {user?.firstName ? `${user.firstName}'s workspace` : "Your workspace"}
+              {user?.firstName
+                ? `${user.firstName}'s workspace`
+                : "Your workspace"}
               {billing ? ` · ${formatMonthLabel(billing.billingPeriod)}` : ""}
             </p>
           </div>
-          
+
           <div className="mt-2 flex shrink-0">
             <SignOutButton>
               <button
@@ -473,7 +717,8 @@ export function UsagePanel() {
               className="flex shrink-0 items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all duration-150"
               style={{
                 fontFamily: "var(--font-jakarta)",
-                background: activeTab === tab.id ? "var(--bg-card)" : "transparent",
+                background:
+                  activeTab === tab.id ? "var(--bg-card)" : "transparent",
                 color: activeTab === tab.id ? "var(--fg)" : "var(--fg-muted)",
                 boxShadow:
                   activeTab === tab.id
@@ -492,6 +737,7 @@ export function UsagePanel() {
       <main className="mx-auto mt-6 w-full max-w-4xl">
         {activeTab === "usage" && <UsageTab billing={billing} />}
         {activeTab === "billing" && <BillingTab />}
+        {activeTab === "debug" && <DebugTab />}
         {activeTab === "account" && <AccountTab />}
       </main>
     </div>

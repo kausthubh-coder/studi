@@ -48,6 +48,19 @@ Key backend modules:
 - Clerk authentication & billing
 - OpenRouter (text + spark generation)
 
+## Restoration Baseline
+
+This branch is the safety foundation for the Studi restoration effort. Build feature branches from `origin/main`; use `demo-old-pre-refactor` and `older-studi` only as read-only references for removed behavior.
+
+The first restoration PR scope is intentionally narrow:
+
+- keep repo-local human notes in `human.md`
+- document placeholder-only environment variables in `.env.example`
+- run `bun run secrets:check` before commits and PRs
+- preserve the current product core while later branches restore model routing, Sparks V2, Labs, Tracks, and Voice
+
+Do not copy secrets from planning docs, chat logs, or reference branches. Any credential pasted during planning should be treated as compromised and rotated outside the repo.
+
 ## Prerequisites
 
 - Bun (required package manager)
@@ -57,17 +70,10 @@ Key backend modules:
 
 ## Environment Variables
 
-Set frontend vars in `.env.local` and backend secrets in Convex env settings.
+Start from `.env.example`. Set frontend vars in `.env.local` and backend secrets in Convex env settings. The example file must stay placeholder-only.
 
 ```bash
-# Core model access
-OPENROUTER_API_KEY=...
-
-# Sparks (required for desmos_graph rendering)
-NEXT_PUBLIC_DESMOS_API_KEY=...
-
-# Clerk (billing sync)
-CLERK_SECRET_KEY=...
+cp .env.example .env.local
 ```
 
 Model routing is configured in `lib/model-config.ts`.
@@ -91,10 +97,11 @@ Open:
 - `bun run dev:frontend`: Next.js only
 - `bun run dev:backend`: Convex only
 - `bun run build`: production build
+- `bun run secrets:check`: lightweight secret hygiene scan for tracked and non-ignored files
 - `bun run lint`: lint
 - `bun run test`: unit + convex tests
 - `bun run test:e2e`: Playwright e2e tests
-- `bun run check`: prompts check + lint + tests + build
+- `bun run check`: secrets check + prompts check + lint + tests + build
 - `bun run playground`: Convex Agent Playground
 - `bun run prompts:sync`: sync prompt files into generated prompt module
 

@@ -207,7 +207,7 @@ function throwBillingError(args: {
     | "BILLING_REQUIRED"
     | "PLAN_REQUIRED"
     | "USAGE_BUDGET_EXHAUSTED";
-  surface: "chat" | "attachments";
+  surface: "chat" | "attachments" | "labs";
   planKey: BillingPlanKey;
   message: string;
   upgradeTarget?: "intro" | "pro";
@@ -655,3 +655,44 @@ export const assertCanUseAttachmentsInternal = internalMutation({
   },
 });
 
+export const assertCanUseLabsInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    planHint: v.optional(v.string()),
+  },
+  returns: billingProfileSnapshotValidator,
+  handler: async (ctx, args) => {
+    const state = await buildViewerBillingStateForUser({
+      ctx,
+      userId: args.userId,
+      planHint: args.planHint,
+    });
+
+    if (state.planKey === "free_onboarding") {
+      throwBillingError({
+        code: "PLAN_REQUIRED",
+        surface: "labs",
+        planKey: state.planKey,
+        message: "Labs are available on paid plans only.",
+        upgradeTarget: "intro",
+      });
+    }
+
+    if (state.lockedSurfaces.chat) {
+      throwBillingError({
+        code: "USAGE_BUDGET_EXHAUSTED",
+        surface: "labs",
+        planKey: state.planKey,
+        message:
+          state.upgradeReason ??
+          "You have reached your current plan limit for lab runtime usage.",
+        upgradeTarget: getUpgradeTarget(state.planKey),
+      });
+    }
+
+    return {
+      planKey: state.planKey,
+      status: state.status,
+    };
+  },
+});

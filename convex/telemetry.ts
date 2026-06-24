@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
+import { sanitizeTelemetryValue } from "../lib/observability/contracts";
 
 const THREAD_PLACEHOLDER = "__none__";
 
@@ -30,6 +31,11 @@ const telemetrySourceValidator = v.union(
   v.literal("agent_usage"),
   v.literal("agent_runtime"),
   v.literal("spark"),
+  v.literal("lab"),
+  v.literal("voice"),
+  v.literal("track"),
+  v.literal("quota"),
+  v.literal("plan_tool"),
 );
 
 const telemetryStatusValidator = v.union(
@@ -126,6 +132,21 @@ const threadUsageBreakdownReturnsValidator = v.object({
       lastCallAt: v.optional(v.number()),
     }),
   ),
+});
+
+const telemetryEventSummaryValidator = v.object({
+  _id: v.id("telemetryEvents"),
+  _creationTime: v.number(),
+  threadId: v.string(),
+  source: telemetrySourceValidator,
+  name: v.string(),
+  status: telemetryStatusValidator,
+  durationMs: v.optional(v.number()),
+  errorCategory: v.optional(v.string()),
+  retriable: v.optional(v.boolean()),
+  model: v.optional(v.string()),
+  metadata: v.optional(v.any()),
+  createdAt: v.number(),
 });
 
 function readNumericCandidate(record: Record<string, unknown>, key: string) {
@@ -429,8 +450,8 @@ export const insertRawUsageInternal = internalMutation({
       agentName: args.agentName,
       model: args.model,
       provider: args.provider,
-      usage: args.usage,
-      providerMetadata: args.providerMetadata,
+      usage: sanitizeTelemetryValue(args.usage) as typeof args.usage,
+      providerMetadata: sanitizeTelemetryValue(args.providerMetadata),
       billingPeriod: getBillingPeriod(now),
       createdAt: now,
     });
@@ -463,9 +484,90 @@ export const insertTelemetryEventInternal = internalMutation({
       errorCategory: args.errorCategory,
       retriable: args.retriable,
       model: args.model,
-      metadata: args.metadata,
+      metadata: sanitizeTelemetryValue(args.metadata),
       createdAt: now,
     });
+  },
+});
+
+export const getCurrentUserRecentEvents = query({
+  args: {
+    limit: v.optional(v.number()),
+    failuresOnly: v.optional(v.boolean()),
+  },
+  returns: v.array(telemetryEventSummaryValidator),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const limit = Math.max(1, Math.min(args.limit ?? 20, 50));
+    const rows = await ctx.db
+      .query("telemetryEvents")
+      .withIndex("by_userId_and_createdAt", (q) =>
+        q.eq("userId", identity.subject),
+      )
+      .order("desc")
+      .take(args.failuresOnly ? limit * 3 : limit);
+
+    return rows
+      .filter((row) => !args.failuresOnly || row.status === "failed")
+      .slice(0, limit)
+      .map((row) => ({
+        _id: row._id,
+        _creationTime: row._creationTime,
+        threadId: row.threadId,
+        source: row.source,
+        name: row.name,
+        status: row.status,
+        durationMs: row.durationMs,
+        errorCategory: row.errorCategory,
+        retriable: row.retriable,
+        model: row.model,
+        metadata: row.metadata,
+        createdAt: row.createdAt,
+      }));
+  },
+});
+
+export const getCurrentUserRecentFailures = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(telemetryEventSummaryValidator),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const limit = Math.max(1, Math.min(args.limit ?? 20, 50));
+    const rows = await ctx.db
+      .query("telemetryEvents")
+      .withIndex("by_userId_and_createdAt", (q) =>
+        q.eq("userId", identity.subject),
+      )
+      .order("desc")
+      .take(limit * 3);
+
+    return rows
+      .filter((row) => row.status === "failed")
+      .slice(0, limit)
+      .map((row) => ({
+        _id: row._id,
+        _creationTime: row._creationTime,
+        threadId: row.threadId,
+        source: row.source,
+        name: row.name,
+        status: row.status,
+        durationMs: row.durationMs,
+        errorCategory: row.errorCategory,
+        retriable: row.retriable,
+        model: row.model,
+        metadata: row.metadata,
+        createdAt: row.createdAt,
+      }));
   },
 });
 

@@ -54,6 +54,16 @@ type AssistantTextSegments = {
   finalText: string;
 };
 
+export type AssistantRenderSequenceItem =
+  | { kind: "intro_text"; text: string }
+  | { kind: "activity" }
+  | { kind: "spark_pending"; partIndex: number; sparkId?: string }
+  | { kind: "tool_pending"; partIndex: number; toolName: string }
+  | { kind: "spark_artifact"; partIndex: number; sparkId?: string }
+  | { kind: "spark_failure"; partIndex: number; sparkId?: string }
+  | { kind: "final_text"; text: string }
+  | { kind: "file"; partIndex: number };
+
 /* ── Helpers ──────────────────────────────────────────────── */
 
 function humanizeToolName(name: string): string {
@@ -88,7 +98,7 @@ function joinTextParts(
     .trim();
 }
 
-function splitAssistantTextSegments(
+export function splitAssistantTextSegments(
   parts: ChatMessagePart[],
 ): AssistantTextSegments {
   const boundaryIndexes: number[] = [];
@@ -732,6 +742,99 @@ function extractCreateSparkToolResult(
   return null;
 }
 
+export function deriveAssistantRenderSequence(
+  message: UIMessage,
+): AssistantRenderSequenceItem[] {
+  const parts = message.parts ?? [];
+  const textSegments = splitAssistantTextSegments(parts);
+  const activity = deriveAssistantActivity(message, textSegments.introText);
+  const sequence: AssistantRenderSequenceItem[] = [];
+
+  const introText = textSegments.introText.trim();
+  const rawFinalText = textSegments.hasToolBoundary
+    ? textSegments.finalText
+    : textSegments.finalText || message.text || "";
+  const finalDuplicatesIntro =
+    introText.length > 0 &&
+    normalizeRenderableText(introText) === normalizeRenderableText(rawFinalText);
+  const finalText = finalDuplicatesIntro ? "" : rawFinalText.trim();
+
+  if (introText) {
+    sequence.push({ kind: "intro_text", text: introText });
+  }
+
+  if (activity.hasActivity && !activity.isTrivial) {
+    sequence.push({ kind: "activity" });
+  }
+
+  for (const [partIndex, part] of parts.entries()) {
+    const toolName = getToolName(part);
+    if (!toolName) {
+      continue;
+    }
+
+    if (toolName !== "create_spark") {
+      if (isToolPartInProgress(part)) {
+        sequence.push({ kind: "tool_pending", partIndex, toolName });
+      }
+      continue;
+    }
+
+    const toolState = part as {
+      state?: string;
+      input?: unknown;
+      output?: unknown;
+      errorText?: unknown;
+    };
+    const sparkId = getSparkId(toolState.input);
+
+    if (
+      toolState.state === "input-streaming" ||
+      toolState.state === "input-available"
+    ) {
+      sequence.push({ kind: "spark_pending", partIndex, sparkId });
+      continue;
+    }
+
+    if (toolState.state === "output-error") {
+      sequence.push({ kind: "spark_failure", partIndex, sparkId });
+      continue;
+    }
+
+    if (toolState.state !== "output-available") {
+      continue;
+    }
+
+    const sparkResult = extractCreateSparkToolResult(toolState);
+    if (sparkResult?.status === "success" && sparkResult.artifact) {
+      sequence.push({ kind: "spark_artifact", partIndex, sparkId });
+      continue;
+    }
+
+    if (sparkResult?.status === "failed") {
+      sequence.push({ kind: "spark_failure", partIndex, sparkId });
+      continue;
+    }
+
+    const outputText = getToolOutputText(toolState.output)?.trim();
+    if (!outputText || !/^spark created/i.test(outputText)) {
+      sequence.push({ kind: "spark_failure", partIndex, sparkId });
+    }
+  }
+
+  if (finalText) {
+    sequence.push({ kind: "final_text", text: finalText });
+  }
+
+  for (const [partIndex, part] of parts.entries()) {
+    if (part.type === "file") {
+      sequence.push({ kind: "file", partIndex });
+    }
+  }
+
+  return sequence;
+}
+
 /* ── Agent UI state ──────────────────────────────────────── */
 
 export function deriveAgentUiState(messages: UIMessage[]): AgentUiState {
@@ -882,6 +985,7 @@ function AssistantParts({
   message,
   threadId,
   onExpandSpark,
+  onOpenLab,
   expandedSparkInstanceId,
 }: {
   message: UIMessage;
@@ -891,6 +995,7 @@ function AssistantParts({
     threadId: string | null,
     sparkInstanceId: string,
   ) => void;
+  onOpenLab?: () => void;
   expandedSparkInstanceId: string | null;
 }) {
   const parts = useMemo(() => message.parts ?? [], [message.parts]);
@@ -903,17 +1008,13 @@ function AssistantParts({
     [message, textSegments.introText],
   );
 
-  const shouldShowIntroText =
-    textSegments.introText.trim().length > 0;
-
   const introMatchesFinal =
-    shouldShowIntroText &&
+    textSegments.introText.trim().length > 0 &&
     normalizeRenderableText(textSegments.introText) ===
       normalizeRenderableText(textSegments.finalText);
 
-  const finalText = textSegments.hasToolBoundary
-    ? textSegments.finalText
-    : textSegments.finalText;
+  const shouldShowIntroText = textSegments.introText.trim().length > 0;
+  const finalText = introMatchesFinal ? "" : textSegments.finalText;
 
   // Spark building cards (in-progress create_spark tools)
   const sparkBuildingCards = parts
@@ -936,7 +1037,7 @@ function AssistantParts({
     })
     .filter((card): card is React.JSX.Element => card !== null);
 
-  const sparkArtifacts = parts
+  const sparkOutputCards = parts
     .map((part, partIndex) => {
       const toolName = getToolName(part);
       if (toolName !== "create_spark") {
@@ -947,47 +1048,7 @@ function AssistantParts({
         state?: string;
         output?: unknown;
       };
-      const sparkResult = extractCreateSparkToolResult(toolState);
-      if (
-        toolState.state !== "output-available" ||
-        sparkResult?.status !== "success" ||
-        !sparkResult.artifact
-      ) {
-        return null;
-      }
-
-      return (
-        <div key={`${message.key}-spark-${partIndex}`}>
-          <SparkSceneRenderer
-            artifact={sparkResult.artifact}
-            threadId={threadId}
-            sparkInstanceId={
-              sparkResult.artifact.artifactId ??
-              `${message.key}-spark-${partIndex}`
-            }
-            onExpandSpark={onExpandSpark}
-            expandedSparkInstanceId={expandedSparkInstanceId}
-          />
-        </div>
-      );
-    })
-    .filter((artifact): artifact is React.JSX.Element => artifact !== null);
-
-  const sparkFailures = parts
-    .map((part, partIndex) => {
-      const toolName = getToolName(part);
-      if (toolName !== "create_spark") {
-        return null;
-      }
-
-      const toolState = part as {
-        state?: string;
-        input?: unknown;
-        output?: unknown;
-        errorText?: unknown;
-      };
-
-      const sparkId = getSparkId(toolState.input);
+      const sparkId = getSparkId((part as { input?: unknown }).input);
 
       if (toolState.state === "output-error") {
         return (
@@ -995,19 +1056,20 @@ function AssistantParts({
             key={`${message.key}-spark-fail-${partIndex}`}
             sparkId={sparkId}
             error={
-              typeof toolState.errorText === "string"
-                ? toolState.errorText
+              typeof (toolState as { errorText?: unknown }).errorText ===
+              "string"
+                ? (toolState as { errorText: string }).errorText
                 : "Spark tool failed before returning output."
             }
           />
         );
       }
 
+      const sparkResult = extractCreateSparkToolResult(toolState);
       if (toolState.state !== "output-available") {
         return null;
       }
 
-      const sparkResult = extractCreateSparkToolResult(toolState);
       if (!sparkResult) {
         const outputText = getToolOutputText(toolState.output)?.trim();
         if (outputText && /^spark created/i.test(outputText)) {
@@ -1034,7 +1096,25 @@ function AssistantParts({
         );
       }
 
-      return null;
+      if (!sparkResult.artifact) {
+        return null;
+      }
+
+      return (
+        <div key={`${message.key}-spark-${partIndex}`}>
+          <SparkSceneRenderer
+            artifact={sparkResult.artifact}
+            threadId={threadId}
+            sparkInstanceId={
+              sparkResult.artifact.artifactId ??
+              `${message.key}-spark-${partIndex}`
+            }
+            onExpandSpark={onExpandSpark}
+            onOpenLab={onOpenLab}
+            expandedSparkInstanceId={expandedSparkInstanceId}
+          />
+        </div>
+      );
     })
     .filter((artifact): artifact is React.JSX.Element => artifact !== null);
 
@@ -1088,7 +1168,7 @@ function AssistantParts({
 
   return (
     <>
-      {shouldShowIntroText && !introMatchesFinal ? (
+      {shouldShowIntroText ? (
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
           rehypePlugins={[rehypeKatex, rehypeHighlight]}
@@ -1098,9 +1178,7 @@ function AssistantParts({
       ) : null}
       <AssistantActivityPanel message={message} activity={activity} />
       {sparkBuildingCards}
-      {/* Intended sequence: show Spark output first, then post-tool guidance text. */}
-      {sparkFailures}
-      {sparkArtifacts}
+      {sparkOutputCards}
       {textToRender ? (
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
@@ -1121,6 +1199,7 @@ export const ArticleMessage = memo(function ArticleMessage({
   index,
   threadId,
   onExpandSpark,
+  onOpenLab,
   expandedSparkInstanceId,
 }: {
   message: UIMessage;
@@ -1131,6 +1210,7 @@ export const ArticleMessage = memo(function ArticleMessage({
     threadId: string | null,
     sparkInstanceId: string,
   ) => void;
+  onOpenLab?: () => void;
   expandedSparkInstanceId: string | null;
 }) {
   const fileParts = useMemo(
@@ -1212,6 +1292,7 @@ export const ArticleMessage = memo(function ArticleMessage({
           message={message}
           threadId={threadId}
           onExpandSpark={onExpandSpark}
+          onOpenLab={onOpenLab}
           expandedSparkInstanceId={expandedSparkInstanceId}
         />
       </div>

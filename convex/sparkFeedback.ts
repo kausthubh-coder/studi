@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import {
+  internalMutation,
   internalQuery,
   mutation,
   query,
@@ -10,6 +11,7 @@ const maxCodeLength = 22_000;
 const maxOutputLength = 6_000;
 const maxErrorLength = 4_000;
 const maxTitleLength = 120;
+const maxCommandLength = 240;
 
 const runStatusValidator = v.union(
   v.literal("idle"),
@@ -24,6 +26,12 @@ const runResultValidator = v.object({
   error: v.optional(v.string()),
 });
 
+const codeSparkLanguageValidator = v.union(
+  v.literal("python"),
+  v.literal("javascript"),
+  v.literal("typescript"),
+);
+
 const sparkStateValidator = v.object({
   sparkInstanceId: v.string(),
   sparkTitle: v.optional(v.string()),
@@ -34,6 +42,10 @@ const sparkStateValidator = v.object({
   lastStdout: v.optional(v.string()),
   lastStderr: v.optional(v.string()),
   lastError: v.optional(v.string()),
+  lastExitCode: v.optional(v.number()),
+  lastRunCommand: v.optional(v.string()),
+  labSessionId: v.optional(v.id("labSessions")),
+  labPreviewUrl: v.optional(v.string()),
   lastRunAt: v.optional(v.number()),
   lastUpdatedAt: v.number(),
 });
@@ -83,7 +95,7 @@ export const upsertCodeSparkDraft = mutation({
     threadId: v.string(),
     sparkInstanceId: v.string(),
     sparkTitle: v.optional(v.string()),
-    language: v.literal("python"),
+    language: codeSparkLanguageValidator,
     code: v.string(),
   },
   returns: v.null(),
@@ -144,7 +156,7 @@ export const recordCodeSparkRun = mutation({
     threadId: v.string(),
     sparkInstanceId: v.string(),
     sparkTitle: v.optional(v.string()),
-    language: v.literal("python"),
+    language: codeSparkLanguageValidator,
     code: v.string(),
     result: runResultValidator,
   },
@@ -204,6 +216,78 @@ export const recordCodeSparkRun = mutation({
   },
 });
 
+export const recordCodeSparkLabRunInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    sparkInstanceId: v.string(),
+    sparkTitle: v.optional(v.string()),
+    language: codeSparkLanguageValidator,
+    code: v.string(),
+    labSessionId: v.id("labSessions"),
+    command: v.string(),
+    previewUrl: v.optional(v.string()),
+    result: v.object({
+      status: v.union(v.literal("success"), v.literal("error")),
+      stdout: v.optional(v.string()),
+      stderr: v.optional(v.string()),
+      error: v.optional(v.string()),
+      exitCode: v.optional(v.number()),
+    }),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireThreadOwnership(ctx, {
+      userId: args.userId,
+      threadId: args.threadId,
+    });
+
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("sparkInteractions")
+      .withIndex("by_userId_and_threadId_and_sparkInstanceId", (q) =>
+        q
+          .eq("userId", args.userId)
+          .eq("threadId", args.threadId)
+          .eq("sparkInstanceId", args.sparkInstanceId),
+      )
+      .unique();
+
+    const normalizedTitle = trimTo(args.sparkTitle, maxTitleLength);
+    const patch = {
+      sparkTitle: normalizedTitle ?? existing?.sparkTitle,
+      language: args.language,
+      code: sliceTo(args.code, maxCodeLength),
+      runCount: existing ? existing.runCount + 1 : 1,
+      lastStatus: args.result.status,
+      lastStdout: sliceTo(args.result.stdout, maxOutputLength),
+      lastStderr: sliceTo(args.result.stderr, maxOutputLength),
+      lastError: sliceTo(args.result.error, maxErrorLength),
+      lastExitCode: args.result.exitCode,
+      lastRunCommand: trimTo(args.command, maxCommandLength),
+      labSessionId: args.labSessionId,
+      labPreviewUrl: trimTo(args.previewUrl, 600),
+      lastRunAt: now,
+      lastUpdatedAt: now,
+    } as const;
+
+    if (existing) {
+      await ctx.db.patch(existing._id, patch);
+      return null;
+    }
+
+    await ctx.db.insert("sparkInteractions", {
+      userId: args.userId,
+      threadId: args.threadId,
+      sparkInstanceId: args.sparkInstanceId,
+      sparkType: "code_playground",
+      ...patch,
+    });
+
+    return null;
+  },
+});
+
 export const getCodeSparkState = query({
   args: {
     threadId: v.string(),
@@ -250,6 +334,10 @@ export const getCodeSparkState = query({
       lastStdout: existing.lastStdout,
       lastStderr: existing.lastStderr,
       lastError: existing.lastError,
+      lastExitCode: existing.lastExitCode,
+      lastRunCommand: existing.lastRunCommand,
+      labSessionId: existing.labSessionId,
+      labPreviewUrl: existing.labPreviewUrl,
       lastRunAt: existing.lastRunAt,
       lastUpdatedAt: existing.lastUpdatedAt,
     };
@@ -283,6 +371,10 @@ export const getRecentCodeSparkContextInternal = internalQuery({
       lastStdout: row.lastStdout,
       lastStderr: row.lastStderr,
       lastError: row.lastError,
+      lastExitCode: row.lastExitCode,
+      lastRunCommand: row.lastRunCommand,
+      labSessionId: row.labSessionId,
+      labPreviewUrl: row.labPreviewUrl,
       lastRunAt: row.lastRunAt,
       lastUpdatedAt: row.lastUpdatedAt,
     }));
