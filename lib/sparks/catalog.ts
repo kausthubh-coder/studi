@@ -1,6 +1,5 @@
 import { loadPrompt } from "../prompts";
-import { sparkTypes, type SparkType } from "./contracts";
-import { sparkSkillMetadataById } from "./skills/generated";
+import { sparkManifest, sparkManifestById, type SparkType } from "./manifest";
 
 export type SparkSkillDefinition = {
   id: SparkType;
@@ -11,10 +10,10 @@ export type SparkSkillDefinition = {
 };
 
 function buildSkillDefinition(id: SparkType): SparkSkillDefinition {
-  const metadata = sparkSkillMetadataById[id];
+  const metadata = sparkManifestById[id];
   return {
     id,
-    name: metadata.name,
+    name: metadata.label,
     description: metadata.description,
     whenToUse: metadata.whenToUse,
     instructions: loadPrompt(metadata.promptPath),
@@ -22,7 +21,7 @@ function buildSkillDefinition(id: SparkType): SparkSkillDefinition {
 }
 
 export const sparkSkillCatalog: readonly SparkSkillDefinition[] =
-  sparkTypes.map((id) => buildSkillDefinition(id));
+  sparkManifest.map((spark) => buildSkillDefinition(spark.id));
 
 export const sparkSkillById: Readonly<Record<SparkType, SparkSkillDefinition>> =
   Object.freeze(
