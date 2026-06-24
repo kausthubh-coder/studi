@@ -12,6 +12,7 @@ import {
   type ModelProfile,
 } from "../../lib/model-config";
 import { renderPrompt } from "../../lib/prompts";
+import { toProviderErrorMessage } from "../../lib/observability/contracts";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
   getSparkTypeLabel,
@@ -67,6 +68,9 @@ const internalApi = internal as unknown as {
     insertRawUsageInternal: FunctionReference<"mutation", "internal">;
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
   };
+  quotas: {
+    reserveDailyQuotaInternal: FunctionReference<"mutation", "internal">;
+  };
 };
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -107,7 +111,9 @@ function readNumericCandidate(record: Record<string, unknown>, key: string) {
     : undefined;
 }
 
-function extractEstimatedCostUsd(providerMetadata: unknown): number | undefined {
+function extractEstimatedCostUsd(
+  providerMetadata: unknown,
+): number | undefined {
   if (!providerMetadata || typeof providerMetadata !== "object") {
     return undefined;
   }
@@ -152,16 +158,22 @@ function extractEstimatedCostUsd(providerMetadata: unknown): number | undefined 
 
 export type SparkWorkerModels = Pick<
   ModelConfig,
-  "sparkScene" | "sparkDesmos" | "sparkCode" | "sparkQuiz" | "sparkFlash"
+  | "sparkSceneWorker"
+  | "sparkDesmosWorker"
+  | "sparkCodeWorker"
+  | "sparkWebWorker"
+  | "sparkQuizWorker"
+  | "sparkFlashWorker"
 >;
 
 function toSparkWorkerModels(modelConfig: ModelConfig): SparkWorkerModels {
   return {
-    sparkScene: modelConfig.sparkScene,
-    sparkDesmos: modelConfig.sparkDesmos,
-    sparkCode: modelConfig.sparkCode,
-    sparkQuiz: modelConfig.sparkQuiz,
-    sparkFlash: modelConfig.sparkFlash,
+    sparkSceneWorker: modelConfig.sparkSceneWorker,
+    sparkDesmosWorker: modelConfig.sparkDesmosWorker,
+    sparkCodeWorker: modelConfig.sparkCodeWorker,
+    sparkWebWorker: modelConfig.sparkWebWorker,
+    sparkQuizWorker: modelConfig.sparkQuizWorker,
+    sparkFlashWorker: modelConfig.sparkFlashWorker,
   };
 }
 
@@ -322,7 +334,6 @@ function isAbortError(error: unknown): boolean {
   }
   return error.name === "AbortError" || /aborted/i.test(error.message);
 }
-
 
 function createTimeoutSignal(
   abortSignal?: AbortSignal,
@@ -548,13 +559,13 @@ async function buildSceneSpark(
     const firstGeneration = await generateWorkerObject<SceneDraft>({
       schema: sceneWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkScene,
+      model: workerModels.sparkSceneWorker,
       abortSignal,
       timeoutMs: sceneWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "scene",
-      model: workerModels.sparkScene,
+      model: workerModels.sparkSceneWorker,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
@@ -623,13 +634,13 @@ async function buildSceneSpark(
     const repairedGeneration = await generateWorkerObject<SceneDraft>({
       schema: sceneWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkScene,
+      model: workerModels.sparkSceneWorker,
       abortSignal,
       timeoutMs: sceneWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "scene",
-      model: workerModels.sparkScene,
+      model: workerModels.sparkSceneWorker,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
@@ -711,14 +722,14 @@ async function buildDesmosGraphSpark(
     const firstGeneration = await generateWorkerObject<DesmosDraft>({
       schema: desmosWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkDesmos,
+      model: workerModels.sparkDesmosWorker,
       abortSignal,
       timeoutMs: desmosWorkerTimeoutMs,
       mode: "json",
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "desmos_graph",
-      model: workerModels.sparkDesmos,
+      model: workerModels.sparkDesmosWorker,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
@@ -784,14 +795,14 @@ async function buildDesmosGraphSpark(
     const repairedGeneration = await generateWorkerObject<DesmosDraft>({
       schema: desmosWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkDesmos,
+      model: workerModels.sparkDesmosWorker,
       abortSignal,
       timeoutMs: desmosWorkerTimeoutMs,
       mode: "json",
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "desmos_graph",
-      model: workerModels.sparkDesmos,
+      model: workerModels.sparkDesmosWorker,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
@@ -853,13 +864,13 @@ async function buildCodePlaygroundSpark(
     const firstGeneration = await generateWorkerObject<CodePlaygroundDraft>({
       schema: codePlaygroundWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkCode,
+      model: workerModels.sparkCodeWorker,
       abortSignal,
       timeoutMs: codeWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "code_playground",
-      model: workerModels.sparkCode,
+      model: workerModels.sparkCodeWorker,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
@@ -918,13 +929,13 @@ async function buildCodePlaygroundSpark(
     const repairedGeneration = await generateWorkerObject<CodePlaygroundDraft>({
       schema: codePlaygroundWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkCode,
+      model: workerModels.sparkCodeWorker,
       abortSignal,
       timeoutMs: codeWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "code_playground",
-      model: workerModels.sparkCode,
+      model: workerModels.sparkCodeWorker,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
@@ -993,13 +1004,13 @@ async function buildWebPlaygroundSpark(
     const firstGeneration = await generateWorkerObject<WebPlaygroundDraft>({
       schema: webPlaygroundWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkCode,
+      model: workerModels.sparkWebWorker,
       abortSignal,
       timeoutMs: codeWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "web_playground",
-      model: workerModels.sparkCode,
+      model: workerModels.sparkWebWorker,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
@@ -1058,13 +1069,13 @@ async function buildWebPlaygroundSpark(
     const repairedGeneration = await generateWorkerObject<WebPlaygroundDraft>({
       schema: webPlaygroundWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkCode,
+      model: workerModels.sparkWebWorker,
       abortSignal,
       timeoutMs: codeWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "web_playground",
-      model: workerModels.sparkCode,
+      model: workerModels.sparkWebWorker,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
@@ -1133,13 +1144,13 @@ async function buildQuizSpark(
     const firstGeneration = await generateWorkerObject<QuizDraft>({
       schema: quizWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkQuiz,
+      model: workerModels.sparkQuizWorker,
       abortSignal,
       timeoutMs: quizWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "quiz",
-      model: workerModels.sparkQuiz,
+      model: workerModels.sparkQuizWorker,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
@@ -1198,13 +1209,13 @@ async function buildQuizSpark(
     const repairedGeneration = await generateWorkerObject<QuizDraft>({
       schema: quizWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkQuiz,
+      model: workerModels.sparkQuizWorker,
       abortSignal,
       timeoutMs: quizWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "quiz",
-      model: workerModels.sparkQuiz,
+      model: workerModels.sparkQuizWorker,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
@@ -1271,13 +1282,13 @@ async function buildFlashCardSpark(
     const firstGeneration = await generateWorkerObject<FlashCardDraft>({
       schema: flashCardWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkFlash,
+      model: workerModels.sparkFlashWorker,
       abortSignal,
       timeoutMs: flashWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "flash_card",
-      model: workerModels.sparkFlash,
+      model: workerModels.sparkFlashWorker,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
@@ -1336,13 +1347,13 @@ async function buildFlashCardSpark(
     const repairedGeneration = await generateWorkerObject<FlashCardDraft>({
       schema: flashCardWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkFlash,
+      model: workerModels.sparkFlashWorker,
       abortSignal,
       timeoutMs: flashWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "flash_card",
-      model: workerModels.sparkFlash,
+      model: workerModels.sparkFlashWorker,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
@@ -1398,6 +1409,35 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
 
       const workerModelForSpark =
         workerModels[sparkManifestById[input.sparkId].workerModelKey];
+
+      if (ctx.userId) {
+        try {
+          const quota = (await ctx.runMutation(
+            internalApi.quotas.reserveDailyQuotaInternal,
+            {
+              userId: ctx.userId,
+              threadId: ctx.threadId,
+              action: "spark_create",
+              name: input.sparkId,
+            },
+          )) as { allowed: boolean; message?: string };
+          if (!quota.allowed) {
+            return {
+              status: "failed",
+              workerSummary: "Spark generation is paused by a usage limit.",
+              warnings: [],
+              error: quota.message ?? "Spark generation limit reached.",
+            };
+          }
+        } catch (error) {
+          return {
+            status: "failed",
+            workerSummary: "Spark generation is paused by a usage limit.",
+            warnings: [],
+            error: toProviderErrorMessage(error),
+          };
+        }
+      }
 
       try {
         if (input.sparkId === "scene") {
@@ -1485,12 +1525,12 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
           await ctx
             .runMutation(internalApi.billing.recordTextAiCostInternal, {
               userId: ctx.userId,
-              textAiCostUsd: extractEstimatedCostUsd(record.providerMetadata) ?? 0,
+              textAiCostUsd:
+                extractEstimatedCostUsd(record.providerMetadata) ?? 0,
             })
             .catch((error) => {
               console.error("Failed to store spark billing usage", error);
             });
-
         }
 
         await ctx

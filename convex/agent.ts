@@ -6,16 +6,18 @@ import { stepCountIs } from "ai";
 import type { FunctionReference } from "convex/server";
 import {
   activeModelProfile,
-  getModelConfig,
+  getModelForRoute,
   getStudiAgentName,
   type ModelProfile,
 } from "../lib/model-config";
+import { resolveAgentRole } from "../lib/role-router";
 import { getCodeSparkContextTool } from "../lib/agent-tools/getCodeSparkContextTool";
 import { buildLabToolset } from "../lib/agent-tools/labTools";
 import { renderPrompt } from "../lib/prompts";
 import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
 import { components, internal } from "./_generated/api";
 import { createSparkToolForProfile } from "./sparks/tools";
+import { buildTrackToolset } from "./tracks/tools";
 
 const internalApi = internal as unknown as {
   billing: {
@@ -141,14 +143,17 @@ export function buildStudiToolset(profile: ModelProfile) {
     create_spark: createSparkToolForProfile(profile),
     get_code_spark_context: getCodeSparkContextTool,
     ...buildLabToolset(),
+    ...buildTrackToolset(),
   };
 }
 
 function createStudiAgent(profile: ModelProfile): Agent {
-  const modelConfig = getModelConfig(profile);
+  const role = resolveAgentRole({ requestedCapability: "tutor" });
   return new Agent(components.agent, {
     name: getStudiAgentName(profile),
-    languageModel: getOpenRouter().chat(modelConfig.studiAgent),
+    languageModel: getOpenRouter().chat(
+      getModelForRoute(role.modelRouteKey, profile),
+    ),
     stopWhen: stepCountIs(6),
     tools: buildStudiToolset(profile),
     instructions: studiAgentInstructions,

@@ -1,5 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+  learningTrackValidator,
+  trackLinkedActivityValidator,
+  trackPhaseValidator,
+  trackProgressValidator,
+} from "./tracks/validators";
 
 export default defineSchema({
   userThreads: defineTable({
@@ -112,6 +118,53 @@ export default defineSchema({
     ])
     .index("by_sandboxId", ["sandboxId"]),
 
+  learningTracks: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    phase: trackPhaseValidator,
+    revision: v.number(),
+    draftTrack: v.optional(learningTrackValidator),
+    acceptedTrack: v.optional(learningTrackValidator),
+    progress: trackProgressValidator,
+    linkedActivities: v.array(trackLinkedActivityValidator),
+    revisionNote: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_threadId", ["userId", "threadId"])
+    .index("by_userId_and_updatedAt", ["userId", "updatedAt"]),
+
+  voiceSessions: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    provider: v.literal("openai_realtime"),
+    model: v.string(),
+    status: v.union(
+      v.literal("created"),
+      v.literal("connected"),
+      v.literal("ended"),
+      v.literal("failed"),
+    ),
+    clientSessionId: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+    lastError: v.optional(
+      v.object({
+        code: v.string(),
+        message: v.string(),
+        retriable: v.boolean(),
+        status: v.optional(v.number()),
+      }),
+    ),
+  })
+    .index("by_userId_and_threadId_and_createdAt", [
+      "userId",
+      "threadId",
+      "createdAt",
+    ])
+    .index("by_clientSessionId", ["clientSessionId"]),
+
   billingProfiles: defineTable({
     userId: v.string(),
     planKey: v.union(
@@ -186,6 +239,9 @@ export default defineSchema({
       v.literal("agent_runtime"),
       v.literal("spark"),
       v.literal("lab"),
+      v.literal("voice"),
+      v.literal("track"),
+      v.literal("quota"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),
@@ -207,6 +263,17 @@ export default defineSchema({
       "source",
       "createdAt",
     ]),
+
+  quotaCounters: defineTable({
+    userId: v.string(),
+    dayKey: v.string(),
+    action: v.string(),
+    count: v.number(),
+    limit: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_dayKey", ["userId", "dayKey"])
+    .index("by_userId_and_dayKey_and_action", ["userId", "dayKey", "action"]),
 
   waitlistWebhookEvents: defineTable({
     source: v.literal("tally_waitlist"),

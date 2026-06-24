@@ -1,6 +1,6 @@
 "use node";
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
@@ -34,6 +34,9 @@ const internalApi = internal as unknown as {
   };
   telemetry: {
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
+  };
+  quotas: {
+    reserveDailyQuotaInternal: FunctionReference<"mutation", "internal">;
   };
 };
 
@@ -140,13 +143,17 @@ export function __setLabRuntimeProviderForTesting(
   provider: LabRuntimeProvider | null,
 ) {
   if (process.env.NODE_ENV !== "test") {
-    throw new Error("Test runtime provider override is only available in tests");
+    throw new Error(
+      "Test runtime provider override is only available in tests",
+    );
   }
   runtimeProvider = provider;
 }
 
 function toMessage(error: unknown) {
-  return error instanceof Error && error.message ? error.message : String(error);
+  return error instanceof Error && error.message
+    ? error.message
+    : String(error);
 }
 
 function classifyProviderError(error: unknown) {
@@ -172,6 +179,41 @@ async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthorized");
   return identity.subject;
+}
+
+type QuotaReservation = {
+  allowed: boolean;
+  action: string;
+  message?: string;
+  limit?: number;
+  resetAt?: number;
+};
+
+function assertQuotaAllowed(quota: QuotaReservation) {
+  if (quota.allowed) return;
+  throw new ConvexError({
+    code: "QUOTA_EXCEEDED",
+    action: quota.action,
+    message: quota.message ?? "Daily usage limit reached.",
+    limit: quota.limit,
+    resetAt: quota.resetAt,
+  });
+}
+
+async function reserveLabRuntime(
+  ctx: ActionCtx,
+  args: { userId: string; threadId: string; name: string },
+) {
+  const quota = (await ctx.runMutation(
+    internalApi.quotas.reserveDailyQuotaInternal,
+    {
+      userId: args.userId,
+      threadId: args.threadId,
+      action: "lab_runtime",
+      name: args.name,
+    },
+  )) as QuotaReservation;
+  assertQuotaAllowed(quota);
 }
 
 async function recordLabTelemetry(
@@ -248,6 +290,11 @@ export const createLab = action({
     await ctx.runQuery(internalApi.labs.assertThreadOwnerInternal, {
       userId,
       threadId: args.threadId,
+    });
+    await reserveLabRuntime(ctx, {
+      userId,
+      threadId: args.threadId,
+      name: "create_lab",
     });
 
     let runtimeSession: LabRuntimeSession | null = null;
@@ -330,6 +377,11 @@ export const materializeCodeSpark = action({
     });
     await ctx.runMutation(internalApi.billing.assertCanUseLabsInternal, {
       userId,
+    });
+    await reserveLabRuntime(ctx, {
+      userId,
+      threadId: args.threadId,
+      name: "materialize_code_spark",
     });
 
     let session = await ctx.runQuery(
@@ -431,7 +483,9 @@ export const materializeCodeSpark = action({
           language: args.language,
           code:
             args.files.find((file) => file.path === args.primaryFile)
-              ?.content ?? args.files[0]?.content ?? "",
+              ?.content ??
+            args.files[0]?.content ??
+            "",
           labSessionId: session._id,
           command: args.runCommand,
           previewUrl: preview?.url,
@@ -483,22 +537,27 @@ export const materializeCodeSpark = action({
           },
         );
         await ctx
-          .runMutation(internalApi.sparkFeedback.recordCodeSparkLabRunInternal, {
-            userId,
-            threadId: args.threadId,
-            sparkInstanceId: args.sparkInstanceId,
-            sparkTitle: args.sparkTitle,
-            language: args.language,
-            code:
-              args.files.find((file) => file.path === args.primaryFile)
-                ?.content ?? args.files[0]?.content ?? "",
-            labSessionId: session._id,
-            command: args.runCommand,
-            result: {
-              status: "error",
-              error: toMessage(error),
+          .runMutation(
+            internalApi.sparkFeedback.recordCodeSparkLabRunInternal,
+            {
+              userId,
+              threadId: args.threadId,
+              sparkInstanceId: args.sparkInstanceId,
+              sparkTitle: args.sparkTitle,
+              language: args.language,
+              code:
+                args.files.find((file) => file.path === args.primaryFile)
+                  ?.content ??
+                args.files[0]?.content ??
+                "",
+              labSessionId: session._id,
+              command: args.runCommand,
+              result: {
+                status: "error",
+                error: toMessage(error),
+              },
             },
-          })
+          )
           .catch((recordError) => {
             console.error("Failed to record code spark run error", recordError);
           });
@@ -533,6 +592,11 @@ export const resumeLab = action({
     const userId = await requireAuthenticatedUserId(ctx);
     const session = await getOwnedSession(ctx, userId, args.labSessionId);
     const startedAt = Date.now();
+    await reserveLabRuntime(ctx, {
+      userId,
+      threadId: session.threadId,
+      name: "resume_lab",
+    });
 
     try {
       const runtimeSession = await getRuntimeProvider().resume({
@@ -765,6 +829,11 @@ export const runCommand = action({
     const userId = await requireAuthenticatedUserId(ctx);
     const session = await getOwnedSession(ctx, userId, args.labSessionId);
     const startedAt = Date.now();
+    await reserveLabRuntime(ctx, {
+      userId,
+      threadId: session.threadId,
+      name: "run_command",
+    });
     try {
       const result = await getRuntimeProvider().runCommand({
         sandboxId: session.sandboxId,
