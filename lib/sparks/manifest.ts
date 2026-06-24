@@ -1,4 +1,4 @@
-import type { ModelRouteKey } from "@/lib/model-config";
+import type { ModelRouteKey } from "../model-config";
 
 export const codePlaygroundLanguages = [
   "python",

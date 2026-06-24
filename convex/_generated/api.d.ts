@@ -21,6 +21,8 @@ import type * as sparks_schemas from "../sparks/schemas.js";
 import type * as sparks_tools from "../sparks/tools.js";
 import type * as sparks_validators from "../sparks/validators.js";
 import type * as telemetry from "../telemetry.js";
+import type * as voice from "../voice.js";
+import type * as voiceActions from "../voiceActions.js";
 import type * as waitlist from "../waitlist.js";
 import type * as waitlistActions from "../waitlistActions.js";
 import type * as waitlistPublic from "../waitlistPublic.js";
@@ -45,6 +47,8 @@ declare const fullApi: ApiFromModules<{
   "sparks/tools": typeof sparks_tools;
   "sparks/validators": typeof sparks_validators;
   telemetry: typeof telemetry;
+  voice: typeof voice;
+  voiceActions: typeof voiceActions;
   waitlist: typeof waitlist;
   waitlistActions: typeof waitlistActions;
   waitlistPublic: typeof waitlistPublic;

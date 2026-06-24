@@ -54,6 +54,37 @@ export default defineSchema({
       "sparkInstanceId",
     ]),
 
+  voiceSessions: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    provider: v.literal("openai_realtime"),
+    model: v.string(),
+    status: v.union(
+      v.literal("created"),
+      v.literal("connected"),
+      v.literal("ended"),
+      v.literal("failed"),
+    ),
+    clientSessionId: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+    lastError: v.optional(
+      v.object({
+        code: v.string(),
+        message: v.string(),
+        retriable: v.boolean(),
+        status: v.optional(v.number()),
+      }),
+    ),
+  })
+    .index("by_userId_and_threadId_and_createdAt", [
+      "userId",
+      "threadId",
+      "createdAt",
+    ])
+    .index("by_clientSessionId", ["clientSessionId"]),
+
   billingProfiles: defineTable({
     userId: v.string(),
     planKey: v.union(
@@ -127,6 +158,7 @@ export default defineSchema({
       v.literal("agent_usage"),
       v.literal("agent_runtime"),
       v.literal("spark"),
+      v.literal("voice"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),
