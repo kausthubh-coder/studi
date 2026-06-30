@@ -24,6 +24,12 @@ const runResultValidator = v.object({
   error: v.optional(v.string()),
 });
 
+const codeSparkLanguageValidator = v.union(
+  v.literal("python"),
+  v.literal("javascript"),
+  v.literal("typescript"),
+);
+
 const sparkStateValidator = v.object({
   sparkInstanceId: v.string(),
   sparkTitle: v.optional(v.string()),
@@ -83,7 +89,7 @@ export const upsertCodeSparkDraft = mutation({
     threadId: v.string(),
     sparkInstanceId: v.string(),
     sparkTitle: v.optional(v.string()),
-    language: v.literal("python"),
+    language: codeSparkLanguageValidator,
     code: v.string(),
   },
   returns: v.null(),
@@ -144,7 +150,7 @@ export const recordCodeSparkRun = mutation({
     threadId: v.string(),
     sparkInstanceId: v.string(),
     sparkTitle: v.optional(v.string()),
-    language: v.literal("python"),
+    language: codeSparkLanguageValidator,
     code: v.string(),
     result: runResultValidator,
   },

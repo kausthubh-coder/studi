@@ -3,9 +3,12 @@
 import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "convex/react";
 import type { ComponentType } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
-import type { CodePlaygroundPayload } from "@/lib/sparks/contracts";
+import type {
+  CodePlaygroundLanguage,
+  CodePlaygroundPayload,
+} from "@/lib/sparks/contracts";
 import { IconSparkle, IconExpand } from "@/components/studi-chat/icons";
 
 type MonacoEditorProps = {
@@ -53,6 +56,19 @@ type RunStatus = "idle" | "running" | "success" | "error";
 
 const RUN_TIMEOUT_MS = 12_000;
 
+const languageLabel: Record<CodePlaygroundLanguage, string> = {
+  python: "Python",
+  javascript: "JavaScript",
+  typescript: "TypeScript",
+};
+
+type CodeRunProvider = {
+  language: CodePlaygroundLanguage;
+  canRun: boolean;
+  pendingMessage?: string;
+  run: (currentCode: string) => Promise<WorkerRunResult>;
+};
+
 function makeRequestId(): string {
   if (
     typeof crypto !== "undefined" &&
@@ -94,6 +110,9 @@ export default function CodePlaygroundScene({
   const lastSavedCodeRef = useRef<string | null>(null);
 
   const code = draftCode ?? persisted?.code ?? payload.starterCode;
+  const canRunCode = payload.language === "python";
+  const runtimePendingMessage = `${languageLabel[payload.language]} execution is pending runtime-provider integration. You can edit the spark now, but running it needs the execution provider to be wired.`;
+  const pendingRuntimeMessage = canRunCode ? undefined : runtimePendingMessage;
 
   const terminateWorker = useCallback(() => {
     if (workerRef.current) {
@@ -158,7 +177,7 @@ export default function CodePlaygroundScene({
     return workerReadyPromiseRef.current;
   }, [terminateWorker]);
 
-  const runCode = useCallback(
+  const runPythonCode = useCallback(
     async (currentCode: string): Promise<WorkerRunResult> => {
       await ensureWorker();
 
@@ -201,6 +220,31 @@ export default function CodePlaygroundScene({
     [ensureWorker, payload.testCode, terminateWorker],
   );
 
+  const runProvider = useMemo<CodeRunProvider>(() => {
+    if (canRunCode) {
+      return {
+        language: payload.language,
+        canRun: true,
+        run: runPythonCode,
+      };
+    }
+
+    return {
+      language: payload.language,
+      canRun: false,
+      pendingMessage: pendingRuntimeMessage,
+      run: async () => {
+        throw new Error(runtimePendingMessage);
+      },
+    };
+  }, [
+    canRunCode,
+    payload.language,
+    pendingRuntimeMessage,
+    runPythonCode,
+    runtimePendingMessage,
+  ]);
+
   useEffect(() => {
     return () => {
       terminateWorker();
@@ -228,7 +272,7 @@ export default function CodePlaygroundScene({
         threadId,
         sparkInstanceId,
         sparkTitle,
-        language: "python",
+        language: payload.language,
         code,
       })
         .then(() => {
@@ -245,6 +289,7 @@ export default function CodePlaygroundScene({
   }, [
     code,
     persisted,
+    payload.language,
     sparkInstanceId,
     sparkTitle,
     threadId,
@@ -256,7 +301,7 @@ export default function CodePlaygroundScene({
     setErrorText(null);
 
     try {
-      const result = await runCode(code);
+      const result = await runProvider.run(code);
       const nextStatus: RunStatus = result.error ? "error" : "success";
 
       setRunStatus(nextStatus);
@@ -270,7 +315,7 @@ export default function CodePlaygroundScene({
           threadId,
           sparkInstanceId,
           sparkTitle,
-          language: "python",
+          language: runProvider.language,
           code,
           result: {
             status: nextStatus,
@@ -284,7 +329,7 @@ export default function CodePlaygroundScene({
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to run Python code.";
+        error instanceof Error ? error.message : "Failed to run code.";
       setRunStatus("error");
       setStdout("");
       setStderr("");
@@ -296,7 +341,7 @@ export default function CodePlaygroundScene({
           threadId,
           sparkInstanceId,
           sparkTitle,
-          language: "python",
+          language: runProvider.language,
           code,
           result: {
             status: "error",
@@ -310,7 +355,7 @@ export default function CodePlaygroundScene({
   }, [
     code,
     recordCodeSparkRun,
-    runCode,
+    runProvider,
     sparkInstanceId,
     sparkTitle,
     threadId,
@@ -376,9 +421,14 @@ export default function CodePlaygroundScene({
             type="button"
             className="code-spark-run-btn"
             onClick={onRunClick}
-            disabled={runStatus === "running"}
+            disabled={runStatus === "running" || !canRunCode}
+            title={pendingRuntimeMessage}
           >
-            {runStatus === "running" ? "Running\u2026" : "\u25b6 Run"}
+            {runStatus === "running"
+              ? "Running\u2026"
+              : canRunCode
+                ? "\u25b6 Run"
+                : "Runtime pending"}
           </button>
         </div>
       </div>
@@ -398,7 +448,7 @@ export default function CodePlaygroundScene({
         <div className="code-spark-editor-shell">
           <MonacoEditor
             height={isExpanded ? "100%" : "320px"}
-            language="python"
+            language={payload.language}
             value={code}
             onChange={(value: string | undefined) => setDraftCode(value ?? "")}
             theme="vs-dark"
@@ -425,7 +475,12 @@ export default function CodePlaygroundScene({
           ) : null}
           {stdout ? <pre className="code-spark-stdout">{stdout}</pre> : null}
           {stderr ? <pre className="code-spark-stderr">{stderr}</pre> : null}
-          {!stdout && !stderr && !errorText ? (
+          {!stdout && !stderr && !errorText && pendingRuntimeMessage ? (
+            <p className="code-spark-placeholder">
+              {pendingRuntimeMessage}
+            </p>
+          ) : null}
+          {!stdout && !stderr && !errorText && !pendingRuntimeMessage ? (
             <p className="code-spark-placeholder">
               Run the code to see results here.
             </p>
