@@ -141,6 +141,7 @@ export default defineSchema({
       v.literal("voice"),
       v.literal("track"),
       v.literal("quota"),
+      v.literal("lab_tool"),
       v.literal("plan_tool"),
     ),
     name: v.string(),
