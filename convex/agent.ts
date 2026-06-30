@@ -6,10 +6,11 @@ import { stepCountIs } from "ai";
 import type { FunctionReference } from "convex/server";
 import {
   activeModelProfile,
-  getModelConfig,
+  getModelForRoute,
   getStudiAgentName,
   type ModelProfile,
 } from "../lib/model-config";
+import { resolveAgentRole } from "../lib/role-router";
 import { getCodeSparkContextTool } from "../lib/agent-tools/getCodeSparkContextTool";
 import { renderPrompt } from "../lib/prompts";
 import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
@@ -143,10 +144,12 @@ export function buildStudiToolset(profile: ModelProfile) {
 }
 
 function createStudiAgent(profile: ModelProfile): Agent {
-  const modelConfig = getModelConfig(profile);
+  const role = resolveAgentRole({ requestedCapability: "tutor" });
   return new Agent(components.agent, {
     name: getStudiAgentName(profile),
-    languageModel: getOpenRouter().chat(modelConfig.studiAgent),
+    languageModel: getOpenRouter().chat(
+      getModelForRoute(role.modelRouteKey, profile),
+    ),
     stopWhen: stepCountIs(6),
     tools: buildStudiToolset(profile),
     instructions: studiAgentInstructions,
