@@ -75,12 +75,12 @@ export function LandingPage() {
 
           <SignedOut>
             <div className="flex items-center gap-2">
-              <Link
+              <a
                 href="/chat"
                 className="hidden sm:block font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-white hover:bg-[#f5ede0] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
               >
                 Sign in
-              </Link>
+              </a>
               <button
                 type="button"
                 onClick={() => {

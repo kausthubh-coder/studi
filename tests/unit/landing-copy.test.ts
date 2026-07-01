@@ -25,7 +25,7 @@ describe("landing copy", () => {
   it("routes signed-out sign in through the protected chat page", () => {
     const source = readLandingSource();
 
-    expect(source).toContain('href="/chat"');
+    expect(source).toMatch(/<a\s+href="\/chat"[\s\S]*?>\s*Sign in\s*<\/a>/);
     expect(source).not.toContain("SignInButton");
     expect(source).not.toContain('mode="modal"');
   });
