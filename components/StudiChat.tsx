@@ -68,8 +68,8 @@ export default function StudiChat() {
     () => (threadsQuery ?? []) as ThreadSummary[],
     [threadsQuery],
   );
-  const sendMessageMutation = useMutation(api.chat.sendMessage);
   const sendFirstMessageAction = useAction(api.chatActions.sendFirstMessage);
+  const sendMessageAction = useAction(api.chatActions.sendMessage);
   const deleteThreadAction = useAction(api.chatActions.deleteThread);
   const backfillThreadActivity = useMutation(
     api.chat.backfillThreadActivityForCurrentUser,
@@ -259,7 +259,7 @@ export default function StudiChat() {
           });
           setSelectedThreadId(threadId);
         } else {
-          await sendMessageMutation({
+          await sendMessageAction({
             threadId: selectedThreadId!,
             prompt,
             attachmentIds,
@@ -283,7 +283,7 @@ export default function StudiChat() {
       pendingAttachments,
       selectedThreadId,
       sendFirstMessageAction,
-      sendMessageMutation,
+      sendMessageAction,
     ],
   );
 

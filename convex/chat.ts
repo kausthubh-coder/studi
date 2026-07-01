@@ -50,6 +50,9 @@ const queuedSendResultValidator = v.object({
   deduped: v.boolean(),
 });
 
+const assistantGenerationFailureText =
+  "I hit a snag while generating that reply. Please try again in a moment.";
+
 function truncateTitle(value: string): string {
   return value.length > 60 ? `${value.slice(0, 60)}...` : value;
 }
@@ -405,6 +408,83 @@ export const touchThread = internalMutation({
 
     await ctx.db.patch(thread._id, {
       lastMessageAt: args.lastMessageAt,
+    });
+    return null;
+  },
+});
+
+export const saveAssistantFailureMessageInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+
+    if (!ownedThread) {
+      throw new Error("Thread not found");
+    }
+
+    const [promptMessage] = await ctx.runQuery(
+      components.agent.messages.getMessagesByIds,
+      {
+        messageIds: [args.promptMessageId],
+      },
+    );
+
+    if (
+      !promptMessage ||
+      promptMessage.threadId !== args.threadId ||
+      promptMessage.message?.role !== "user"
+    ) {
+      return null;
+    }
+
+    const promptTurnMessages = await ctx.runQuery(
+      components.agent.messages.listMessagesByThreadId,
+      {
+        threadId: args.threadId,
+        order: "desc",
+        statuses: ["pending", "success", "failed"],
+        upToAndIncludingMessageId: args.promptMessageId,
+        paginationOpts: {
+          cursor: null,
+          numItems: 64,
+        },
+      },
+    );
+    const hasVisibleAssistantForPrompt =
+      promptTurnMessages.page
+        .filter((message) => message.order === promptMessage.order)
+        .some((message) => {
+          return (
+            message.message?.role === "assistant" &&
+            typeof message.text === "string" &&
+            message.text.trim().length > 0
+          );
+        });
+
+    if (!hasVisibleAssistantForPrompt) {
+      await saveMessage(ctx, components.agent, {
+        threadId: args.threadId,
+        userId: args.userId,
+        promptMessageId: args.promptMessageId,
+        message: {
+          role: "assistant",
+          content: assistantGenerationFailureText,
+        },
+      });
+    }
+
+    await ctx.db.patch(ownedThread._id, {
+      lastMessageAt: Date.now(),
     });
     return null;
   },

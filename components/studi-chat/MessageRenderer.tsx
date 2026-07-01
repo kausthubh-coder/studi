@@ -737,6 +737,9 @@ function extractCreateSparkToolResult(
 export function deriveAgentUiState(messages: UIMessage[]): AgentUiState {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
+    if (message.role === "user") {
+      break;
+    }
     if (message.role !== "assistant") {
       continue;
     }

@@ -5,7 +5,11 @@ import type { FunctionReference } from "convex/server";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { api, components, internal } from "./_generated/api";
 import { activeModelProfile } from "../lib/model-config";
-import { buildStudiToolset, getStudiAgent } from "./agent";
+
+const queuedSendResultValidator = v.object({
+  promptMessageId: v.string(),
+  deduped: v.boolean(),
+});
 
 const internalApi = internal as unknown as {
   telemetry: {
@@ -28,6 +32,7 @@ export const createThread = action({
   returns: v.string(),
   handler: async (ctx, args) => {
     const userId = await requireAuthenticatedUserId(ctx);
+    const { getStudiAgent } = await import("./agent");
 
     const { threadId } = await getStudiAgent().createThread(ctx, {
       userId,
@@ -56,6 +61,7 @@ export const sendFirstMessage = action({
   }),
   handler: async (ctx, args) => {
     const userId = await requireAuthenticatedUserId(ctx);
+    const { getStudiAgent } = await import("./agent");
 
     const { threadId } = await getStudiAgent().createThread(ctx, { userId });
 
@@ -76,23 +82,21 @@ export const sendFirstMessage = action({
   },
 });
 
-export const sendMessage = action({
+export const sendMessage: ReturnType<typeof action> = action({
   args: {
     threadId: v.string(),
     prompt: v.optional(v.string()),
     attachmentIds: v.optional(v.array(v.id("attachments"))),
     requestId: v.optional(v.string()),
   },
-  returns: v.null(),
+  returns: queuedSendResultValidator,
   handler: async (ctx, args) => {
-    await ctx.runMutation(api.chat.sendMessage, {
+    return await ctx.runMutation(api.chat.sendMessage, {
       threadId: args.threadId,
       prompt: args.prompt,
       attachmentIds: args.attachmentIds,
       requestId: args.requestId ?? crypto.randomUUID(),
     });
-
-    return null;
   },
 });
 
@@ -147,10 +151,10 @@ export const generateAssistantReply = internalAction({
       threadId: args.threadId,
     });
 
-    const activeAgent = getStudiAgent();
-    const tools = buildStudiToolset(activeModelProfile);
-
     try {
+      const { buildStudiToolset, getStudiAgent } = await import("./agent");
+      const activeAgent = getStudiAgent();
+      const tools = buildStudiToolset(activeModelProfile);
       const { thread } = await activeAgent.continueThread(ctx, {
         threadId: args.threadId,
         userId: args.userId,
@@ -193,9 +197,17 @@ export const generateAssistantReply = internalAction({
       );
     } catch (error) {
       const durationMs = Date.now() - startedAt;
-      await ctx.runMutation(
-        internalApi.telemetry.insertTelemetryEventInternal,
-        {
+      await ctx
+        .runMutation(internal.chat.saveAssistantFailureMessageInternal, {
+          userId: args.userId,
+          threadId: args.threadId,
+          promptMessageId: args.promptMessageId,
+        })
+        .catch((saveError) => {
+          console.error("Failed to save assistant failure message", saveError);
+        });
+      await ctx
+        .runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
           userId: args.userId,
           threadId: args.threadId,
           source: "agent_runtime",
@@ -208,8 +220,10 @@ export const generateAssistantReply = internalAction({
             error: error instanceof Error ? error.message : String(error),
             modelProfile: activeModelProfile,
           },
-        },
-      );
+        })
+        .catch((telemetryError) => {
+          console.error("Failed to record assistant failure telemetry", telemetryError);
+        });
 
       throw error;
     }
