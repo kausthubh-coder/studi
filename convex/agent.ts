@@ -10,6 +10,7 @@ import {
   getStudiAgentName,
   type ModelProfile,
 } from "../lib/model-config";
+import { sanitizeStudiModelMessages } from "../lib/agent-message-sanitizer";
 import { renderPrompt } from "../lib/prompts";
 import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
 import { components, internal } from "./_generated/api";
@@ -149,6 +150,8 @@ function createStudiAgent(profile: ModelProfile): Agent {
     stopWhen: stepCountIs(6),
     tools: buildStudiToolset(profile),
     instructions: studiAgentInstructions,
+    contextHandler: async (_ctx, { allMessages }) =>
+      sanitizeStudiModelMessages(allMessages),
     usageHandler,
   });
 }
