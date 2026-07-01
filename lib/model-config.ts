@@ -19,7 +19,7 @@ export type ModelConfig = {
   providerOptions: OpenRouterProviderOptions;
 };
 
-const defaultAgentModel = "anthropic/claude-sonnet-4.6";
+const defaultAgentModel = "anthropic/claude-opus-4.8";
 const defaultSparkModel = defaultAgentModel;
 
 export const openRouterReasoningProviderOptions: OpenRouterProviderOptions = {

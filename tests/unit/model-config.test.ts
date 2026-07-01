@@ -6,18 +6,18 @@ import {
 } from "@/lib/model-config";
 
 describe("model config", () => {
-  it("uses Sonnet 4.6 for every active model role", () => {
+  it("uses Opus 4.8 for every active model role", () => {
     for (const profile of listModelProfiles()) {
       const { providerOptions: _providerOptions, ...models } =
         getModelConfig(profile);
 
       expect(Object.values(models)).toEqual(
         expect.arrayContaining(
-          Array.from({ length: 5 }, () => "anthropic/claude-sonnet-4.6"),
+          Array.from({ length: 5 }, () => "anthropic/claude-opus-4.8"),
         ),
       );
       expect(new Set(Object.values(models))).toEqual(
-        new Set(["anthropic/claude-sonnet-4.6"]),
+        new Set(["anthropic/claude-opus-4.8"]),
       );
     }
   });
