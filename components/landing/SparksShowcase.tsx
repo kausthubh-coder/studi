@@ -1,11 +1,9 @@
 "use client";
 
-/* eslint-disable react/no-unescaped-entities */
-
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Code2, BrainCircuit, Box, Calculator, LibraryBig, Globe } from "lucide-react";
+import { BrainCircuit, Box, Calculator, LibraryBig } from "lucide-react";
 
 export type SparkDemo = {
     id: string;
@@ -76,77 +74,6 @@ const SPARKS_DATA: SparkDemo[] = [
                     </motion.svg>
                 </div>
                 <p className="text-sm font-mono text-purple-800 mt-4 bg-purple-200/50 px-3 py-1 rounded">y = sin(x) + cos(2x)</p>
-            </div>
-        ),
-    },
-    {
-        id: "playground",
-        title: "Code Playground",
-        description: "Write it, run it, break it. Python playground where you test ideas mid-conversation.",
-        icon: <Code2 className="w-5 h-5" />,
-        colorClass: "bg-amber-100 text-amber-900 border-amber-300",
-        content: (
-            <div className="w-full h-full bg-[#1e1e1e] rounded-xl border border-amber-900/50 p-4 font-mono text-sm shadow-inner flex flex-col text-left">
-                <div className="flex gap-2 mb-3">
-                    <div className="w-3 h-3 rounded-full bg-red-400" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                    <div className="w-3 h-3 rounded-full bg-green-400" />
-                </div>
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.5 }}
-                >
-                    <p className="text-blue-400">def <span className="text-yellow-200">fibonacci</span><span className="text-gray-300">(n):</span></p>
-                    <p className="text-gray-300 pl-4">if n {'<='} 1:</p>
-                    <p className="text-gray-300 pl-8 text-pink-400">return <span className="text-gray-300">n</span></p>
-                    <p className="text-pink-400 pl-4">return <span className="text-gray-300">fibonacci(n-1) + fibonacci(n-2)</span></p>
-                    <div className="mt-4 border-t border-gray-700 pt-2 text-green-400">
-                        &gt; fibonacci(10) = <motion.span
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.8, duration: 0.3 }}
-                        >55</motion.span>
-                    </div>
-                </motion.div>
-            </div>
-        ),
-    },
-    {
-        id: "web",
-        title: "Web Playground",
-        description: "Edit live HTML, CSS, and JavaScript and see your changes instantly in the preview.",
-        icon: <Globe className="w-5 h-5" />,
-        colorClass: "bg-sky-100 text-sky-900 border-sky-300",
-        content: (
-            <div className="w-full h-full flex flex-col bg-white rounded-xl border border-sky-200 overflow-hidden">
-                <div className="flex bg-[#1e1e1e] px-4 py-2 gap-4 text-xs font-mono">
-                    <span className="text-sky-300">HTML</span>
-                    <span className="text-gray-500">CSS</span>
-                    <span className="text-gray-500">JS</span>
-                </div>
-                <div className="flex flex-1 overflow-hidden">
-                    <div className="w-1/2 bg-[#1e1e1e] p-3 font-mono text-xs text-left border-r border-gray-700">
-                        <p className="text-gray-400">&lt;<span className="text-sky-300">div</span> <span className="text-yellow-200">class</span>=<span className="text-green-300">"box"</span>&gt;</p>
-                        <p className="text-gray-300 pl-4">Click me!</p>
-                        <p className="text-gray-400">&lt;/<span className="text-sky-300">div</span>&gt;</p>
-                        <motion.div
-                            animate={{ opacity: [1, 0, 1] }}
-                            transition={{ duration: 1.2, repeat: Infinity }}
-                            className="w-0.5 h-4 bg-white inline-block mt-1"
-                        />
-                    </div>
-                    <div className="w-1/2 bg-sky-50 flex items-center justify-center">
-                        <motion.div
-                            whileHover={{ scale: 1.05 }}
-                            animate={{ backgroundColor: ["#bae6fd", "#7dd3fc", "#bae6fd"] }}
-                            transition={{ duration: 3, repeat: Infinity }}
-                            className="w-20 h-10 rounded-lg border-2 border-sky-500 flex items-center justify-center text-xs font-bold text-sky-800 cursor-pointer"
-                        >
-                            Click me!
-                        </motion.div>
-                    </div>
-                </div>
             </div>
         ),
     },

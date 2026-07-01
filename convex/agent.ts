@@ -10,7 +10,6 @@ import {
   getStudiAgentName,
   type ModelProfile,
 } from "../lib/model-config";
-import { getCodeSparkContextTool } from "../lib/agent-tools/getCodeSparkContextTool";
 import { renderPrompt } from "../lib/prompts";
 import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
 import { components, internal } from "./_generated/api";
@@ -138,7 +137,6 @@ const studiAgentInstructions = renderPrompt("agents/studi.md", {
 export function buildStudiToolset(profile: ModelProfile) {
   return {
     create_spark: createSparkToolForProfile(profile),
-    get_code_spark_context: getCodeSparkContextTool,
   };
 }
 
@@ -147,6 +145,7 @@ function createStudiAgent(profile: ModelProfile): Agent {
   return new Agent(components.agent, {
     name: getStudiAgentName(profile),
     languageModel: getOpenRouter().chat(modelConfig.studiAgent),
+    providerOptions: modelConfig.providerOptions,
     stopWhen: stepCountIs(6),
     tools: buildStudiToolset(profile),
     instructions: studiAgentInstructions,

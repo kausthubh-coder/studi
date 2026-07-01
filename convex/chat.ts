@@ -428,17 +428,6 @@ export const deleteThreadRecordInternal = internalMutation({
       return false;
     }
 
-    const sparkInteractions = await ctx.db
-      .query("sparkInteractions")
-      .withIndex("by_userId_and_threadId_and_lastUpdatedAt", (q) =>
-        q.eq("userId", args.userId).eq("threadId", args.threadId),
-      )
-      .collect();
-
-    for (const interaction of sparkInteractions) {
-      await ctx.db.delete(interaction._id);
-    }
-
     await ctx.db.delete(thread._id);
     return true;
   },
