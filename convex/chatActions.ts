@@ -12,9 +12,20 @@ const queuedSendResultValidator = v.object({
 });
 
 const internalApi = internal as unknown as {
+  chat: {
+    cleanupFailedAssistantTurnInternal: FunctionReference<"mutation", "internal">;
+  };
   telemetry: {
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
   };
+};
+
+const maxAssistantGenerationAttempts = 2;
+
+type CleanupFailedAssistantTurnResult = {
+  promptFound: boolean;
+  meaningfulContentFound: boolean;
+  retryEligible: boolean;
 };
 
 async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
@@ -23,6 +34,15 @@ async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
     throw new Error("Unauthorized");
   }
   return identity.subject;
+}
+
+function isRetriableAssistantGenerationError(error: unknown): boolean {
+  if (error instanceof Error && error.name === "AbortError") {
+    return false;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return !/(?:unauthorized|thread not found)/i.test(message);
 }
 
 export const createThread = action({
@@ -151,52 +171,114 @@ export const generateAssistantReply = internalAction({
       threadId: args.threadId,
     });
 
-    try {
-      const { buildStudiToolset, getStudiAgent } = await import("./agent");
-      const activeAgent = getStudiAgent();
-      const tools = buildStudiToolset(activeModelProfile);
-      const { thread } = await activeAgent.continueThread(ctx, {
-        threadId: args.threadId,
-        userId: args.userId,
-      });
+    const { buildStudiToolset, getStudiAgent } = await import("./agent");
+    const activeAgent = getStudiAgent();
+    const tools = buildStudiToolset(activeModelProfile);
+    const { thread } = await activeAgent.continueThread(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+    });
 
-      await thread.streamText(
-        {
-          promptMessageId: args.promptMessageId,
-          tools,
-          maxOutputTokens: 4000,
-        },
-        {
-          saveStreamDeltas: {
-            chunking: "line",
-            throttleMs: 120,
+    let lastError: unknown;
+    let lastErrorRetriable = false;
+    let attempts = 0;
+    let cleanupResult: CleanupFailedAssistantTurnResult | null = null;
+
+    for (let attempt = 1; attempt <= maxAssistantGenerationAttempts; attempt += 1) {
+      attempts = attempt;
+      try {
+        await thread.streamText(
+          {
+            promptMessageId: args.promptMessageId,
+            tools,
+            maxOutputTokens: 4000,
           },
-        },
-      );
+          {
+            saveStreamDeltas: {
+              chunking: "line",
+              throttleMs: 120,
+            },
+          },
+        );
 
-      await ctx.runMutation(internal.chat.touchThread, {
-        userId: args.userId,
-        threadId: args.threadId,
-        lastMessageAt: Date.now(),
-      });
-
-      const durationMs = Date.now() - startedAt;
-      await ctx.runMutation(
-        internalApi.telemetry.insertTelemetryEventInternal,
-        {
+        await ctx.runMutation(internal.chat.touchThread, {
           userId: args.userId,
           threadId: args.threadId,
-          source: "agent_runtime",
-          name: "generate_assistant_reply",
-          status: "success",
-          durationMs,
-          metadata: {
-            modelProfile: activeModelProfile,
+          lastMessageAt: Date.now(),
+        });
+
+        const durationMs = Date.now() - startedAt;
+        await ctx.runMutation(
+          internalApi.telemetry.insertTelemetryEventInternal,
+          {
+            userId: args.userId,
+            threadId: args.threadId,
+            source: "agent_runtime",
+            name: "generate_assistant_reply",
+            status: "success",
+            durationMs,
+            metadata: {
+              attempts: attempt,
+              modelProfile: activeModelProfile,
+            },
           },
-        },
-      );
-    } catch (error) {
-      const durationMs = Date.now() - startedAt;
+        );
+        return null;
+      } catch (error) {
+        lastError = error;
+        lastErrorRetriable = isRetriableAssistantGenerationError(error);
+
+        if (
+          lastErrorRetriable &&
+          attempt < maxAssistantGenerationAttempts
+        ) {
+          try {
+            cleanupResult = (await ctx.runMutation(
+              internalApi.chat.cleanupFailedAssistantTurnInternal,
+              {
+                userId: args.userId,
+                threadId: args.threadId,
+                promptMessageId: args.promptMessageId,
+              },
+            )) as CleanupFailedAssistantTurnResult;
+          } catch (cleanupError) {
+            console.error(
+              "Failed to clean up assistant turn before retry",
+              cleanupError,
+            );
+            break;
+          }
+          if (!cleanupResult.retryEligible) {
+            break;
+          }
+          continue;
+        }
+
+        break;
+      }
+    }
+
+    if (!cleanupResult?.meaningfulContentFound) {
+      try {
+        cleanupResult = (await ctx.runMutation(
+          internalApi.chat.cleanupFailedAssistantTurnInternal,
+          {
+            userId: args.userId,
+            threadId: args.threadId,
+            promptMessageId: args.promptMessageId,
+          },
+        )) as CleanupFailedAssistantTurnResult;
+      } catch (cleanupError) {
+        console.error(
+          "Failed to clean up assistant turn before fallback",
+          cleanupError,
+        );
+        cleanupResult = null;
+      }
+    }
+
+    const durationMs = Date.now() - startedAt;
+    if (cleanupResult?.promptFound && !cleanupResult.meaningfulContentFound) {
       await ctx
         .runMutation(internal.chat.saveAssistantFailureMessageInternal, {
           userId: args.userId,
@@ -206,28 +288,36 @@ export const generateAssistantReply = internalAction({
         .catch((saveError) => {
           console.error("Failed to save assistant failure message", saveError);
         });
-      await ctx
-        .runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
-          userId: args.userId,
-          threadId: args.threadId,
-          source: "agent_runtime",
-          name: "generate_assistant_reply",
-          status: "failed",
-          durationMs,
-          errorCategory: "runtime_error",
-          retriable: true,
-          metadata: {
-            error: error instanceof Error ? error.message : String(error),
-            modelProfile: activeModelProfile,
-          },
-        })
-        .catch((telemetryError) => {
-          console.error("Failed to record assistant failure telemetry", telemetryError);
-        });
+    }
+    await ctx
+      .runMutation(internalApi.telemetry.insertTelemetryEventInternal, {
+        userId: args.userId,
+        threadId: args.threadId,
+        source: "agent_runtime",
+        name: "generate_assistant_reply",
+        status: "failed",
+        durationMs,
+        errorCategory: "runtime_error",
+        retriable: lastErrorRetriable,
+        metadata: {
+          attempts,
+          meaningfulContentFound:
+            cleanupResult?.meaningfulContentFound ?? false,
+          error: lastError instanceof Error ? lastError.message : String(lastError),
+          modelProfile: activeModelProfile,
+        },
+      })
+      .catch((telemetryError) => {
+        console.error(
+          "Failed to record assistant failure telemetry",
+          telemetryError,
+        );
+      });
 
-      throw error;
+    if (lastError) {
+      throw lastError;
     }
 
-    return null;
+    throw new Error("Assistant generation failed");
   },
 });

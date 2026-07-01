@@ -12,6 +12,7 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 
 const internalApi = internal as unknown as {
@@ -50,11 +51,126 @@ const queuedSendResultValidator = v.object({
   deduped: v.boolean(),
 });
 
+const cleanupFailedAssistantTurnResultValidator = v.object({
+  promptFound: v.boolean(),
+  deletedMessages: v.number(),
+  deletedStreams: v.number(),
+  meaningfulContentFound: v.boolean(),
+  retryEligible: v.boolean(),
+  visibleAssistantTextFound: v.boolean(),
+  visibleToolContentFound: v.boolean(),
+});
+
 const assistantGenerationFailureText =
   "I hit a snag while generating that reply. Please try again in a moment.";
 
 function truncateTitle(value: string): string {
   return value.length > 60 ? `${value.slice(0, 60)}...` : value;
+}
+
+function hasVisibleText(message: { text?: string }): boolean {
+  return typeof message.text === "string" && message.text.trim().length > 0;
+}
+
+function hasMeaningfulContent(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((part) => hasMeaningfulContent(part));
+  }
+
+  if (typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.text === "string") {
+    return record.text.trim().length > 0;
+  }
+  if (record.type === "tool-call") {
+    return Boolean(record.toolName || record.toolCallId);
+  }
+  if (record.isError === true) {
+    return true;
+  }
+
+  for (const key of ["output", "result", "value", "experimental_content"]) {
+    if (key in record && hasMeaningfulContent(record[key])) {
+      return true;
+    }
+  }
+
+  for (const key of ["data", "image", "url"]) {
+    if (!(key in record)) {
+      continue;
+    }
+    const content = record[key];
+    if (typeof content === "string") {
+      return content.trim().length > 0;
+    }
+    if (content !== null && content !== undefined) {
+      return true;
+    }
+  }
+
+  const metadataOnlyKeys = new Set([
+    "type",
+    "toolCallId",
+    "toolName",
+    "providerExecuted",
+    "providerMetadata",
+    "providerOptions",
+  ]);
+  return Object.entries(record).some(([key, child]) => {
+    return !metadataOnlyKeys.has(key) && hasMeaningfulContent(child);
+  });
+}
+
+function hasMeaningfulAssistantOrToolContent(message: {
+  text?: string;
+  message?: { role?: string; content?: unknown };
+}): boolean {
+  if (message.message?.role === "assistant") {
+    return hasVisibleText(message) || hasMeaningfulContent(message.message.content);
+  }
+
+  if (message.message?.role === "tool") {
+    return hasMeaningfulContent(message.message.content);
+  }
+
+  return false;
+}
+
+function hasOnlyEmptyTextContent(content: unknown): boolean {
+  if (typeof content === "string") {
+    return content.trim().length === 0;
+  }
+
+  if (!Array.isArray(content)) {
+    return false;
+  }
+
+  if (content.length === 0) {
+    return true;
+  }
+
+  return content.every((part) => {
+    if (part === null || typeof part !== "object") {
+      return false;
+    }
+    const record = part as Record<string, unknown>;
+    return typeof record.text === "string" && record.text.trim().length === 0;
+  });
 }
 
 export const listThreads = query({
@@ -413,6 +529,144 @@ export const touchThread = internalMutation({
   },
 });
 
+async function cleanupFailedAssistantTurnState(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    threadId: string;
+    promptMessageId: string;
+  },
+): Promise<{
+  promptFound: boolean;
+  deletedMessages: number;
+  deletedStreams: number;
+  meaningfulContentFound: boolean;
+  retryEligible: boolean;
+  visibleAssistantTextFound: boolean;
+  visibleToolContentFound: boolean;
+}> {
+  const ownedThread = await ctx.db
+    .query("userThreads")
+    .withIndex("by_userId_and_threadId", (q) =>
+      q.eq("userId", args.userId).eq("threadId", args.threadId),
+    )
+    .unique();
+
+  if (!ownedThread) {
+    throw new Error("Thread not found");
+  }
+
+  const [promptMessage] = await ctx.runQuery(
+    components.agent.messages.getMessagesByIds,
+    {
+      messageIds: [args.promptMessageId],
+    },
+  );
+
+  if (
+    !promptMessage ||
+    promptMessage.threadId !== args.threadId ||
+    promptMessage.message?.role !== "user"
+  ) {
+    return {
+      promptFound: false,
+      deletedMessages: 0,
+      deletedStreams: 0,
+      meaningfulContentFound: false,
+      retryEligible: false,
+      visibleAssistantTextFound: false,
+      visibleToolContentFound: false,
+    };
+  }
+
+  const promptTurnMessages = await ctx.runQuery(
+    components.agent.messages.listMessagesByThreadId,
+    {
+      threadId: args.threadId,
+      order: "desc",
+      statuses: ["pending", "success", "failed"],
+      upToAndIncludingMessageId: args.promptMessageId,
+      paginationOpts: {
+        cursor: null,
+        numItems: 256,
+      },
+    },
+  );
+
+  const samePromptTurnMessages = promptTurnMessages.page.filter(
+    (message) => message.order === promptMessage.order,
+  );
+  const visibleAssistantTextFound = samePromptTurnMessages.some((message) => {
+    return message.message?.role === "assistant" && hasVisibleText(message);
+  });
+  const visibleToolContentFound = samePromptTurnMessages.some((message) => {
+    return (
+      message.message?.role === "tool" &&
+      hasMeaningfulContent(message.message.content)
+    );
+  });
+  const meaningfulContentFound = samePromptTurnMessages.some((message) => {
+    return hasMeaningfulAssistantOrToolContent(message);
+  });
+  const emptyAssistantMessageIds = samePromptTurnMessages
+    .filter((message) => {
+      return (
+        message.message?.role === "assistant" &&
+        (message.status === "pending" || message.status === "failed") &&
+        !hasVisibleText(message) &&
+        hasOnlyEmptyTextContent(message.message.content)
+      );
+    })
+    .map((message) => message._id);
+
+  if (emptyAssistantMessageIds.length > 0) {
+    await ctx.runMutation(components.agent.messages.deleteByIds, {
+      messageIds: emptyAssistantMessageIds,
+    });
+  }
+
+  let deletedStreams = 0;
+  if (emptyAssistantMessageIds.length > 0 && !meaningfulContentFound) {
+    const promptStreams = await ctx.runQuery(components.agent.streams.list, {
+      threadId: args.threadId,
+      startOrder: promptMessage.order,
+      statuses: ["streaming", "finished", "aborted"],
+    });
+
+    for (const stream of promptStreams) {
+      if (stream.order !== promptMessage.order) {
+        continue;
+      }
+      await ctx.runMutation(components.agent.streams.deleteStreamSync, {
+        streamId: stream.streamId,
+      });
+      deletedStreams += 1;
+    }
+  }
+
+  return {
+    promptFound: true,
+    deletedMessages: emptyAssistantMessageIds.length,
+    deletedStreams,
+    meaningfulContentFound,
+    retryEligible: !meaningfulContentFound,
+    visibleAssistantTextFound,
+    visibleToolContentFound,
+  };
+}
+
+export const cleanupFailedAssistantTurnInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: cleanupFailedAssistantTurnResultValidator,
+  handler: async (ctx, args) => {
+    return await cleanupFailedAssistantTurnState(ctx, args);
+  },
+});
+
 export const saveAssistantFailureMessageInternal = internalMutation({
   args: {
     userId: v.string(),
@@ -421,6 +675,12 @@ export const saveAssistantFailureMessageInternal = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const cleanupResult = await cleanupFailedAssistantTurnState(ctx, args);
+
+    if (!cleanupResult.promptFound || cleanupResult.meaningfulContentFound) {
+      return null;
+    }
+
     const ownedThread = await ctx.db
       .query("userThreads")
       .withIndex("by_userId_and_threadId", (q) =>
@@ -432,56 +692,15 @@ export const saveAssistantFailureMessageInternal = internalMutation({
       throw new Error("Thread not found");
     }
 
-    const [promptMessage] = await ctx.runQuery(
-      components.agent.messages.getMessagesByIds,
-      {
-        messageIds: [args.promptMessageId],
+    await saveMessage(ctx, components.agent, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      message: {
+        role: "assistant",
+        content: assistantGenerationFailureText,
       },
-    );
-
-    if (
-      !promptMessage ||
-      promptMessage.threadId !== args.threadId ||
-      promptMessage.message?.role !== "user"
-    ) {
-      return null;
-    }
-
-    const promptTurnMessages = await ctx.runQuery(
-      components.agent.messages.listMessagesByThreadId,
-      {
-        threadId: args.threadId,
-        order: "desc",
-        statuses: ["pending", "success", "failed"],
-        upToAndIncludingMessageId: args.promptMessageId,
-        paginationOpts: {
-          cursor: null,
-          numItems: 64,
-        },
-      },
-    );
-    const hasVisibleAssistantForPrompt =
-      promptTurnMessages.page
-        .filter((message) => message.order === promptMessage.order)
-        .some((message) => {
-          return (
-            message.message?.role === "assistant" &&
-            typeof message.text === "string" &&
-            message.text.trim().length > 0
-          );
-        });
-
-    if (!hasVisibleAssistantForPrompt) {
-      await saveMessage(ctx, components.agent, {
-        threadId: args.threadId,
-        userId: args.userId,
-        promptMessageId: args.promptMessageId,
-        message: {
-          role: "assistant",
-          content: assistantGenerationFailureText,
-        },
-      });
-    }
+    });
 
     await ctx.db.patch(ownedThread._id, {
       lastMessageAt: Date.now(),

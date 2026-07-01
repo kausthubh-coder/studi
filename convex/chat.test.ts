@@ -1,10 +1,17 @@
 import { convexTest } from "convex-test";
 import { register as registerAgent } from "@convex-dev/agent/test";
 import { register as registerRateLimiter } from "@convex-dev/rate-limiter/test";
+import type { FunctionReference } from "convex/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, components, internal } from "./_generated/api";
 import schema from "./schema";
 import { modules } from "./test.setup";
+
+const internalTestApi = internal as unknown as {
+  chat: {
+    cleanupFailedAssistantTurnInternal: FunctionReference<"mutation", "internal">;
+  };
+};
 
 function testConvex() {
   const t = convexTest(schema, modules);
@@ -377,6 +384,325 @@ describe("chat Convex auth and ownership", () => {
       expect.stringContaining("I hit a snag while generating that reply."),
       expect.stringContaining("I hit a snag while generating that reply."),
     ]);
+  });
+
+  // The provider retry path is integration-level; these tests pin the deterministic cleanup/fallback contract it uses.
+  it("removes an empty pending assistant before fallback and keeps fallback idempotent", async () => {
+    vi.useFakeTimers();
+    const t = testConvex();
+    const agentThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "New Thread",
+    });
+
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      title: "New Thread",
+      lastMessageAt: 1,
+    });
+
+    const sent = await t.withIdentity({ subject: "user_a" }).mutation(
+      api.chat.sendMessage,
+      {
+        threadId: agentThread._id,
+        prompt: "Explain slope",
+        requestId: "request_a",
+      },
+    );
+    const [promptMessage] = await t.query(
+      components.agent.messages.getMessagesByIds,
+      {
+        messageIds: [sent.promptMessageId],
+      },
+    );
+    if (!promptMessage) {
+      throw new Error("Prompt message was not saved");
+    }
+
+    const pending = await t.mutation(components.agent.messages.addMessages, {
+      threadId: agentThread._id,
+      userId: "user_a",
+      promptMessageId: sent.promptMessageId,
+      messages: [
+        {
+          message: {
+            role: "assistant" as const,
+            content: "",
+          },
+          status: "pending" as const,
+        },
+      ],
+    });
+    const pendingAssistantId = pending.messages[0]!._id;
+
+    await t.mutation(components.agent.streams.create, {
+      threadId: agentThread._id,
+      userId: "user_a",
+      order: promptMessage.order,
+      stepOrder: promptMessage.stepOrder,
+      format: "UIMessageChunk",
+    });
+
+    await expect(
+      t.mutation(internalTestApi.chat.cleanupFailedAssistantTurnInternal, {
+        userId: "user_a",
+        threadId: agentThread._id,
+        promptMessageId: sent.promptMessageId,
+      }),
+    ).resolves.toMatchObject({
+      deletedMessages: 1,
+      deletedStreams: 1,
+      meaningfulContentFound: false,
+      retryEligible: true,
+    });
+    await t.mutation(internal.chat.saveAssistantFailureMessageInternal, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      promptMessageId: sent.promptMessageId,
+    });
+    await t.mutation(internal.chat.saveAssistantFailureMessageInternal, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      promptMessageId: sent.promptMessageId,
+    });
+
+    const [deletedPendingAssistant] = await t.query(
+      components.agent.messages.getMessagesByIds,
+      {
+        messageIds: [pendingAssistantId],
+      },
+    );
+    expect(deletedPendingAssistant).toBeNull();
+
+    const streams = await t.query(components.agent.streams.list, {
+      threadId: agentThread._id,
+      startOrder: promptMessage.order,
+      statuses: ["streaming", "finished", "aborted"],
+    });
+    expect(
+      streams.filter((stream) => stream.order === promptMessage.order),
+    ).toEqual([]);
+
+    const listed = await t.query(components.agent.messages.listMessagesByThreadId, {
+      threadId: agentThread._id,
+      order: "asc",
+      excludeToolMessages: true,
+      paginationOpts: {
+        cursor: null,
+        numItems: 10,
+      },
+    });
+    const assistantMessages = listed.page.filter(
+      (message) => message.message?.role === "assistant",
+    );
+
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.text).toContain(
+      "I hit a snag while generating that reply.",
+    );
+  });
+
+  it("preserves non-empty assistant text while cleaning failed empty state", async () => {
+    vi.useFakeTimers();
+    const t = testConvex();
+    const agentThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "New Thread",
+    });
+
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      title: "New Thread",
+      lastMessageAt: 1,
+    });
+
+    const sent = await t.withIdentity({ subject: "user_a" }).mutation(
+      api.chat.sendMessage,
+      {
+        threadId: agentThread._id,
+        prompt: "Explain acceleration",
+        requestId: "request_a",
+      },
+    );
+    const savedAssistants = await t.mutation(
+      components.agent.messages.addMessages,
+      {
+        threadId: agentThread._id,
+        userId: "user_a",
+        promptMessageId: sent.promptMessageId,
+        messages: [
+          {
+            message: {
+              role: "assistant" as const,
+              content: "Let's reason from the graph first.",
+            },
+            status: "failed" as const,
+          },
+          {
+            message: {
+              role: "assistant" as const,
+              content: "",
+            },
+            status: "failed" as const,
+          },
+        ],
+      },
+    );
+    const visibleAssistantId = savedAssistants.messages[0]!._id;
+    const emptyAssistantId = savedAssistants.messages[1]!._id;
+
+    await expect(
+      t.mutation(internalTestApi.chat.cleanupFailedAssistantTurnInternal, {
+        userId: "user_a",
+        threadId: agentThread._id,
+        promptMessageId: sent.promptMessageId,
+      }),
+    ).resolves.toMatchObject({
+      promptFound: true,
+      deletedMessages: 1,
+      meaningfulContentFound: true,
+      retryEligible: false,
+      visibleAssistantTextFound: true,
+    });
+    await t.mutation(internal.chat.saveAssistantFailureMessageInternal, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      promptMessageId: sent.promptMessageId,
+    });
+
+    const [visibleAssistant, deletedEmptyAssistant] = await t.query(
+      components.agent.messages.getMessagesByIds,
+      {
+        messageIds: [visibleAssistantId, emptyAssistantId],
+      },
+    );
+    expect(visibleAssistant?.text).toBe("Let's reason from the graph first.");
+    expect(deletedEmptyAssistant).toBeNull();
+
+    const listed = await t.query(components.agent.messages.listMessagesByThreadId, {
+      threadId: agentThread._id,
+      order: "asc",
+      excludeToolMessages: true,
+      paginationOpts: {
+        cursor: null,
+        numItems: 10,
+      },
+    });
+    const assistantMessages = listed.page.filter(
+      (message) => message.message?.role === "assistant",
+    );
+
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?._id).toBe(visibleAssistantId);
+  });
+
+  it("preserves tool content and does not save fallback for that prompt turn", async () => {
+    vi.useFakeTimers();
+    const t = testConvex();
+    const agentThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "New Thread",
+    });
+
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      title: "New Thread",
+      lastMessageAt: 1,
+    });
+
+    const sent = await t.withIdentity({ subject: "user_a" }).mutation(
+      api.chat.sendMessage,
+      {
+        threadId: agentThread._id,
+        prompt: "Make a quick graph Spark",
+        requestId: "request_a",
+      },
+    );
+    const savedMessages = await t.mutation(components.agent.messages.addMessages, {
+      threadId: agentThread._id,
+      userId: "user_a",
+      promptMessageId: sent.promptMessageId,
+      messages: [
+        {
+          message: {
+            role: "assistant" as const,
+            content: "",
+          },
+          status: "pending" as const,
+        },
+        {
+          message: {
+            role: "tool" as const,
+            content: [
+              {
+                type: "tool-result" as const,
+                toolCallId: "spark_call",
+                toolName: "renderSpark",
+                output: {
+                  type: "json" as const,
+                  value: {
+                    kind: "graph",
+                    sparkId: "spark_1",
+                  },
+                },
+              },
+            ],
+          },
+          status: "success" as const,
+        },
+      ],
+    });
+    const emptyAssistantId = savedMessages.messages[0]!._id;
+    const toolMessageId = savedMessages.messages[1]!._id;
+
+    await expect(
+      t.mutation(internalTestApi.chat.cleanupFailedAssistantTurnInternal, {
+        userId: "user_a",
+        threadId: agentThread._id,
+        promptMessageId: sent.promptMessageId,
+      }),
+    ).resolves.toMatchObject({
+      deletedMessages: 1,
+      meaningfulContentFound: true,
+      retryEligible: false,
+      visibleToolContentFound: true,
+    });
+    await t.mutation(internal.chat.saveAssistantFailureMessageInternal, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      promptMessageId: sent.promptMessageId,
+    });
+
+    const [deletedAssistant, toolMessage] = await t.query(
+      components.agent.messages.getMessagesByIds,
+      {
+        messageIds: [emptyAssistantId, toolMessageId],
+      },
+    );
+    expect(deletedAssistant).toBeNull();
+    expect(toolMessage?.message?.role).toBe("tool");
+
+    const listed = await t.query(components.agent.messages.listMessagesByThreadId, {
+      threadId: agentThread._id,
+      order: "asc",
+      paginationOpts: {
+        cursor: null,
+        numItems: 10,
+      },
+    });
+    const assistantMessages = listed.page.filter(
+      (message) => message.message?.role === "assistant",
+    );
+    const toolMessages = listed.page.filter(
+      (message) => message.message?.role === "tool",
+    );
+
+    expect(assistantMessages).toEqual([]);
+    expect(toolMessages).toHaveLength(1);
+    expect(toolMessages[0]?._id).toBe(toolMessageId);
   });
 
   it("does not duplicate fallback messages for prompts beyond the first page", async () => {
