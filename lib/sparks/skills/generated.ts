@@ -35,18 +35,6 @@ export const sparkSkillMetadataById: Readonly<Record<SparkType, SparkSkillMetada
     "description": "Create an interactive Desmos graph with equations, points, and data tables for math exploration.",
     "whenToUse": "Use when the learner needs to visualize equations, compare multiple functions, inspect points, or manipulate table-driven data.",
     "promptPath": "sparks/skills/desmos-graph.md"
-  },
-  "code_playground": {
-    "name": "Code Playground",
-    "description": "Create an editable coding spark with starter code and a short challenge.",
-    "whenToUse": "Use when the learner should practice by editing and running code to verify understanding.",
-    "promptPath": "sparks/skills/code-playground.md"
-  },
-  "web_playground": {
-    "name": "Web Playground",
-    "description": "Create an editable HTML/CSS/JS playground spark with live preview for frontend practice.",
-    "whenToUse": "Use when the learner should practice web fundamentals by editing HTML, CSS, and JavaScript and seeing immediate visual output.",
-    "promptPath": "sparks/skills/web-playground.md"
   }
 }
 );

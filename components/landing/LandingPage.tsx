@@ -241,8 +241,6 @@ export function LandingPage() {
                 {[
                   "Interactive Scenes",
                   "Desmos Graphs",
-                  "Python Playground",
-                  "Web Playground",
                   "Adaptive Quizzes",
                   "Flashcard Sets",
                   "Socratic Practice",
@@ -496,7 +494,7 @@ export function LandingPage() {
                     {[
                       "Interactive scenes and graphs",
                       "Quizzes and flash cards",
-                      "Python and web playgrounds",
+                      "Built for the concept you are learning",
                       "Built from your current question",
                       "Safe iframe rendering inside chat",
                     ].map((item) => (
@@ -510,68 +508,48 @@ export function LandingPage() {
 
                 {/* Spark mockup */}
                 <motion.div variants={fadeUp} className="lg:w-7/12 w-full">
-                  <div className="w-full aspect-[4/3] md:aspect-video bg-[#1c1208] rounded-2xl md:rounded-3xl border-4 border-[#1c1208] shadow-[8px_8px_0px_#e05a3a] md:shadow-[12px_12px_0px_#e05a3a] overflow-hidden flex flex-col">
-                    {/* Title bar */}
-                    <div className="flex bg-[#2a1c10] border-b border-gray-700 shrink-0">
-                      <div className="flex items-center gap-2 px-4 py-3 border-r border-gray-700 font-bold text-white text-xs md:text-sm">
-                        <div className="w-2 h-2 rounded-full bg-[#3a9e8a]" />
-                        <span>Studi Tutor</span>
+                  <div className="w-full aspect-[4/3] md:aspect-video bg-white rounded-2xl md:rounded-3xl border-4 border-[#1c1208] shadow-[8px_8px_0px_#e05a3a] md:shadow-[12px_12px_0px_#e05a3a] overflow-hidden flex flex-col">
+                    <div className="flex items-center justify-between bg-[#fff4e7] border-b-4 border-[#1c1208] px-4 py-3 shrink-0">
+                      <div className="flex items-center gap-2 font-bold text-[#1c1208] text-xs md:text-sm">
+                        <div className="w-2.5 h-2.5 rounded-full bg-[#3a9e8a]" />
+                        <span>Function Spark</span>
                       </div>
-                      <div className="flex-1 px-4 py-3 font-mono text-xs text-gray-300 flex items-center gap-2">
-                        <span className="text-gray-500">spark/</span>
-                        <span>binary_search.py</span>
-                        <span className="ml-auto flex items-center gap-1.5 text-[#e8a030]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#e8a030]" />
-                          <span className="text-xs">unsaved</span>
-                        </span>
-                      </div>
+                      <span className="font-mono text-xs text-[#9b6dd4]">desmos_graph</span>
                     </div>
 
-                    <div className="flex flex-1 overflow-hidden">
-                      {/* Tutor panel */}
-                      <div className="w-[38%] bg-[#1e1408] border-r border-gray-700 flex flex-col justify-end p-3 md:p-4 text-xs md:text-sm overflow-y-auto">
-                        <div className="bg-[#2a1c10] border border-gray-600 rounded-xl p-3 mb-2 text-gray-400 font-body text-xs leading-relaxed">
-                          Great — you understand binary search. Now prove it.
+                    <div className="grid grid-cols-[0.9fr_1.25fr] flex-1 min-h-0">
+                      <div className="bg-[#fffaf3] border-r-4 border-[#1c1208] p-4 flex flex-col justify-between">
+                        <div>
+                          <p className="font-brand text-2xl text-[#1c1208] leading-tight">
+                            Why does slope stay constant?
+                          </p>
+                          <p className="mt-3 text-sm text-[#6b5a47] leading-relaxed">
+                            Drag the point and watch the rise/run ratio. What
+                            changes, and what refuses to change?
+                          </p>
                         </div>
-                        <div className="bg-[#3a9e8a]/20 border border-[#3a9e8a] text-[#3a9e8a] p-3 rounded-xl text-xs leading-relaxed">
-                          <p className="font-bold mb-1">Challenge:</p>
-                          <p>Implement <code className="bg-[#1c1208] px-1 rounded">binary_search(arr, target)</code> that returns <code className="bg-[#1c1208] px-1 rounded">-1</code> if not found.</p>
+                        <div className="rounded-xl border-2 border-[#3a9e8a] bg-[#3a9e8a]/10 p-3 text-xs text-[#1f6d60] font-bold">
+                          Try moving from x = 1 to x = 4. Predict the y value
+                          before revealing it.
                         </div>
                       </div>
 
-                      {/* Code editor */}
-                      <div className="flex-1 flex flex-col overflow-hidden">
-                        <div className="flex-1 bg-[#1c1208] p-3 md:p-4 font-mono text-[10px] sm:text-xs md:text-sm overflow-hidden">
-                          <p className="text-[#3a9e8a]">def <span className="text-[#e8a030]">binary_search</span><span className="text-gray-300">(arr, target):</span></p>
-                          <p className="text-gray-300 pl-4">left, right = 0, len(arr) - 1</p>
-                          <p className="text-gray-300 pl-4 mt-1">while left {"<="} right:</p>
-                          <p className="text-gray-300 pl-8">mid = (left + right) // 2</p>
-                          <p className="text-gray-300 pl-8">if arr[mid] == target:</p>
-                          <p className="text-[#e8a030] pl-12">return mid</p>
-                          <p className="text-gray-300 pl-8">elif arr[mid] {"<"} target:</p>
-                          <p className="text-gray-300 pl-12">left = mid + 1</p>
-                          <p className="text-gray-300 pl-8">else:</p>
-                          <p className="text-gray-300 pl-12">right = mid - 1</p>
-                          <div className="flex items-center pl-4 mt-1">
-                            <motion.div
-                              animate={{ opacity: [1, 0, 1] }}
-                              transition={{ repeat: Infinity, duration: 0.9 }}
-                              className="w-1.5 h-4 bg-white inline-block"
-                            />
+                      <div className="relative bg-[#f7efe4] p-4">
+                        <div className="absolute inset-4 rounded-xl border-2 border-[#d8c8b6] bg-white">
+                          <div className="absolute left-1/2 top-4 bottom-4 w-px bg-[#d8c8b6]" />
+                          <div className="absolute top-1/2 left-4 right-4 h-px bg-[#d8c8b6]" />
+                          <svg viewBox="0 0 320 220" className="absolute inset-0 h-full w-full">
+                            <path d="M28 178 L292 48" stroke="#9b6dd4" strokeWidth="5" strokeLinecap="round" />
+                            <circle cx="96" cy="144" r="9" fill="#e05a3a" stroke="#1c1208" strokeWidth="4" />
+                            <circle cx="214" cy="86" r="9" fill="#3a9e8a" stroke="#1c1208" strokeWidth="4" />
+                            <path d="M96 144 H214 V86" fill="none" stroke="#e8a030" strokeWidth="3" strokeDasharray="8 7" />
+                          </svg>
+                          <div className="absolute bottom-4 left-4 rounded-full bg-[#1c1208] px-3 py-1 text-xs font-bold text-white">
+                            rise 2 / run 4
                           </div>
-                        </div>
-
-                        {/* Test result bar */}
-                        <div className="border-t border-gray-700 bg-[#1a1208] px-3 md:px-4 py-2 flex items-center gap-3 shrink-0">
-                          <motion.div
-                            animate={{ opacity: [0.6, 1, 0.6] }}
-                            transition={{ repeat: Infinity, duration: 1.5 }}
-                            className="flex items-center gap-2"
-                          >
-                            <span className="w-2 h-2 rounded-full bg-[#3a9e8a] shrink-0" />
-                            <span className="font-mono text-[10px] md:text-xs text-[#3a9e8a] font-bold">Running tests...</span>
-                          </motion.div>
-                          <span className="font-mono text-[10px] md:text-xs text-gray-500 ml-auto">2 / 3 passing</span>
+                          <div className="absolute right-4 top-4 rounded-full bg-[#fff4e7] border-2 border-[#1c1208] px-3 py-1 text-xs font-bold text-[#1c1208]">
+                            slope = 1/2
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -753,7 +731,7 @@ export function LandingPage() {
                 />
                 <FaqItem
                   q="What is a Spark?"
-                  a="A Spark is an interactive tool Studi generates mid-conversation — a live Desmos graph, a physics simulation, a Python playground, a web preview, a quiz, or a flashcard set. Built for your exact question, in real time, inside the chat."
+                  a="A Spark is an interactive tool Studi generates mid-conversation — a live graph, a visual simulation, a quiz, or a flashcard set. Built for your exact question, in real time, inside the chat."
                 />
               </motion.div>
             </motion.div>

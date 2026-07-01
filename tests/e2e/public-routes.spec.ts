@@ -5,7 +5,9 @@ test.describe("public routes", () => {
     page,
   }) => {
     for (const path of ["/", "/pricing", "/waitlist"]) {
-      const response = await page.goto(path);
+      const response = await page.goto(path, {
+        waitUntil: "domcontentloaded",
+      });
 
       expect(response?.ok(), `${path} should return a successful page`).toBe(
         true,
@@ -16,6 +18,7 @@ test.describe("public routes", () => {
   test("waitlist forwards query params to Tally", async ({ page }) => {
     const response = await page.goto(
       "/waitlist?email=student%40example.com&source=studi",
+      { waitUntil: "domcontentloaded" },
     );
 
     expect(response?.ok()).toBe(true);

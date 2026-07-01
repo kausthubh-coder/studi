@@ -10,17 +10,15 @@ import {
   getModelConfig,
   type ModelConfig,
   type ModelProfile,
+  type OpenRouterProviderOptions,
 } from "../../lib/model-config";
 import { renderPrompt } from "../../lib/prompts";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import {
   getSparkTypeLabel,
   normalizeSparkFlashCardDraft,
-  normalizeSparkCodePlaygroundDraft,
-  normalizeSparkWebPlaygroundDraft,
   normalizeCreateSparkInput,
   normalizeSparkQuizDraft,
-  type CodePlaygroundSparkDraft,
   type FlashCardSparkDraft,
   normalizeSparkDesmosGraphDraft,
   normalizeSparkSceneDraft,
@@ -28,34 +26,27 @@ import {
   type CreateSparkToolResult,
   type QuizSparkDraft,
   type SparkType,
-  type WebPlaygroundSparkDraft,
 } from "../../lib/sparks/contracts";
 import { internal } from "../_generated/api";
 import {
-  codePlaygroundWorkerOutputSchema,
   createSparkInputSchema,
   desmosWorkerOutputSchema,
   flashCardWorkerOutputSchema,
   quizWorkerOutputSchema,
   sceneWorkerOutputSchema,
-  webPlaygroundWorkerOutputSchema,
-  type CodePlaygroundDraft,
   type DesmosDraft,
   type FlashCardDraft,
   type QuizDraft,
   type SceneDraft,
-  type WebPlaygroundDraft,
 } from "./schemas";
 import {
   buildSimpleDesmosDraft,
   createArtifactId,
   normalizeSceneHtmlWithTemplate,
-  validateCodePlaygroundPayload,
   validateDesmosPayload,
   validateFlashCardPayload,
   validateQuizPayload,
   validateSceneHtml,
-  validateWebPlaygroundPayload,
 } from "./validators";
 
 const internalApi = internal as unknown as {
@@ -151,16 +142,20 @@ function extractEstimatedCostUsd(providerMetadata: unknown): number | undefined 
 
 export type SparkWorkerModels = Pick<
   ModelConfig,
-  "sparkScene" | "sparkDesmos" | "sparkCode" | "sparkQuiz" | "sparkFlash"
+  | "sparkScene"
+  | "sparkDesmos"
+  | "sparkQuiz"
+  | "sparkFlash"
+  | "providerOptions"
 >;
 
 function toSparkWorkerModels(modelConfig: ModelConfig): SparkWorkerModels {
   return {
     sparkScene: modelConfig.sparkScene,
     sparkDesmos: modelConfig.sparkDesmos,
-    sparkCode: modelConfig.sparkCode,
     sparkQuiz: modelConfig.sparkQuiz,
     sparkFlash: modelConfig.sparkFlash,
+    providerOptions: modelConfig.providerOptions,
   };
 }
 
@@ -187,11 +182,6 @@ const desmosWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
 const sceneWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
   process.env.SPARK_WORKER_SCENE_TIMEOUT_MS,
   Math.min(sparkWorkerTimeoutMs, 35_000),
-);
-
-const codeWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
-  process.env.SPARK_WORKER_CODE_TIMEOUT_MS,
-  Math.min(sparkWorkerTimeoutMs, 25_000),
 );
 
 const quizWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
@@ -371,6 +361,7 @@ async function generateWorkerObjectForModel<T>(params: {
   schema: z.ZodType<T>;
   prompt: string;
   model: string;
+  providerOptions: OpenRouterProviderOptions;
   abortSignal?: AbortSignal;
   timeoutMs?: number;
   mode?: "auto" | "json" | "tool";
@@ -387,6 +378,7 @@ async function generateWorkerObjectForModel<T>(params: {
       model: openrouter.chat(params.model),
       schema: params.schema,
       prompt: params.prompt,
+      providerOptions: params.providerOptions,
       temperature: 0.2,
       abortSignal: timeout.signal,
       mode: params.mode,
@@ -437,6 +429,7 @@ async function generateWorkerObject<T>(params: {
   schema: z.ZodType<T>;
   prompt: string;
   model: string;
+  providerOptions: OpenRouterProviderOptions;
   abortSignal?: AbortSignal;
   timeoutMs?: number;
   mode?: "auto" | "json" | "tool";
@@ -450,6 +443,7 @@ async function generateWorkerObject<T>(params: {
     schema: params.schema,
     prompt: params.prompt,
     model: params.model,
+    providerOptions: params.providerOptions,
     abortSignal: params.abortSignal,
     timeoutMs: params.timeoutMs,
     mode: params.mode,
@@ -548,6 +542,7 @@ async function buildSceneSpark(
       schema: sceneWorkerOutputSchema,
       prompt,
       model: workerModels.sparkScene,
+      providerOptions: workerModels.providerOptions,
       abortSignal,
       timeoutMs: sceneWorkerTimeoutMs,
     });
@@ -623,6 +618,7 @@ async function buildSceneSpark(
       schema: sceneWorkerOutputSchema,
       prompt: repairPrompt,
       model: workerModels.sparkScene,
+      providerOptions: workerModels.providerOptions,
       abortSignal,
       timeoutMs: sceneWorkerTimeoutMs,
     });
@@ -711,6 +707,7 @@ async function buildDesmosGraphSpark(
       schema: desmosWorkerOutputSchema,
       prompt,
       model: workerModels.sparkDesmos,
+      providerOptions: workerModels.providerOptions,
       abortSignal,
       timeoutMs: desmosWorkerTimeoutMs,
       mode: "json",
@@ -784,6 +781,7 @@ async function buildDesmosGraphSpark(
       schema: desmosWorkerOutputSchema,
       prompt: repairPrompt,
       model: workerModels.sparkDesmos,
+      providerOptions: workerModels.providerOptions,
       abortSignal,
       timeoutMs: desmosWorkerTimeoutMs,
       mode: "json",
@@ -829,286 +827,6 @@ async function buildDesmosGraphSpark(
   }
 }
 
-async function buildCodePlaygroundSpark(
-  input: CreateSparkToolInput,
-  workerModels: SparkWorkerModels,
-  abortSignal?: AbortSignal,
-): Promise<CreateSparkToolResultWithUsage> {
-  const skill = sparkSkillById.code_playground;
-  const warnings: string[] = [];
-  const workerUsage: SparkWorkerUsageRecord[] = [];
-  let firstDraft: CodePlaygroundSparkDraft | null = null;
-  let firstErrors: string[] = [];
-
-  try {
-    const prompt = buildPrompt({
-      sparkType: "code_playground",
-      context: input.context,
-      title: input.title,
-      summary: input.summary,
-      skillInstructions: skill.instructions,
-    });
-
-    const firstGeneration = await generateWorkerObject<CodePlaygroundDraft>({
-      schema: codePlaygroundWorkerOutputSchema,
-      prompt,
-      model: workerModels.sparkCode,
-      abortSignal,
-      timeoutMs: codeWorkerTimeoutMs,
-    });
-    pushWorkerUsage(workerUsage, {
-      sparkId: "code_playground",
-      model: workerModels.sparkCode,
-      attempt: "initial",
-      usage: firstGeneration.usage,
-      providerMetadata: firstGeneration.providerMetadata,
-    });
-
-    warnings.push(...firstGeneration.warnings);
-    firstDraft = {
-      ...firstGeneration.object,
-      artifactId: createArtifactId(),
-    };
-
-    const firstValidation = validateCodePlaygroundPayload(firstDraft.payload);
-    warnings.push(...firstValidation.warnings);
-    firstErrors = firstValidation.errors;
-
-    if (firstValidation.ok) {
-      return {
-        status: "success",
-        workerSummary: firstGeneration.object.workerSummary,
-        warnings,
-        artifact: normalizeSparkCodePlaygroundDraft(firstDraft),
-        workerUsage,
-      };
-    }
-  } catch (error) {
-    return {
-      status: "failed",
-      workerSummary: "Code playground generation failed due to provider fault.",
-      warnings,
-      error: toProviderFaultMessage(error),
-      workerUsage,
-    };
-  }
-
-  if (!firstDraft) {
-    return {
-      status: "failed",
-      workerSummary: "Code playground worker failed before repair.",
-      warnings,
-      error: "Spark worker could not produce an initial code draft.",
-      workerUsage,
-    };
-  }
-
-  try {
-    const repairPrompt = buildPrompt({
-      sparkType: "code_playground",
-      context: input.context,
-      title: input.title,
-      summary: input.summary,
-      skillInstructions: skill.instructions,
-      previousOutput: JSON.stringify(firstDraft),
-      previousErrors: firstErrors,
-    });
-
-    const repairedGeneration = await generateWorkerObject<CodePlaygroundDraft>({
-      schema: codePlaygroundWorkerOutputSchema,
-      prompt: repairPrompt,
-      model: workerModels.sparkCode,
-      abortSignal,
-      timeoutMs: codeWorkerTimeoutMs,
-    });
-    pushWorkerUsage(workerUsage, {
-      sparkId: "code_playground",
-      model: workerModels.sparkCode,
-      attempt: "repair",
-      usage: repairedGeneration.usage,
-      providerMetadata: repairedGeneration.providerMetadata,
-    });
-
-    warnings.push(...repairedGeneration.warnings);
-    const repairedDraft: CodePlaygroundSparkDraft = {
-      ...repairedGeneration.object,
-      artifactId: firstDraft.artifactId,
-    };
-    const repairedValidation = validateCodePlaygroundPayload(
-      repairedDraft.payload,
-    );
-    warnings.push(...repairedValidation.warnings);
-
-    if (repairedValidation.ok) {
-      return {
-        status: "success",
-        workerSummary: repairedGeneration.object.workerSummary,
-        warnings,
-        artifact: normalizeSparkCodePlaygroundDraft(repairedDraft),
-        workerUsage,
-      };
-    }
-
-    return {
-      status: "failed",
-      workerSummary:
-        repairedGeneration.object.workerSummary ||
-        "Code playground payload failed validation in two attempts.",
-      warnings,
-      error: repairedValidation.errors.join(" "),
-      workerUsage,
-    };
-  } catch (error) {
-    return {
-      status: "failed",
-      workerSummary: "Code playground repair failed due to provider fault.",
-      warnings,
-      error: toProviderFaultMessage(error),
-      workerUsage,
-    };
-  }
-}
-
-async function buildWebPlaygroundSpark(
-  input: CreateSparkToolInput,
-  workerModels: SparkWorkerModels,
-  abortSignal?: AbortSignal,
-): Promise<CreateSparkToolResultWithUsage> {
-  const skill = sparkSkillById.web_playground;
-  const warnings: string[] = [];
-  const workerUsage: SparkWorkerUsageRecord[] = [];
-  let firstDraft: WebPlaygroundSparkDraft | null = null;
-  let firstErrors: string[] = [];
-
-  try {
-    const prompt = buildPrompt({
-      sparkType: "web_playground",
-      context: input.context,
-      title: input.title,
-      summary: input.summary,
-      skillInstructions: skill.instructions,
-    });
-
-    const firstGeneration = await generateWorkerObject<WebPlaygroundDraft>({
-      schema: webPlaygroundWorkerOutputSchema,
-      prompt,
-      model: workerModels.sparkCode,
-      abortSignal,
-      timeoutMs: codeWorkerTimeoutMs,
-    });
-    pushWorkerUsage(workerUsage, {
-      sparkId: "web_playground",
-      model: workerModels.sparkCode,
-      attempt: "initial",
-      usage: firstGeneration.usage,
-      providerMetadata: firstGeneration.providerMetadata,
-    });
-
-    warnings.push(...firstGeneration.warnings);
-    firstDraft = {
-      ...firstGeneration.object,
-      artifactId: createArtifactId(),
-    };
-
-    const firstValidation = validateWebPlaygroundPayload(firstDraft.payload);
-    warnings.push(...firstValidation.warnings);
-    firstErrors = firstValidation.errors;
-
-    if (firstValidation.ok) {
-      return {
-        status: "success",
-        workerSummary: firstGeneration.object.workerSummary,
-        warnings,
-        artifact: normalizeSparkWebPlaygroundDraft(firstDraft),
-        workerUsage,
-      };
-    }
-  } catch (error) {
-    return {
-      status: "failed",
-      workerSummary: "Web playground generation failed due to provider fault.",
-      warnings,
-      error: toProviderFaultMessage(error),
-      workerUsage,
-    };
-  }
-
-  if (!firstDraft) {
-    return {
-      status: "failed",
-      workerSummary: "Web playground worker failed before repair.",
-      warnings,
-      error: "Spark worker could not produce an initial web playground draft.",
-      workerUsage,
-    };
-  }
-
-  try {
-    const repairPrompt = buildPrompt({
-      sparkType: "web_playground",
-      context: input.context,
-      title: input.title,
-      summary: input.summary,
-      skillInstructions: skill.instructions,
-      previousOutput: JSON.stringify(firstDraft),
-      previousErrors: firstErrors,
-    });
-
-    const repairedGeneration = await generateWorkerObject<WebPlaygroundDraft>({
-      schema: webPlaygroundWorkerOutputSchema,
-      prompt: repairPrompt,
-      model: workerModels.sparkCode,
-      abortSignal,
-      timeoutMs: codeWorkerTimeoutMs,
-    });
-    pushWorkerUsage(workerUsage, {
-      sparkId: "web_playground",
-      model: workerModels.sparkCode,
-      attempt: "repair",
-      usage: repairedGeneration.usage,
-      providerMetadata: repairedGeneration.providerMetadata,
-    });
-
-    warnings.push(...repairedGeneration.warnings);
-    const repairedDraft: WebPlaygroundSparkDraft = {
-      ...repairedGeneration.object,
-      artifactId: firstDraft.artifactId,
-    };
-    const repairedValidation = validateWebPlaygroundPayload(
-      repairedDraft.payload,
-    );
-    warnings.push(...repairedValidation.warnings);
-
-    if (repairedValidation.ok) {
-      return {
-        status: "success",
-        workerSummary: repairedGeneration.object.workerSummary,
-        warnings,
-        artifact: normalizeSparkWebPlaygroundDraft(repairedDraft),
-        workerUsage,
-      };
-    }
-
-    return {
-      status: "failed",
-      workerSummary:
-        repairedGeneration.object.workerSummary ||
-        "Web playground payload failed validation in two attempts.",
-      warnings,
-      error: repairedValidation.errors.join(" "),
-      workerUsage,
-    };
-  } catch (error) {
-    return {
-      status: "failed",
-      workerSummary: "Web playground repair failed due to provider fault.",
-      warnings,
-      error: toProviderFaultMessage(error),
-      workerUsage,
-    };
-  }
-}
-
 async function buildQuizSpark(
   input: CreateSparkToolInput,
   workerModels: SparkWorkerModels,
@@ -1133,6 +851,7 @@ async function buildQuizSpark(
       schema: quizWorkerOutputSchema,
       prompt,
       model: workerModels.sparkQuiz,
+      providerOptions: workerModels.providerOptions,
       abortSignal,
       timeoutMs: quizWorkerTimeoutMs,
     });
@@ -1198,6 +917,7 @@ async function buildQuizSpark(
       schema: quizWorkerOutputSchema,
       prompt: repairPrompt,
       model: workerModels.sparkQuiz,
+      providerOptions: workerModels.providerOptions,
       abortSignal,
       timeoutMs: quizWorkerTimeoutMs,
     });
@@ -1271,6 +991,7 @@ async function buildFlashCardSpark(
       schema: flashCardWorkerOutputSchema,
       prompt,
       model: workerModels.sparkFlash,
+      providerOptions: workerModels.providerOptions,
       abortSignal,
       timeoutMs: flashWorkerTimeoutMs,
     });
@@ -1336,6 +1057,7 @@ async function buildFlashCardSpark(
       schema: flashCardWorkerOutputSchema,
       prompt: repairPrompt,
       model: workerModels.sparkFlash,
+      providerOptions: workerModels.providerOptions,
       abortSignal,
       timeoutMs: flashWorkerTimeoutMs,
     });
@@ -1400,13 +1122,9 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
           ? workerModels.sparkScene
           : input.sparkId === "desmos_graph"
             ? workerModels.sparkDesmos
-            : input.sparkId === "code_playground"
-              ? workerModels.sparkCode
-              : input.sparkId === "web_playground"
-                ? workerModels.sparkCode
-                : input.sparkId === "quiz"
-                  ? workerModels.sparkQuiz
-                  : workerModels.sparkFlash;
+            : input.sparkId === "quiz"
+              ? workerModels.sparkQuiz
+              : workerModels.sparkFlash;
 
       try {
         if (input.sparkId === "scene") {
@@ -1429,18 +1147,6 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
           );
         } else if (input.sparkId === "desmos_graph") {
           result = await buildDesmosGraphSpark(
-            input,
-            workerModels,
-            options.abortSignal,
-          );
-        } else if (input.sparkId === "code_playground") {
-          result = await buildCodePlaygroundSpark(
-            input,
-            workerModels,
-            options.abortSignal,
-          );
-        } else if (input.sparkId === "web_playground") {
-          result = await buildWebPlaygroundSpark(
             input,
             workerModels,
             options.abortSignal,

@@ -23,41 +23,6 @@ export default defineSchema({
     size: v.number(),
   }).index("by_userId", ["userId"]),
 
-  sparkInteractions: defineTable({
-    userId: v.string(),
-    threadId: v.string(),
-    sparkInstanceId: v.string(),
-    sparkType: v.string(),
-    sparkTitle: v.optional(v.string()),
-    language: v.optional(v.string()),
-    code: v.optional(v.string()),
-    runCount: v.number(),
-    lastStatus: v.union(
-      v.literal("idle"),
-      v.literal("success"),
-      v.literal("error"),
-    ),
-    lastStdout: v.optional(v.string()),
-    lastStderr: v.optional(v.string()),
-    lastError: v.optional(v.string()),
-    lastExitCode: v.optional(v.number()),
-    lastRunCommand: v.optional(v.string()),
-    labSessionId: v.optional(v.string()),
-    labPreviewUrl: v.optional(v.string()),
-    lastRunAt: v.optional(v.number()),
-    lastUpdatedAt: v.number(),
-  })
-    .index("by_userId_and_threadId_and_lastUpdatedAt", [
-      "userId",
-      "threadId",
-      "lastUpdatedAt",
-    ])
-    .index("by_userId_and_threadId_and_sparkInstanceId", [
-      "userId",
-      "threadId",
-      "sparkInstanceId",
-    ]),
-
   billingProfiles: defineTable({
     userId: v.string(),
     planKey: v.union(
@@ -86,12 +51,6 @@ export default defineSchema({
     textPromptCount: v.number(),
     textAiCostUsd: v.number(),
     totalEstimatedCostUsd: v.number(),
-    labActiveSeconds: v.optional(v.number()),
-    labEstimatedCostUsd: v.optional(v.number()),
-    labSessionCount: v.optional(v.number()),
-    lastLabActivityAt: v.optional(v.number()),
-    voiceEstimatedCostUsd: v.optional(v.number()),
-    voiceSeconds: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_userId_and_billingPeriod", ["userId", "billingPeriod"]),
 
@@ -137,12 +96,6 @@ export default defineSchema({
       v.literal("agent_usage"),
       v.literal("agent_runtime"),
       v.literal("spark"),
-      v.literal("lab"),
-      v.literal("voice"),
-      v.literal("track"),
-      v.literal("quota"),
-      v.literal("lab_tool"),
-      v.literal("plan_tool"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),

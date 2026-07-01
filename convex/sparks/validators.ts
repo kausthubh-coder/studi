@@ -1,12 +1,10 @@
 import type {
-  CodePlaygroundPayload,
   CreateSparkToolInput,
   DesmosGraphPayload,
   DesmosSparkDraft,
   FlashCardSparkPayload,
   QuizSparkPayload,
   SparkValidationResult,
-  WebPlaygroundPayload,
 } from "../../lib/sparks/contracts";
 import { tailwindBrowserScriptSrc } from "./schemas";
 
@@ -194,104 +192,6 @@ export function validateDesmosPayload(
   });
   if (!hasEquation) {
     warnings.push("Desmos payload has no latex equations.");
-  }
-
-  return {
-    ok: errors.length === 0,
-    errors,
-    warnings,
-  };
-}
-
-export function validateCodePlaygroundPayload(
-  payload: CodePlaygroundPayload,
-): SparkValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  if (payload.language !== "python") {
-    errors.push("Code playground currently supports only python.");
-  }
-
-  if (!payload.instructions.trim()) {
-    errors.push("Code playground instructions are required.");
-  }
-
-  if (!payload.starterCode.trim()) {
-    errors.push("Code playground starterCode is required.");
-  }
-
-  const starterLines = payload.starterCode.split(/\r?\n/);
-  if (starterLines.length < 2) {
-    errors.push(
-      "Code playground starterCode must be multi-line Python code with proper indentation.",
-    );
-  }
-
-  const hasInlineCommentedFunctionBody = starterLines.some((line) =>
-    /^\s*def\s+[A-Za-z_]\w*\([^)]*\):\s*#/.test(line),
-  );
-  if (hasInlineCommentedFunctionBody) {
-    errors.push(
-      "Function definitions must not place TODO comments inline after ':'. Put comments on the next indented line.",
-    );
-  }
-
-  if (payload.starterCode.length > 22_000) {
-    errors.push("Code playground starterCode is too large.");
-  }
-
-  if (payload.testCode && payload.testCode.length > 22_000) {
-    errors.push("Code playground testCode is too large.");
-  }
-
-  if (/\brequests\b|\burllib\b|\bsocket\b/i.test(payload.starterCode)) {
-    warnings.push("Starter code may rely on network-related modules.");
-  }
-
-  return {
-    ok: errors.length === 0,
-    errors,
-    warnings,
-  };
-}
-
-export function validateWebPlaygroundPayload(
-  payload: WebPlaygroundPayload,
-): SparkValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  if (!payload.html.trim()) {
-    errors.push("Web playground html is required.");
-  }
-
-  if (payload.html.length > 22_000) {
-    errors.push("Web playground html is too large.");
-  }
-
-  if (payload.css && payload.css.length > 22_000) {
-    errors.push("Web playground css is too large.");
-  }
-
-  if (payload.js && payload.js.length > 22_000) {
-    errors.push("Web playground js is too large.");
-  }
-
-  if (payload.instructions && payload.instructions.length > 1_200) {
-    errors.push("Web playground instructions are too long.");
-  }
-
-  if (payload.runHint && payload.runHint.length > 240) {
-    errors.push("Web playground runHint is too long.");
-  }
-
-  if (/\bfetch\(/i.test(payload.html)) {
-    warnings.push("Web playground html uses fetch(). Avoid network calls.");
-  }
-
-  if (payload.js && /\bfetch\(|\bXMLHttpRequest\b/i.test(payload.js)) {
-    warnings.push("Web playground js may rely on network requests.");
   }
 
   return {

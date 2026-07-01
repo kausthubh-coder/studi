@@ -19,7 +19,7 @@ You type a message
 ```
 
 There is a single agent:
-- **studi** — the tutor (tools: `create_spark`, `get_code_spark_context`)
+- **studi** — the tutor (tool: `create_spark`)
 
 Everything else (billing, telemetry, waitlist, the landing page) is supporting
 machinery around that core loop.
@@ -71,7 +71,6 @@ convex/                   Backend. Every file = a set of queries/mutations/actio
   rateLimits.ts           per-plan token-bucket rate limits
   waitlist.ts / waitlistActions.ts / waitlistPublic.ts   Tally→Clerk waitlist
   http.ts                 the Tally webhook endpoint
-  sparkFeedback.ts        persists code-playground edits/runs for agent context
   playground.ts           Convex Agent Playground (debugging only)
 
 lib/                      Shared, framework-agnostic code
@@ -81,7 +80,6 @@ lib/                      Shared, framework-agnostic code
   sparks/skills/generated.ts   auto-generated from prompts/ (do not edit)
   prompts/                loads + syncs the markdown prompt files
   voice/contracts.ts      voice warning types
-  agent-tools/getCodeSparkContextTool.ts   lets the agent read the learner's code attempts
 
 prompts/                  ★ the actual system prompts as editable markdown
   agents/studi.md, agents/shru.md
@@ -101,9 +99,8 @@ Follow this order. Each step builds on the last.
 
 **Step 1 — The data model.** Read `convex/schema.ts` (186 lines). Every feature
 maps to a table here: `userThreads` (chat ownership), `attachments`,
-`sparkInteractions` (code playground state), `billingProfiles` / `billingUsagePeriods`
-/ `billingOnboarding` (money), `rawUsage` / `telemetryEvents` (observability),
-`waitlistWebhookEvents`.
+`billingProfiles` / `billingUsagePeriods` / `billingOnboarding` (money),
+`rawUsage` / `telemetryEvents` (observability), `waitlistWebhookEvents`.
 
 **Step 2 — The message loop.** Read in this order:
 1. `components/StudiChat.tsx` — find `onSend` to see what the client sends.
@@ -114,12 +111,12 @@ maps to a table here: `userThreads` (chat ownership), `attachments`,
 4. `convex/agent.ts` — how the studi/shru agents are built and what tools they get.
 
 **Step 3 — Sparks (the signature feature).** Read:
-1. `lib/sparks/contracts.ts` — skim the 6 type definitions and their validators.
+1. `lib/sparks/contracts.ts` — skim the 4 type definitions and their validators.
 2. `convex/sparks/tools.ts` → `createSparkTool` — the worker LLM call → parse →
    validate → repair-once pipeline.
 3. `components/sparks/SparkSceneRenderer.tsx` — how a generated artifact becomes UI.
 4. One scene, e.g. `components/sparks/scenes/QuizScene.tsx` (simple) then
-   `WebPlaygroundScene.tsx` (complex).
+   `DesmosGraphScene.tsx` (third-party embed).
 
 **Step 4 — Real-time rendering.** Read `components/studi-chat/MessageRenderer.tsx`.
 `deriveAgentUiState` / `deriveAssistantActivity` turn streaming message "parts"
@@ -143,7 +140,6 @@ dashboard to watch tables change as you chat.
 | Streaming replies | `MessageRenderer.tsx` (`deriveAgentUiState`) | `chatActions.generateAssistantReply`, `agent.ts` | — |
 | Attachments | `Composer.tsx` | `chat.ts` (`generateUploadUrl`, `saveAttachment`, `resolveAttachments`) | — |
 | Sparks (6 types) | `sparks/SparkSceneRenderer.tsx`, `sparks/scenes/*` | `sparks/tools.ts` | `lib/sparks/contracts.ts`, `catalog.ts`, `prompts/sparks/skills/*.md` |
-| Code-playground state | `scenes/CodePlaygroundScene.tsx` | `sparkFeedback.ts` | `lib/agent-tools/getCodeSparkContextTool.ts` |
 | Voice mode | `voice/useVoiceSession.ts`, `studi-chat/VoiceComposer.tsx`, `VoiceWarningBanner.tsx` | `voiceActions.ts`, `voiceTools.ts` | `lib/voice/contracts.ts` |
 | Billing & quotas | `settings/UsagePanel.tsx` | `billing.ts`, `billingActions.ts`, `rateLimits.ts` | — |
 | Telemetry / usage | `analytics/*` | `telemetry.ts`, `posthog.ts` | — |

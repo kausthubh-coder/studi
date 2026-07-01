@@ -16,8 +16,6 @@ Studi is an agentic tutor built with Next.js, Convex, Clerk, and OpenRouter.
 
 - `scene`: sandboxed HTML/CSS/JS interaction
 - `desmos_graph`: interactive graph artifact
-- `code_playground`: Python playground (Monaco + Pyodide)
-- `web_playground`: editable HTML/CSS/JS live preview
 - `quiz`: multi-question quiz artifacts
 - `flash_card`: flashcard artifact sets
 

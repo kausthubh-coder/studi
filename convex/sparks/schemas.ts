@@ -1,10 +1,8 @@
 import { z } from "zod";
 import type {
-  CodePlaygroundPayload,
   DesmosGraphPayload,
   FlashCardSparkPayload,
   QuizSparkPayload,
-  WebPlaygroundPayload,
 } from "../../lib/sparks/contracts";
 
 export const tailwindBrowserScriptSrc =
@@ -17,11 +15,9 @@ export const createSparkInputSchema = z.object({
       "quiz",
       "flash_card",
       "desmos_graph",
-      "code_playground",
-      "web_playground",
     ])
     .describe(
-      "Spark id to generate. Use scene, quiz, flash_card, desmos_graph, code_playground, or web_playground.",
+      "Spark id to generate. Use scene, quiz, flash_card, or desmos_graph.",
     ),
   context: z
     .string()
@@ -88,22 +84,6 @@ const desmosPayloadSchema: z.ZodType<DesmosGraphPayload> = z.object({
   hint: z.string().optional(),
 });
 
-const codePlaygroundPayloadSchema: z.ZodType<CodePlaygroundPayload> = z.object({
-  language: z.literal("python"),
-  instructions: z.string().min(1),
-  starterCode: z.string().min(1),
-  testCode: z.string().optional(),
-  runHint: z.string().optional(),
-});
-
-const webPlaygroundPayloadSchema: z.ZodType<WebPlaygroundPayload> = z.object({
-  html: z.string().min(1),
-  css: z.string().optional(),
-  js: z.string().optional(),
-  instructions: z.string().optional(),
-  runHint: z.string().optional(),
-});
-
 const quizChoiceSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1),
@@ -147,20 +127,6 @@ export const desmosWorkerOutputSchema = z.object({
   payload: desmosPayloadSchema,
 });
 
-export const codePlaygroundWorkerOutputSchema = z.object({
-  title: z.string(),
-  summary: z.string(),
-  workerSummary: z.string(),
-  payload: codePlaygroundPayloadSchema,
-});
-
-export const webPlaygroundWorkerOutputSchema = z.object({
-  title: z.string(),
-  summary: z.string(),
-  workerSummary: z.string(),
-  payload: webPlaygroundPayloadSchema,
-});
-
 export const quizWorkerOutputSchema = z.object({
   title: z.string(),
   summary: z.string(),
@@ -177,9 +143,5 @@ export const flashCardWorkerOutputSchema = z.object({
 
 export type SceneDraft = z.infer<typeof sceneWorkerOutputSchema>;
 export type DesmosDraft = z.infer<typeof desmosWorkerOutputSchema>;
-export type CodePlaygroundDraft = z.infer<
-  typeof codePlaygroundWorkerOutputSchema
->;
-export type WebPlaygroundDraft = z.infer<typeof webPlaygroundWorkerOutputSchema>;
 export type QuizDraft = z.infer<typeof quizWorkerOutputSchema>;
 export type FlashCardDraft = z.infer<typeof flashCardWorkerOutputSchema>;

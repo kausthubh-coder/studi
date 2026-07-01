@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeSceneHtmlWithTemplate,
-  validateCodePlaygroundPayload,
   validateDesmosPayload,
   validateFlashCardPayload,
   validateQuizPayload,
   validateSceneHtml,
-  validateWebPlaygroundPayload,
 } from "@/convex/sparks/validators";
 
 describe("spark validators", () => {
@@ -47,27 +45,6 @@ describe("spark validators", () => {
       viewport: { left: 10, right: -10, bottom: 10, top: -10 },
     });
     expect(bad.ok).toBe(false);
-  });
-
-  it("requires multi-line python starter code in code playgrounds", () => {
-    const ok = validateCodePlaygroundPayload({
-      language: "python",
-      instructions: "Implement add().",
-      starterCode: "def add(a, b):\n    return a + b",
-    });
-    expect(ok.ok).toBe(true);
-
-    const singleLine = validateCodePlaygroundPayload({
-      language: "python",
-      instructions: "Implement add().",
-      starterCode: "def add(a, b): return a + b",
-    });
-    expect(singleLine.ok).toBe(false);
-  });
-
-  it("requires html in web playgrounds", () => {
-    expect(validateWebPlaygroundPayload({ html: "<h1>Hi</h1>" }).ok).toBe(true);
-    expect(validateWebPlaygroundPayload({ html: "   " }).ok).toBe(false);
   });
 
   it("validates quiz correctness and minimum question count", () => {

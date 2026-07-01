@@ -16,7 +16,6 @@ import type * as chatActions from "../chatActions.js";
 import type * as http from "../http.js";
 import type * as playground from "../playground.js";
 import type * as rateLimits from "../rateLimits.js";
-import type * as sparkFeedback from "../sparkFeedback.js";
 import type * as sparks_schemas from "../sparks/schemas.js";
 import type * as sparks_tools from "../sparks/tools.js";
 import type * as sparks_validators from "../sparks/validators.js";
@@ -40,7 +39,6 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   playground: typeof playground;
   rateLimits: typeof rateLimits;
-  sparkFeedback: typeof sparkFeedback;
   "sparks/schemas": typeof sparks_schemas;
   "sparks/tools": typeof sparks_tools;
   "sparks/validators": typeof sparks_validators;
