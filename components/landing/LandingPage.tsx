@@ -3,7 +3,7 @@
 /* eslint-disable react/no-unescaped-entities */
 
 import Link from "next/link";
-import { SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { SparksShowcase } from "./SparksShowcase";
@@ -75,11 +75,12 @@ export function LandingPage() {
 
           <SignedOut>
             <div className="flex items-center gap-2">
-              <SignInButton mode="modal" forceRedirectUrl="/chat">
-                <button type="button" className="hidden sm:block font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-white hover:bg-[#f5ede0] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none">
-                  Sign in
-                </button>
-              </SignInButton>
+              <Link
+                href="/chat"
+                className="hidden sm:block font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-white hover:bg-[#f5ede0] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
+              >
+                Sign in
+              </Link>
               <button
                 type="button"
                 onClick={() => {
