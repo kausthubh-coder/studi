@@ -16,6 +16,10 @@ describe("scene worker generation contract", () => {
 
     expect(rendered).toContain("Set version to 2");
     expect(rendered).toContain("files.index.html");
+    expect(rendered).toContain('<main class="studi-scene">');
+    expect(rendered).toContain("--studi-scene-ink");
+    expect(rendered).toContain("Never use pale text");
+    expect(rendered).toContain("Do not make the whole scene a dark UI");
     expect(rendered).toContain("Legacy html-only scene output is invalid");
     expect(rendered).not.toContain(
       "Return strict JSON with keys: title, summary, workerSummary, html.",

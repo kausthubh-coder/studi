@@ -33,6 +33,16 @@ Use this file map:
 
 The renderer injects the document shell, CSP, and window.StudiScene runtime. Do not include remote scripts or a full app framework.
 
+The renderer also injects a Studi scene theme. Build on it instead of inventing a separate app skin:
+
+- Use a top-level `<main class="studi-scene">`.
+- Use the injected CSS tokens: `--studi-scene-bg`, `--studi-scene-surface`, `--studi-scene-surface-soft`, `--studi-scene-ink`, `--studi-scene-muted`, `--studi-scene-border`, `--studi-scene-accent`, `--studi-scene-teal`, `--studi-scene-amber`, and `--studi-scene-lavender`.
+- Body text, instructions, labels, values, and checkpoint prompts must be readable on the warm background. Prefer `--studi-scene-ink` for primary text and `--studi-scene-muted` for secondary text.
+- Never use pale text, low-opacity white, or gray text on the warm scene background.
+- Do not make the whole scene a dark UI. If a concept truly needs a dark plot/canvas, keep only the plot dark and put all instructions, controls, questions, and labels on the warm Studi surface with high contrast.
+- Use calm 1px borders and soft surfaces. Avoid thick black cartoon borders, chunky offset shadows, and oversized pill containers.
+- Prefer light graph/grid backgrounds with dark readable labels unless the concept needs a dark field.
+
 Use window.StudiScene when useful:
 
 - window.StudiScene.ready()

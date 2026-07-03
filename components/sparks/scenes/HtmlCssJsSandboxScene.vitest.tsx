@@ -42,6 +42,10 @@ describe("HtmlCssJsSandboxScene", () => {
     expect(srcDoc).toContain("script-src 'unsafe-inline'");
     expect(srcDoc).not.toContain("https://cdn.jsdelivr.net");
     expect(srcDoc).toContain("window.StudiScene");
+    expect(srcDoc).toContain("data-studi-scene-theme");
+    expect(srcDoc).toContain("data-studi-scene-contrast-guard");
+    expect(srcDoc).toContain("--studi-scene-ink");
+    expect(srcDoc).toContain("--studi-scene-bg");
     expect(srcDoc).toContain('data-studi-scene-file="styles.css"');
     expect(srcDoc).toContain('data-studi-scene-file="script.js"');
   });
@@ -60,6 +64,7 @@ describe("HtmlCssJsSandboxScene", () => {
     const srcDoc = iframe.getAttribute("srcdoc") ?? "";
     expect(srcDoc).toContain("https://cdn.jsdelivr.net");
     expect(srcDoc).toContain("window.StudiScene");
+    expect(srcDoc).toContain("data-studi-scene-theme");
   });
 
   it("accepts scene messages only from the rendered iframe", async () => {

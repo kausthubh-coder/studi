@@ -90,6 +90,176 @@ const studiSceneRuntimeScript = `
 }());
 `.trim();
 
+const studiSceneThemeStyles = `
+:root {
+  color-scheme: light;
+  --studi-scene-bg: #fff8f0;
+  --studi-scene-surface: #fffdf9;
+  --studi-scene-surface-soft: #f7efe4;
+  --studi-scene-ink: #1c1208;
+  --studi-scene-muted: #6b5a47;
+  --studi-scene-faint: #8b7a69;
+  --studi-scene-border: #eadccd;
+  --studi-scene-accent: #e05a3a;
+  --studi-scene-teal: #3a9e8a;
+  --studi-scene-amber: #e8a030;
+  --studi-scene-lavender: #9b6dd4;
+  --studi-scene-radius: 16px;
+}
+
+html {
+  min-width: 0;
+  background: var(--studi-scene-bg);
+  color: var(--studi-scene-ink);
+  font-family:
+    "Plus Jakarta Sans",
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  min-width: 0;
+  background: var(--studi-scene-bg);
+  color: var(--studi-scene-ink);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+body,
+main,
+section,
+article,
+p,
+label,
+li,
+figcaption,
+output {
+  color: var(--studi-scene-ink);
+}
+
+main,
+.studi-scene {
+  width: min(100%, 820px);
+  margin: 0 auto;
+  padding: clamp(18px, 4vw, 32px);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 0.45em;
+  color: var(--studi-scene-ink);
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0 0 0.85rem;
+  max-width: 70ch;
+}
+
+.muted,
+.hint,
+.instructions,
+[data-muted="true"] {
+  color: var(--studi-scene-muted);
+}
+
+.panel,
+.card,
+.scene-panel,
+.studi-panel,
+fieldset {
+  border: 1px solid var(--studi-scene-border);
+  border-radius: var(--studi-scene-radius);
+  background: var(--studi-scene-surface);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--studi-scene-ink);
+}
+
+button,
+select,
+input[type="button"],
+input[type="submit"] {
+  min-height: 40px;
+  border: 1px solid var(--studi-scene-border);
+  border-radius: 999px;
+  background: var(--studi-scene-surface);
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: color-mix(in srgb, var(--studi-scene-accent) 42%, var(--studi-scene-border));
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--studi-scene-accent) 35%, transparent);
+  outline-offset: 2px;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid var(--studi-scene-border);
+  border-radius: 12px;
+  background: var(--studi-scene-surface);
+}
+
+svg text {
+  fill: currentColor;
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 15px;
+  }
+
+  main,
+  .studi-scene {
+    padding: 16px;
+  }
+}
+`.trim();
+
+const studiSceneContrastGuardStyles = `
+body:not([data-studi-scene-dark]) {
+  background: var(--studi-scene-bg);
+  color: var(--studi-scene-ink);
+}
+
+body:not([data-studi-scene-dark]) main > h1,
+body:not([data-studi-scene-dark]) main > h2,
+body:not([data-studi-scene-dark]) main > h3,
+body:not([data-studi-scene-dark]) main > p,
+body:not([data-studi-scene-dark]) main > label,
+body:not([data-studi-scene-dark]) main > .instructions,
+body:not([data-studi-scene-dark]) main > .hint,
+body:not([data-studi-scene-dark]) main > [data-muted="true"] {
+  color: var(--studi-scene-ink);
+}
+`.trim();
+
 function escapeClosingTags(value: string, tagName: "script" | "style"): string {
   return value.replace(
     new RegExp(`</${tagName}`, "gi"),
@@ -116,16 +286,20 @@ function buildRuntimeHead({
   csp: string;
   extraStyles?: string;
 }): string {
+  const themeStyles = `<style data-studi-scene-theme>${escapeClosingTags(studiSceneThemeStyles, "style")}</style>`;
   const styles = extraStyles
     ? `<style data-studi-scene-file="styles.css">${escapeClosingTags(extraStyles, "style")}</style>`
     : "";
+  const contrastGuardStyles = `<style data-studi-scene-contrast-guard>${escapeClosingTags(studiSceneContrastGuardStyles, "style")}</style>`;
 
   return [
     '<meta charset="UTF-8" />',
     '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
     `<meta http-equiv="Content-Security-Policy" content="${csp}" />`,
     `<script>${escapeClosingTags(studiSceneRuntimeScript, "script")}</script>`,
+    themeStyles,
     styles,
+    contrastGuardStyles,
   ].join("");
 }
 
