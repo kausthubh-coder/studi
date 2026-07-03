@@ -4,6 +4,7 @@ import type {
   DesmosSparkDraft,
   FlashCardSparkPayload,
   QuizSparkPayload,
+  SceneSparkV2Payload,
   SparkValidationResult,
 } from "../../lib/sparks/contracts";
 import { tailwindBrowserScriptSrc } from "./schemas";
@@ -159,6 +160,237 @@ export function validateSceneHtml(html: string): SparkValidationResult {
       "Inline script syntax checks are skipped in this runtime environment.",
     );
   }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+const allowedSceneV2FileNames = new Set([
+  "index.html",
+  "styles.css",
+  "script.js",
+]);
+
+const blockedSceneCodePatterns: Array<[RegExp, string]> = [
+  [/\bfetch\s*\(/i, "fetch() is not allowed in Scene Spark v2."],
+  [/\bXMLHttpRequest\b/i, "XMLHttpRequest is not allowed in Scene Spark v2."],
+  [/\bWebSocket\b/i, "WebSocket is not allowed in Scene Spark v2."],
+  [/\bEventSource\b/i, "EventSource is not allowed in Scene Spark v2."],
+  [/\bsendBeacon\s*\(/i, "sendBeacon() is not allowed in Scene Spark v2."],
+  [/\bnavigator\.sendBeacon\s*\(/i, "sendBeacon() is not allowed in Scene Spark v2."],
+  [/\blocalStorage\b/i, "Browser storage is not allowed in Scene Spark v2."],
+  [/\bsessionStorage\b/i, "Browser storage is not allowed in Scene Spark v2."],
+  [/\bindexedDB\b/i, "Browser storage is not allowed in Scene Spark v2."],
+  [/\bdocument\.cookie\b/i, "Cookies are not allowed in Scene Spark v2."],
+  [/\beval\s*\(/i, "eval() is not allowed in Scene Spark v2."],
+  [/\bFunction\s*\(/, "Function() is not allowed in Scene Spark v2."],
+  [/\bimport\s*\(/i, "Dynamic import is not allowed in Scene Spark v2."],
+  [/\bwindow\.open\s*\(/i, "Popups are not allowed in Scene Spark v2."],
+  [/\bopen\s*\(/i, "Popups are not allowed in Scene Spark v2."],
+  [/\btop\.location\b/i, "Top-level navigation is not allowed in Scene Spark v2."],
+  [/\bparent\.location\b/i, "Parent navigation is not allowed in Scene Spark v2."],
+  [/\bwindow\.location\b/i, "Navigation is not allowed in Scene Spark v2."],
+  [/\bdocument\.location\b/i, "Navigation is not allowed in Scene Spark v2."],
+  [/\blocation\.(assign|replace|href)\b/i, "Navigation is not allowed in Scene Spark v2."],
+  [/\bnavigator\.serviceWorker\b/i, "Service workers are not allowed in Scene Spark v2."],
+];
+
+function validateSceneCodeSafety(code: string): string[] {
+  const errors: string[] = [];
+  for (const [pattern, message] of blockedSceneCodePatterns) {
+    if (pattern.test(code)) {
+      errors.push(message);
+    }
+  }
+  return errors;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateSceneV2Controls(controls: unknown): string[] {
+  const errors: string[] = [];
+
+  if (!Array.isArray(controls)) {
+    return ["Scene v2 controls must be an array."];
+  }
+
+  controls.forEach((control, index) => {
+    const label = `Control ${index + 1}`;
+    if (!isPlainRecord(control)) {
+      errors.push(`${label} must be an object.`);
+      return;
+    }
+    const id = typeof control.id === "string" ? control.id : "";
+    const controlLabel =
+      typeof control.label === "string" ? control.label : "";
+    if (!id.trim()) {
+      errors.push(`${label} id is required.`);
+    }
+    if (!controlLabel.trim()) {
+      errors.push(`${label} label is required.`);
+    }
+    if (
+      control.type === "slider" &&
+      typeof control.min === "number" &&
+      typeof control.max === "number" &&
+      control.min >= control.max
+    ) {
+      errors.push(`${label} min must be less than max.`);
+    }
+    if (
+      (control.type === "choice" || control.type === "button") &&
+      control.choices !== undefined &&
+      !Array.isArray(control.choices)
+    ) {
+      errors.push(`${label} choices must be an array when provided.`);
+    }
+    if (
+      control.type === "choice" &&
+      (!Array.isArray(control.choices) || control.choices.length < 2)
+    ) {
+      errors.push(`${label} choices must include at least 2 options.`);
+    }
+  });
+
+  return errors;
+}
+
+function validateSceneV2Checkpoints(checkpoints: unknown): string[] {
+  const errors: string[] = [];
+
+  if (!Array.isArray(checkpoints)) {
+    return ["Scene v2 checkpoints must be an array."];
+  }
+
+  checkpoints.forEach((checkpoint, index) => {
+    const label = `Checkpoint ${index + 1}`;
+    if (!isPlainRecord(checkpoint)) {
+      errors.push(`${label} must be an object.`);
+      return;
+    }
+    const id = typeof checkpoint.id === "string" ? checkpoint.id : "";
+    const prompt =
+      typeof checkpoint.prompt === "string" ? checkpoint.prompt : "";
+    if (!id.trim()) {
+      errors.push(`${label} id is required.`);
+    }
+    if (!prompt.trim()) {
+      errors.push(`${label} prompt is required.`);
+    }
+    if (
+      checkpoint.answerType === "choice" &&
+      (!Array.isArray(checkpoint.choices) || checkpoint.choices.length < 2)
+    ) {
+      errors.push(`${label} choices must include at least 2 options.`);
+    }
+  });
+
+  return errors;
+}
+
+export function validateSceneV2Payload(
+  payload: SceneSparkV2Payload | unknown,
+): SparkValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const candidate = isPlainRecord(payload) ? payload : {};
+
+  const learningObjective = candidate.learningObjective;
+  if (typeof learningObjective !== "string" || !learningObjective.trim()) {
+    errors.push("Scene v2 learningObjective is required.");
+  }
+
+  const capabilities = candidate.capabilities;
+  if (!isPlainRecord(capabilities)) {
+    errors.push("Scene v2 capabilities must be an object.");
+  } else if (capabilities.needsNetwork) {
+    errors.push("Scene v2 cannot require network access.");
+  }
+
+  const files: Record<string, unknown> = isPlainRecord(candidate.files)
+    ? candidate.files
+    : {};
+  if (!isPlainRecord(candidate.files)) {
+    errors.push("Scene v2 files must be an object.");
+  }
+
+  const fileEntries = Object.entries(files);
+  if (
+    typeof files["index.html"] !== "string" ||
+    !files["index.html"].trim()
+  ) {
+    errors.push("Scene v2 requires files.index.html.");
+  }
+
+  for (const [fileName, contents] of fileEntries) {
+    if (!allowedSceneV2FileNames.has(fileName)) {
+      errors.push(`Scene v2 file is not allowed: ${fileName}.`);
+      continue;
+    }
+    if (typeof contents !== "string") {
+      errors.push(`Scene v2 file must be a string: ${fileName}.`);
+      continue;
+    }
+    if (contents.length > 9_000) {
+      errors.push(`Scene v2 file is too large: ${fileName}.`);
+    }
+  }
+
+  const combinedCode = fileEntries
+    .filter(([, contents]) => typeof contents === "string")
+    .map(([, contents]) => contents)
+    .join("\n");
+  errors.push(...validateSceneCodeSafety(combinedCode));
+
+  const indexHtml =
+    typeof files["index.html"] === "string" ? files["index.html"] : "";
+  const externalScriptSrcs = extractExternalScriptSrcs(indexHtml);
+  if (externalScriptSrcs.length > 0) {
+    errors.push(
+      `External script is not allowed in Scene Spark v2: ${externalScriptSrcs[0]}.`,
+    );
+  }
+
+  if (/<\s*link\b[^>]*\bhref\s*=/i.test(indexHtml)) {
+    errors.push("External stylesheets and preloads are not allowed in Scene Spark v2.");
+  }
+
+  if (/<\s*meta\b[^>]*http-equiv\s*=\s*["']?refresh/i.test(indexHtml)) {
+    errors.push("Navigation by meta refresh is not allowed in Scene Spark v2.");
+  }
+
+  if (/\bhref\s*=\s*["']\s*(?:https?:|javascript:)/i.test(indexHtml)) {
+    errors.push("Navigation links are not allowed in Scene Spark v2.");
+  }
+
+  if (/\btarget\s*=\s*["']?_blank/i.test(indexHtml)) {
+    errors.push("Popups are not allowed in Scene Spark v2.");
+  }
+
+  if (/<iframe\b/i.test(indexHtml)) {
+    errors.push("Nested iframes are not allowed in Scene Spark v2.");
+  }
+
+  if (/<form\b/i.test(indexHtml)) {
+    errors.push("Forms are not allowed in Scene Spark v2.");
+  }
+
+  if (
+    Array.isArray(candidate.controls) &&
+    Array.isArray(candidate.checkpoints) &&
+    candidate.controls.length === 0 &&
+    candidate.checkpoints.length === 0
+  ) {
+    warnings.push("Scene v2 has no controls or checkpoints.");
+  }
+
+  errors.push(...validateSceneV2Controls(candidate.controls));
+  errors.push(...validateSceneV2Checkpoints(candidate.checkpoints));
 
   return {
     ok: errors.length === 0,

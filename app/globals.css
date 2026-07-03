@@ -1122,6 +1122,21 @@ body::after {
   background: #fdf8f2;
 }
 
+.spark-scene-status {
+  border-top: 1px solid #ead9c8;
+  background: #fff7e8;
+  color: #7a5b2a;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  padding: 8px 12px;
+}
+
+.spark-scene-status-error {
+  background: #fff0ee;
+  color: #8b352f;
+}
+
 /* Spark type badges — light style for vivid headers */
 .spark-type-badge {
   display: inline-flex;

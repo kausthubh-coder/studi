@@ -14,6 +14,7 @@ import {
 } from "../../lib/model-config";
 import { renderPrompt } from "../../lib/prompts";
 import { sparkSkillById } from "../../lib/sparks/catalog";
+import { getSparkWorkerOutputRequirements } from "../../lib/sparks/worker-output-requirements";
 import {
   getSparkTypeLabel,
   normalizeSparkFlashCardDraft,
@@ -42,11 +43,11 @@ import {
 import {
   buildSimpleDesmosDraft,
   createArtifactId,
-  normalizeSceneHtmlWithTemplate,
   validateDesmosPayload,
   validateFlashCardPayload,
   validateQuizPayload,
   validateSceneHtml,
+  validateSceneV2Payload,
 } from "./validators";
 
 const internalApi = internal as unknown as {
@@ -466,20 +467,11 @@ function buildPrompt(params: {
   previousOutput?: string;
   previousErrors?: string[];
 }): string {
-  const outputRequirements =
-    params.sparkType === "scene"
-      ? [
-          "Return strict JSON with keys: title, summary, workerSummary, html.",
-          "Do not include markdown fences.",
-        ]
-      : [
-          "Return strict JSON with keys: title, summary, workerSummary, payload.",
-          "Do not include markdown fences.",
-        ];
-
   return renderPrompt("sparks/worker-build.md", {
     sparkType: params.sparkType,
-    outputRequirements: outputRequirements.join("\n"),
+    outputRequirements: getSparkWorkerOutputRequirements(
+      params.sparkType,
+    ).join("\n"),
     context: params.context,
     preferredTitleLine: params.title ? `Preferred title: ${params.title}` : "",
     preferredSummaryLine: params.summary
@@ -515,6 +507,19 @@ function pushWorkerUsage(
     usage: params.usage,
     providerMetadata: params.providerMetadata,
   });
+}
+
+function validateSceneDraft(draft: SceneDraft): {
+  artifact: ReturnType<typeof normalizeSparkSceneDraft>;
+  validation: ReturnType<typeof validateSceneHtml>;
+} {
+  const artifact = normalizeSparkSceneDraft(draft);
+  const validation =
+    artifact.version === 2
+      ? validateSceneV2Payload(artifact.payload)
+      : validateSceneHtml(artifact.payload.html);
+
+  return { artifact, validation };
 }
 
 async function buildSceneSpark(
@@ -553,13 +558,11 @@ async function buildSceneSpark(
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
     });
-    firstDraft = {
-      ...firstGeneration.object,
-      html: normalizeSceneHtmlWithTemplate(firstGeneration.object.html),
-    };
+    firstDraft = firstGeneration.object;
     firstWarnings.push(...firstGeneration.warnings);
 
-    const firstValidation = validateSceneHtml(firstDraft.html);
+    const { artifact, validation: firstValidation } =
+      validateSceneDraft(firstDraft);
     firstErrors = firstValidation.errors;
     firstWarnings.push(...firstValidation.warnings);
 
@@ -568,7 +571,7 @@ async function buildSceneSpark(
         status: "success",
         workerSummary: firstDraft.workerSummary,
         warnings: firstWarnings,
-        artifact: normalizeSparkSceneDraft(firstDraft),
+        artifact,
         workerUsage,
       };
     }
@@ -629,19 +632,17 @@ async function buildSceneSpark(
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
     });
-    const repairedDraft = {
-      ...repairedGeneration.object,
-      html: normalizeSceneHtmlWithTemplate(repairedGeneration.object.html),
-    };
+    const repairedDraft = repairedGeneration.object;
     firstWarnings.push(...repairedGeneration.warnings);
 
-    const repairedValidation = validateSceneHtml(repairedDraft.html);
+    const { artifact, validation: repairedValidation } =
+      validateSceneDraft(repairedDraft);
     if (repairedValidation.ok) {
       return {
         status: "success",
         workerSummary: repairedDraft.workerSummary,
         warnings: [...firstWarnings, ...repairedValidation.warnings],
-        artifact: normalizeSparkSceneDraft(repairedDraft),
+        artifact,
         workerUsage,
       };
     }

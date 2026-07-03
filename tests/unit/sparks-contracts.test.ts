@@ -6,6 +6,7 @@ import {
   normalizeCreateSparkInput,
   normalizeSparkQuizDraft,
   normalizeSparkSceneDraft,
+  sparkSceneV2Version,
   sparkTypes,
 } from "@/lib/sparks/contracts";
 import type { CreateSparkToolInput } from "@/lib/sparks/contracts";
@@ -71,6 +72,56 @@ describe("spark contracts", () => {
         artifact,
       }),
     ).toBe(true);
+  });
+
+  it("normalizes scene v2 drafts with files and learning metadata", () => {
+    const artifact = normalizeSparkSceneDraft({
+      version: sparkSceneV2Version,
+      title: "Slope Explorer",
+      summary: "Move the run and rise to feel slope.",
+      learningObjective: "Help the learner connect rise over run to steepness.",
+      files: {
+        "index.html": '<main><button id="step">Step</button></main>',
+        "styles.css": "main { min-height: 240px; }",
+        "script.js": "document.querySelector('#step')?.addEventListener('click', () => window.StudiScene?.interaction('step'));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: true,
+        needsNetwork: true,
+        recordsAnswers: true,
+      },
+      controls: [
+        {
+          id: "rise",
+          type: "slider",
+          label: "Rise",
+          min: -5,
+          max: 5,
+          defaultValue: 2,
+        },
+      ],
+      checkpoints: [
+        {
+          id: "predict",
+          prompt: "What happens when rise increases?",
+          answerType: "choice",
+          choices: ["steeper", "flatter"],
+        },
+      ],
+    });
+
+    if (artifact.version !== sparkSceneV2Version) {
+      throw new Error("Expected a scene v2 artifact.");
+    }
+
+    expect(artifact.mode).toBe("editable");
+    expect(artifact.payload.files["index.html"]).toContain("button");
+    expect(artifact.payload.learningObjective).toMatch(/rise over run/i);
+    expect(artifact.payload.capabilities.needsNetwork).toBe(true);
+    expect(artifact.payload.controls).toHaveLength(1);
+    expect(artifact.payload.checkpoints).toHaveLength(1);
+    expect(isSparkArtifact(artifact)).toBe(true);
   });
 
   it("falls back to a usable quiz when a draft is underspecified", () => {

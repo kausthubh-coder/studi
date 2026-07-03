@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizeSparkSceneDraft,
+  sparkSceneV2Version,
+} from "@/lib/sparks/contracts";
+import {
   normalizeSceneHtmlWithTemplate,
   validateDesmosPayload,
   validateFlashCardPayload,
   validateQuizPayload,
   validateSceneHtml,
+  validateSceneV2Payload,
 } from "@/convex/sparks/validators";
 
 describe("spark validators", () => {
@@ -31,6 +36,150 @@ describe("spark validators", () => {
     );
     expect(invalid.ok).toBe(false);
     expect(invalid.errors.join(" ")).toMatch(/External script/i);
+  });
+
+  it("validates scene v2 files and blocks unsafe browser capabilities", () => {
+    const valid = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "See how the input changes the output.",
+      files: {
+        "index.html": '<main><button id="try">Try</button></main>',
+        "styles.css": "main { min-height: 260px; }",
+        "script.js": "window.StudiScene?.ready();",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: false,
+        recordsAnswers: false,
+      },
+      controls: [],
+      checkpoints: [],
+    });
+    expect(valid.ok).toBe(true);
+
+    const invalid = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Sneak data out.",
+      files: {
+        "index.html": "<main>Bad</main>",
+        "script.js": "fetch('https://example.com'); localStorage.setItem('x', 'y'); eval('1 + 1');",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: true,
+        recordsAnswers: false,
+      },
+      controls: [],
+      checkpoints: [],
+    });
+
+    expect(invalid.ok).toBe(false);
+    expect(invalid.errors.join(" ")).toMatch(/fetch|storage|eval|network/i);
+  });
+
+  it("rejects scene v2 external scripts, navigation, oversized files, and invalid metadata", () => {
+    const invalid = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "",
+      files: {
+        "index.html":
+          '<main><a href="https://example.com" target="_blank">Leave</a><script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script><meta http-equiv="refresh" content="0;url=https://example.com"></main>',
+        "script.js":
+          "window.location.href = 'https://example.com'; window.open('https://example.com');",
+        "styles.css": "body {}".repeat(2_000),
+        "bad.js": "console.log('nope')",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: false,
+        recordsAnswers: false,
+      },
+      controls: [
+        {
+          id: "",
+          type: "slider",
+          label: "",
+          min: 10,
+          max: 1,
+        },
+        {
+          id: "choice",
+          type: "choice",
+          label: "Pick",
+        },
+      ],
+      checkpoints: [
+        {
+          id: "checkpoint",
+          prompt: "Pick one.",
+          answerType: "choice",
+        },
+      ],
+    } as never);
+
+    expect(invalid.ok).toBe(false);
+    expect(invalid.errors.join(" ")).toMatch(/learningObjective/i);
+    expect(invalid.errors.join(" ")).toMatch(/External script/i);
+    expect(invalid.errors.join(" ")).toMatch(/Navigation|Popups/i);
+    expect(invalid.errors.join(" ")).toMatch(/too large/i);
+    expect(invalid.errors.join(" ")).toMatch(/not allowed: bad\.js/i);
+    expect(invalid.errors.join(" ")).toMatch(/Control 1 id/i);
+    expect(invalid.errors.join(" ")).toMatch(/Control 1 label/i);
+    expect(invalid.errors.join(" ")).toMatch(/Control 1 min must be less than max/i);
+    expect(invalid.errors.join(" ")).toMatch(/Control 2 choices/i);
+    expect(invalid.errors.join(" ")).toMatch(/Checkpoint 1 choices/i);
+  });
+
+  it("returns scene v2 metadata errors instead of throwing on malformed payloads", () => {
+    const invalid = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: 42,
+      files: null,
+      capabilities: null,
+      controls: "bad",
+      checkpoints: null,
+    } as never);
+
+    expect(invalid.ok).toBe(false);
+    expect(invalid.errors.join(" ")).toMatch(/learningObjective/i);
+    expect(invalid.errors.join(" ")).toMatch(/files must be an object/i);
+    expect(invalid.errors.join(" ")).toMatch(/capabilities must be an object/i);
+    expect(invalid.errors.join(" ")).toMatch(/controls must be an array/i);
+    expect(invalid.errors.join(" ")).toMatch(/checkpoints must be an array/i);
+  });
+
+  it("rejects unsafe scene v2 data after draft normalization", () => {
+    const artifact = normalizeSparkSceneDraft({
+      version: sparkSceneV2Version,
+      learningObjective: "Show why network access should be blocked.",
+      files: {
+        "index.html": "<main>Unsafe scene</main>",
+        "styles.css": "body {}".repeat(2_000),
+        "bad.js": "console.log('bad')",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: true,
+        recordsAnswers: false,
+      },
+      controls: [],
+      checkpoints: [],
+    });
+
+    if (artifact.version !== sparkSceneV2Version) {
+      throw new Error("Expected a scene v2 artifact.");
+    }
+
+    expect(artifact.payload.capabilities.needsNetwork).toBe(true);
+    const invalid = validateSceneV2Payload(artifact.payload);
+    expect(invalid.ok).toBe(false);
+    expect(invalid.errors.join(" ")).toMatch(/network/i);
+    expect(invalid.errors.join(" ")).toMatch(/bad\.js/i);
+    expect(invalid.errors.join(" ")).toMatch(/too large/i);
   });
 
   it("requires desmos viewport bounds to be ordered", () => {

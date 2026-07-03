@@ -1,4 +1,5 @@
 export const sparkSceneVersion = 1 as const;
+export const sparkSceneV2Version = 2 as const;
 
 export const sparkTypes = [
   "scene",
@@ -16,9 +17,53 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export type SceneSparkPayload = {
+export type SceneSparkV1Payload = {
   html: string;
 };
+
+export type SceneSparkFileName = "index.html" | "styles.css" | "script.js";
+
+export type SceneSparkFiles = Partial<Record<SceneSparkFileName, string>> &
+  Record<string, string> & {
+  "index.html": string;
+};
+
+export type SceneSparkCapabilities = {
+  usesCanvas: boolean;
+  usesSvg: boolean;
+  needsNetwork: boolean;
+  recordsAnswers: boolean;
+};
+
+export type SceneSparkControl = {
+  id: string;
+  type: "slider" | "toggle" | "button" | "choice";
+  label: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  defaultValue?: string | number | boolean;
+  choices?: string[];
+};
+
+export type SceneSparkCheckpoint = {
+  id: string;
+  prompt: string;
+  answerType: "choice" | "text" | "number" | "boolean";
+  choices?: string[];
+};
+
+export type SceneSparkV2Payload = {
+  version: typeof sparkSceneV2Version;
+  learningObjective: string;
+  estimatedInteractionSeconds?: number;
+  capabilities: SceneSparkCapabilities;
+  files: SceneSparkFiles;
+  controls: SceneSparkControl[];
+  checkpoints: SceneSparkCheckpoint[];
+};
+
+export type SceneSparkPayload = SceneSparkV1Payload | SceneSparkV2Payload;
 
 export type QuizChoice = {
   id: string;
@@ -65,7 +110,7 @@ export type DesmosGraphPayload = {
   hint?: string;
 };
 
-export type SparkSceneArtifact = {
+export type SparkSceneV1Artifact = {
   kind: "spark_scene";
   version: typeof sparkSceneVersion;
   sparkType: "scene";
@@ -73,8 +118,21 @@ export type SparkSceneArtifact = {
   artifactId?: string;
   title: string;
   summary?: string;
-  payload: SceneSparkPayload;
+  payload: SceneSparkV1Payload;
 };
+
+export type SparkSceneV2Artifact = {
+  kind: "spark_scene";
+  version: typeof sparkSceneV2Version;
+  sparkType: "scene";
+  mode: SparkMode;
+  artifactId?: string;
+  title: string;
+  summary?: string;
+  payload: SceneSparkV2Payload;
+};
+
+export type SparkSceneArtifact = SparkSceneV1Artifact | SparkSceneV2Artifact;
 
 export type SparkQuizArtifact = {
   kind: "spark_quiz";
@@ -137,7 +195,14 @@ export type CreateSparkToolResult =
     };
 
 export type SparkDraft = {
-  html: string;
+  version?: typeof sparkSceneVersion | typeof sparkSceneV2Version;
+  html?: string;
+  files?: Partial<Record<string, string>>;
+  learningObjective?: string;
+  estimatedInteractionSeconds?: number;
+  capabilities?: Partial<SceneSparkCapabilities>;
+  controls?: unknown[];
+  checkpoints?: unknown[];
   artifactId?: string;
   title?: string;
   summary?: string;
@@ -177,6 +242,10 @@ export type SparkValidationResult = {
 const maxTitleLength = 80;
 const maxSummaryLength = 220;
 const maxCodeLength = 16_000;
+const maxSceneObjectiveLength = 240;
+const maxSceneControls = 8;
+const maxSceneCheckpoints = 4;
+const maxSceneControlChoices = 8;
 const maxInstructionsLength = 1_200;
 const maxHintLength = 180;
 const maxExpressions = 40;
@@ -408,11 +477,172 @@ export function getSparkTypeLabel(sparkType: SparkType): string {
   return sparkTypeLabels[sparkType];
 }
 
+function normalizeSceneFiles(
+  input: unknown,
+  fallbackHtml: string | undefined,
+): SceneSparkFiles {
+  const candidate = isPlainObject(input) ? input : {};
+  const indexHtml =
+    typeof candidate["index.html"] === "string" &&
+    candidate["index.html"].trim().length > 0
+      ? candidate["index.html"]
+      : fallbackHtml;
+
+  const files: SceneSparkFiles = {
+    "index.html": typeof indexHtml === "string" ? indexHtml.trim() : "",
+  };
+
+  for (const [fileName, contents] of Object.entries(candidate)) {
+    if (typeof contents === "string") {
+      files[fileName] = contents;
+    }
+  }
+
+  return files;
+}
+
+function normalizeSceneCapabilities(
+  input: unknown,
+): SceneSparkCapabilities {
+  const candidate = isPlainObject(input) ? input : {};
+  return {
+    usesCanvas: candidate.usesCanvas === true,
+    usesSvg: candidate.usesSvg === true,
+    needsNetwork: candidate.needsNetwork === true,
+    recordsAnswers: candidate.recordsAnswers === true,
+  };
+}
+
+function normalizeSceneControls(input: unknown): SceneSparkControl[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const allowedTypes = new Set<SceneSparkControl["type"]>([
+    "slider",
+    "toggle",
+    "button",
+    "choice",
+  ]);
+
+  return input
+    .slice(0, maxSceneControls)
+    .map((rawControl, index) => {
+      if (!isPlainObject(rawControl)) {
+        return null;
+      }
+
+      const type = allowedTypes.has(rawControl.type as SceneSparkControl["type"])
+        ? (rawControl.type as SceneSparkControl["type"])
+        : "button";
+      const id =
+        typeof rawControl.id === "string" && rawControl.id.trim().length > 0
+          ? clampText(rawControl.id, 48)
+          : `control_${index + 1}`;
+      const label =
+        typeof rawControl.label === "string" &&
+        rawControl.label.trim().length > 0
+          ? clampText(rawControl.label, 80)
+          : `Control ${index + 1}`;
+
+      const control: SceneSparkControl = { id, type, label };
+
+      for (const key of ["min", "max", "step"] as const) {
+        const value = rawControl[key];
+        if (typeof value === "number" && Number.isFinite(value)) {
+          control[key] = value;
+        }
+      }
+
+      const defaultValue = rawControl.defaultValue;
+      if (
+        typeof defaultValue === "string" ||
+        typeof defaultValue === "boolean" ||
+        (typeof defaultValue === "number" && Number.isFinite(defaultValue))
+      ) {
+        control.defaultValue =
+          typeof defaultValue === "string"
+            ? clampText(defaultValue, 80)
+            : defaultValue;
+      }
+
+      if (Array.isArray(rawControl.choices)) {
+        const choices = rawControl.choices
+          .slice(0, maxSceneControlChoices)
+          .filter((choice): choice is string => typeof choice === "string")
+          .map((choice) => clampText(choice, 80))
+          .filter(Boolean);
+        if (choices.length > 0) {
+          control.choices = choices;
+        }
+      }
+
+      return control;
+    })
+    .filter((control): control is SceneSparkControl => control !== null);
+}
+
+function normalizeSceneCheckpoints(input: unknown): SceneSparkCheckpoint[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const allowedAnswerTypes = new Set<SceneSparkCheckpoint["answerType"]>([
+    "choice",
+    "text",
+    "number",
+    "boolean",
+  ]);
+
+  return input
+    .slice(0, maxSceneCheckpoints)
+    .map((rawCheckpoint, index) => {
+      if (!isPlainObject(rawCheckpoint)) {
+        return null;
+      }
+
+      const prompt =
+        typeof rawCheckpoint.prompt === "string" &&
+        rawCheckpoint.prompt.trim().length > 0
+          ? clampText(rawCheckpoint.prompt, maxQuestionLength)
+          : "";
+      if (!prompt) {
+        return null;
+      }
+
+      const id =
+        typeof rawCheckpoint.id === "string" &&
+        rawCheckpoint.id.trim().length > 0
+          ? clampText(rawCheckpoint.id, 48)
+          : `checkpoint_${index + 1}`;
+      const answerType = allowedAnswerTypes.has(
+        rawCheckpoint.answerType as SceneSparkCheckpoint["answerType"],
+      )
+        ? (rawCheckpoint.answerType as SceneSparkCheckpoint["answerType"])
+        : "text";
+
+      const checkpoint: SceneSparkCheckpoint = { id, prompt, answerType };
+      if (Array.isArray(rawCheckpoint.choices)) {
+        const choices = rawCheckpoint.choices
+          .slice(0, maxSceneControlChoices)
+          .filter((choice): choice is string => typeof choice === "string")
+          .map((choice) => clampText(choice, 80))
+          .filter(Boolean);
+        if (choices.length > 0) {
+          checkpoint.choices = choices;
+        }
+      }
+
+      return checkpoint;
+    })
+    .filter(
+      (checkpoint): checkpoint is SceneSparkCheckpoint => checkpoint !== null,
+    );
+}
+
 export function normalizeSparkSceneDraft(
   draft: SparkDraft,
 ): SparkSceneArtifact {
-  const html = clampCode(typeof draft.html === "string" ? draft.html : "");
-
   const title = clampText(
     typeof draft.title === "string" && draft.title.trim().length > 0
       ? draft.title
@@ -425,15 +655,50 @@ export function normalizeSparkSceneDraft(
       ? clampText(draft.summary, maxSummaryLength)
       : undefined;
 
+  const artifactId =
+    typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
+      ? clampText(draft.artifactId, 120)
+      : undefined;
+
+  if (draft.version === sparkSceneV2Version || isPlainObject(draft.files)) {
+    const learningObjective =
+      typeof draft.learningObjective === "string" &&
+      draft.learningObjective.trim().length > 0
+        ? clampText(draft.learningObjective, maxSceneObjectiveLength)
+        : summary ?? "Help the learner explore the concept interactively.";
+
+    return {
+      kind: "spark_scene",
+      version: sparkSceneV2Version,
+      sparkType: "scene",
+      mode: "editable",
+      artifactId,
+      title,
+      summary,
+      payload: {
+        version: sparkSceneV2Version,
+        learningObjective,
+        estimatedInteractionSeconds:
+          typeof draft.estimatedInteractionSeconds === "number" &&
+          Number.isFinite(draft.estimatedInteractionSeconds)
+            ? Math.min(180, Math.max(10, draft.estimatedInteractionSeconds))
+            : undefined,
+        capabilities: normalizeSceneCapabilities(draft.capabilities),
+        files: normalizeSceneFiles(draft.files, draft.html),
+        controls: normalizeSceneControls(draft.controls),
+        checkpoints: normalizeSceneCheckpoints(draft.checkpoints),
+      },
+    };
+  }
+
+  const html = clampCode(typeof draft.html === "string" ? draft.html : "");
+
   return {
     kind: "spark_scene",
     version: sparkSceneVersion,
     sparkType: "scene",
     mode: "readonly",
-    artifactId:
-      typeof draft.artifactId === "string" && draft.artifactId.trim().length > 0
-        ? clampText(draft.artifactId, 120)
-        : undefined,
+    artifactId,
     title,
     summary,
     payload: {
@@ -762,6 +1027,35 @@ export function isSparkType(value: unknown): value is SparkType {
   return typeof value === "string" && sparkTypes.includes(value as SparkType);
 }
 
+function isSceneSparkV2Payload(value: unknown): value is SceneSparkV2Payload {
+  if (!isPlainObject(value) || value.version !== sparkSceneV2Version) {
+    return false;
+  }
+
+  if (
+    typeof value.learningObjective !== "string" ||
+    !isPlainObject(value.capabilities) ||
+    !isPlainObject(value.files) ||
+    typeof value.files["index.html"] !== "string" ||
+    !Array.isArray(value.controls) ||
+    !Array.isArray(value.checkpoints)
+  ) {
+    return false;
+  }
+
+  const capabilities = value.capabilities;
+  if (
+    typeof capabilities.usesCanvas !== "boolean" ||
+    typeof capabilities.usesSvg !== "boolean" ||
+    typeof capabilities.needsNetwork !== "boolean" ||
+    typeof capabilities.recordsAnswers !== "boolean"
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function isSparkSceneArtifact(
   value: unknown,
 ): value is SparkSceneArtifact {
@@ -772,7 +1066,8 @@ export function isSparkSceneArtifact(
   const candidate = value as Partial<SparkSceneArtifact>;
   if (
     candidate.kind !== "spark_scene" ||
-    candidate.version !== sparkSceneVersion ||
+    (candidate.version !== sparkSceneVersion &&
+      candidate.version !== sparkSceneV2Version) ||
     candidate.sparkType !== "scene" ||
     typeof candidate.title !== "string" ||
     (candidate.mode !== "readonly" && candidate.mode !== "editable")
@@ -791,7 +1086,11 @@ export function isSparkSceneArtifact(
     return false;
   }
 
-  const payload = candidate.payload as Partial<SceneSparkPayload>;
+  if (candidate.version === sparkSceneV2Version) {
+    return isSceneSparkV2Payload(candidate.payload);
+  }
+
+  const payload = candidate.payload as Partial<SceneSparkV1Payload>;
   return typeof payload.html === "string";
 }
 

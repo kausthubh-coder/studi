@@ -113,12 +113,51 @@ const flashCardPayloadSchema: z.ZodType<FlashCardSparkPayload> = z.object({
   cards: z.array(flashCardItemSchema).min(4),
 });
 
+const sceneCapabilitiesSchema = z.object({
+  usesCanvas: z.boolean().default(false),
+  usesSvg: z.boolean().default(false),
+  needsNetwork: z.boolean().default(false),
+  recordsAnswers: z.boolean().default(false),
+});
+
+const sceneControlSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(["slider", "toggle", "button", "choice"]),
+  label: z.string().min(1),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  step: z.number().optional(),
+  defaultValue: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  choices: z.array(z.string()).optional(),
+});
+
+const sceneCheckpointSchema = z.object({
+  id: z.string().min(1),
+  prompt: z.string().min(1),
+  answerType: z.enum(["choice", "text", "number", "boolean"]),
+  choices: z.array(z.string()).optional(),
+});
+
+const sceneFilesSchema = z
+  .object({
+    "index.html": z.string().min(1),
+    "styles.css": z.string().optional(),
+    "script.js": z.string().optional(),
+  })
+  .strict();
+
 export const sceneWorkerOutputSchema = z.object({
   title: z.string(),
   summary: z.string(),
   workerSummary: z.string(),
-  html: z.string(),
-});
+  version: z.literal(2),
+  learningObjective: z.string().min(1),
+  estimatedInteractionSeconds: z.number().optional(),
+  capabilities: sceneCapabilitiesSchema,
+  files: sceneFilesSchema,
+  controls: z.array(sceneControlSchema),
+  checkpoints: z.array(sceneCheckpointSchema),
+}).strict();
 
 export const desmosWorkerOutputSchema = z.object({
   title: z.string(),

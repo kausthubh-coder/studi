@@ -14,7 +14,7 @@ export const sparkSkillMetadataById: Readonly<Record<SparkType, SparkSkillMetada
 {
   "scene": {
     "name": "Spark Scene",
-    "description": "Create a single self-contained HTML file for a micro-interactive learning visualization.",
+    "description": "Create a safe file-based micro-interactive learning visualization.",
     "whenToUse": "Use when the learner would understand better with an interactive visual demo instead of text alone.",
     "promptPath": "sparks/skills/scene.md"
   },
