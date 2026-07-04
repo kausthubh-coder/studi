@@ -17,9 +17,10 @@
     "test:convex": "vitest run --config vitest.convex.config.ts",
     "test:e2e": "playwright test",
     "test:all": "bun run test && bun run test:e2e",
-    "check": "bun run prompts:check && bun run lint && bun run test && bun run build",
+    "check": "bun run secrets:check && bun run prompts:check && bun run lint && bun run test && bun run build",
     "prompts:sync": "bun lib/prompts/sync.ts",
     "prompts:check": "bun lib/prompts/sync.ts --check",
+    "secrets:check": "bun scripts/secrets-check.ts",
     "playground": "bunx @convex-dev/agent-playground"
   },
   "dependencies": {
