@@ -35,6 +35,18 @@ export const sparkSkillMetadataById: Readonly<Record<SparkType, SparkSkillMetada
     "description": "Create an interactive Desmos graph with equations, points, and data tables for math exploration.",
     "whenToUse": "Use when the learner needs to visualize equations, compare multiple functions, inspect points, or manipulate table-driven data.",
     "promptPath": "sparks/skills/desmos-graph.md"
+  },
+  "code": {
+    "name": "Code Spark",
+    "description": "Create a tiny editable code workspace that can run provider-backed TypeScript or Python commands.",
+    "whenToUse": "Use when the learner needs to edit a small file, run code, inspect output, and make one focused repair inside chat.",
+    "promptPath": "sparks/skills/code.md"
+  },
+  "test": {
+    "name": "Test Spark",
+    "description": "Create a tiny code challenge with visible checks only.",
+    "whenToUse": "Use when the learner should repair code by making tests fail, reading feedback, and iterating until visible checks pass.",
+    "promptPath": "sparks/skills/test.md"
   }
 }
 );

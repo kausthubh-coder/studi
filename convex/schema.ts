@@ -118,6 +118,128 @@ export default defineSchema({
       "createdAt",
     ]),
 
+  codeSparkSessions: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    messageId: v.optional(v.string()),
+    sparkId: v.string(),
+    title: v.string(),
+    mode: v.union(v.literal("workspace"), v.literal("challenge")),
+    language: v.union(
+      v.literal("typescript"),
+      v.literal("python"),
+      v.literal("c"),
+      v.literal("rust"),
+      v.literal("mixed"),
+    ),
+    provider: v.union(
+      v.literal("vercel_sandbox"),
+      v.literal("daytona"),
+      v.literal("e2b"),
+      v.literal("local_fake"),
+      v.literal("unavailable"),
+    ),
+    providerStatus: v.union(
+      v.literal("configured"),
+      v.literal("unconfigured"),
+      v.literal("unavailable"),
+      v.literal("test_only"),
+    ),
+    providerSessionId: v.optional(v.string()),
+    providerSnapshotId: v.optional(v.string()),
+    status: v.union(
+      v.literal("creating"),
+      v.literal("ready"),
+      v.literal("running"),
+      v.literal("failed"),
+      v.literal("archived"),
+      v.literal("unavailable"),
+    ),
+    activePath: v.string(),
+    runCommand: v.string(),
+    testCommand: v.string(),
+    version: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastAccessedAt: v.number(),
+    expiresAt: v.optional(v.number()),
+  })
+    .index("by_userId_and_threadId", ["userId", "threadId"])
+    .index("by_userId_threadId_sparkId", ["userId", "threadId", "sparkId"]),
+
+  codeSparkFiles: defineTable({
+    sessionId: v.id("codeSparkSessions"),
+    path: v.string(),
+    language: v.union(
+      v.literal("typescript"),
+      v.literal("python"),
+      v.literal("c"),
+      v.literal("rust"),
+      v.literal("mixed"),
+    ),
+    contents: v.string(),
+    version: v.number(),
+    hash: v.string(),
+    editable: v.boolean(),
+    role: v.union(
+      v.literal("starter"),
+      v.literal("solution"),
+      v.literal("test"),
+      v.literal("hidden_test"),
+      v.literal("config"),
+      v.literal("readme"),
+    ),
+    updatedAt: v.number(),
+  })
+    .index("by_sessionId", ["sessionId"])
+    .index("by_sessionId_and_path", ["sessionId", "path"]),
+
+  codeSparkChecks: defineTable({
+    sessionId: v.id("codeSparkSessions"),
+    checkId: v.string(),
+    label: v.string(),
+    command: v.string(),
+    hidden: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_sessionId", ["sessionId"])
+    .index("by_sessionId_and_checkId", ["sessionId", "checkId"]),
+
+  codeSparkRuns: defineTable({
+    sessionId: v.id("codeSparkSessions"),
+    version: v.number(),
+    kind: v.union(
+      v.literal("run"),
+      v.literal("test"),
+      v.literal("preview"),
+      v.literal("inspect"),
+    ),
+    provider: v.union(
+      v.literal("vercel_sandbox"),
+      v.literal("daytona"),
+      v.literal("e2b"),
+      v.literal("local_fake"),
+      v.literal("unavailable"),
+    ),
+    command: v.optional(v.string()),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("passed"),
+      v.literal("failed"),
+      v.literal("timed_out"),
+      v.literal("unavailable"),
+    ),
+    stdout: v.optional(v.string()),
+    stderr: v.optional(v.string()),
+    exitCode: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+    timedOut: v.boolean(),
+    triggeredBy: v.union(v.literal("user"), v.literal("agent")),
+    createdAt: v.number(),
+  }).index("by_sessionId_and_createdAt", ["sessionId", "createdAt"]),
+
   waitlistWebhookEvents: defineTable({
     source: v.literal("tally_waitlist"),
     dedupeKey: v.string(),

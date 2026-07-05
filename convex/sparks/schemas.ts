@@ -15,9 +15,11 @@ export const createSparkInputSchema = z.object({
       "quiz",
       "flash_card",
       "desmos_graph",
+      "code",
+      "test",
     ])
     .describe(
-      "Spark id to generate. Use scene, quiz, flash_card, or desmos_graph.",
+      "Spark id to generate. Use scene, quiz, flash_card, desmos_graph, code, or test.",
     ),
   context: z
     .string()

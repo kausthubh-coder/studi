@@ -5,6 +5,7 @@ import DesmosGraphScene from "@/components/sparks/scenes/DesmosGraphScene";
 import HtmlCssJsSandboxScene from "@/components/sparks/scenes/HtmlCssJsSandboxScene";
 import QuizScene from "@/components/sparks/scenes/QuizScene";
 import FlashCardScene from "@/components/sparks/scenes/FlashCardScene";
+import CodeSparkScene from "@/components/sparks/scenes/CodeSparkScene";
 import { getSparkTypeLabel, type SparkArtifact } from "@/lib/sparks/contracts";
 import { IconSparkle, IconExpand } from "@/components/studi-chat/icons";
 
@@ -25,6 +26,7 @@ function getBadgeClass(kind: SparkArtifact["kind"]): string {
   if (kind === "spark_quiz") return "badge-quiz";
   if (kind === "spark_flash_card") return "badge-flash";
   if (kind === "spark_desmos_graph") return "badge-desmos";
+  if (kind === "spark_code") return "badge-code";
   return "badge-scene";
 }
 
@@ -36,7 +38,9 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
   expandedSparkInstanceId,
 }: SparkSceneRendererProps) {
   const isExpandable =
-    artifact.kind === "spark_scene" || artifact.kind === "spark_desmos_graph";
+    artifact.kind === "spark_scene" ||
+    artifact.kind === "spark_desmos_graph" ||
+    artifact.kind === "spark_code";
   const isExpanded =
     isExpandable && expandedSparkInstanceId === sparkInstanceId;
   const badgeClass = getBadgeClass(artifact.kind);
@@ -78,6 +82,17 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
       break;
     case "spark_desmos_graph":
       scene = <DesmosGraphScene payload={artifact.payload} isExpanded={false} />;
+      break;
+    case "spark_code":
+      scene = (
+        <CodeSparkScene
+          payload={artifact.payload}
+          title={artifact.title}
+          threadId={threadId}
+          sparkId={artifact.artifactId ?? sparkInstanceId}
+          isExpanded={false}
+        />
+      );
       break;
   }
 

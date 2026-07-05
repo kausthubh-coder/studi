@@ -18,6 +18,8 @@ describe("spark contracts", () => {
       "quiz",
       "flash_card",
       "desmos_graph",
+      "code",
+      "test",
     ]);
     expect(isSparkType("code_playground")).toBe(false);
     expect(isSparkType("web_playground")).toBe(false);

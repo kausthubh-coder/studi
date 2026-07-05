@@ -22,6 +22,8 @@ const sparkSkillPromptPathById: Record<SparkType, string> = {
   quiz: "sparks/skills/quiz.md",
   flash_card: "sparks/skills/flash-card.md",
   desmos_graph: "sparks/skills/desmos-graph.md",
+  code: "sparks/skills/code.md",
+  test: "sparks/skills/test.md",
 };
 
 type PromptFile = {

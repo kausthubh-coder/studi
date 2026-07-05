@@ -6,6 +6,7 @@ import HtmlCssJsSandboxScene from "@/components/sparks/scenes/HtmlCssJsSandboxSc
 import DesmosGraphScene from "@/components/sparks/scenes/DesmosGraphScene";
 import QuizScene from "@/components/sparks/scenes/QuizScene";
 import FlashCardScene from "@/components/sparks/scenes/FlashCardScene";
+import CodeSparkScene from "@/components/sparks/scenes/CodeSparkScene";
 import { IconSparkle } from "@/components/studi-chat/icons";
 import { getSparkTypeLabel } from "@/lib/sparks/contracts";
 
@@ -14,6 +15,7 @@ function getBadgeClass(kind: string): string {
   if (kind === "spark_quiz") return "badge-quiz";
   if (kind === "spark_flash_card") return "badge-flash";
   if (kind === "spark_desmos_graph") return "badge-desmos";
+  if (kind === "spark_code") return "badge-code";
   return "badge-scene";
 }
 
@@ -39,6 +41,17 @@ export const SparkPanel = memo(function SparkPanel({
       break;
     case "spark_desmos_graph":
       scene = <DesmosGraphScene payload={artifact.payload} isExpanded />;
+      break;
+    case "spark_code":
+      scene = (
+        <CodeSparkScene
+          payload={artifact.payload}
+          title={artifact.title}
+          threadId={spark.threadId}
+          sparkId={artifact.artifactId ?? spark.sparkInstanceId}
+          isExpanded
+        />
+      );
       break;
   }
 

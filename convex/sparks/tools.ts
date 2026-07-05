@@ -17,17 +17,21 @@ import { sparkSkillById } from "../../lib/sparks/catalog";
 import { getSparkWorkerOutputRequirements } from "../../lib/sparks/worker-output-requirements";
 import {
   getSparkTypeLabel,
+  normalizeCodeSparkDraft,
   normalizeSparkFlashCardDraft,
   normalizeCreateSparkInput,
   normalizeSparkQuizDraft,
   type FlashCardSparkDraft,
+  type CodeSparkDraft,
   normalizeSparkDesmosGraphDraft,
   normalizeSparkSceneDraft,
+  validateCodeSparkPayload,
   type CreateSparkToolInput,
   type CreateSparkToolResult,
   type QuizSparkDraft,
   type SparkType,
 } from "../../lib/sparks/contracts";
+import { getCodeSparkProviderConfig } from "../../lib/code-sparks/config";
 import { internal } from "../_generated/api";
 import {
   createSparkInputSchema,
@@ -1108,6 +1112,156 @@ async function buildFlashCardSpark(
   }
 }
 
+function inferCodeSparkLanguage(context: string): "typescript" | "python" {
+  return /\bpython|py|pandas|numpy|list|dict\b/i.test(context)
+    ? "python"
+    : "typescript";
+}
+
+function buildCodeSpark(
+  input: CreateSparkToolInput,
+  sparkType: "code" | "test",
+): CreateSparkToolResultWithUsage {
+  const language = inferCodeSparkLanguage(input.context);
+  const providerConfig = getCodeSparkProviderConfig();
+  const title =
+    input.title ??
+    (sparkType === "test"
+      ? language === "python"
+        ? "Python Test Spark"
+        : "TypeScript Test Spark"
+      : language === "python"
+        ? "Python Code Spark"
+        : "TypeScript Code Spark");
+  const summary =
+    input.summary ??
+    "Edit the starter file, run it, then use the visible check feedback to make the smallest fix.";
+
+  const draft: CodeSparkDraft =
+    language === "python"
+      ? {
+          title,
+          summary,
+          workerSummary:
+            "Created a provider-backed Python Code Spark starter artifact.",
+          artifactId: createArtifactId(),
+          payload: {
+            mode: sparkType === "test" ? "challenge" : "workspace",
+            language,
+            instructions:
+              "Predict the output, run the file, then change answer() so the visible check passes.",
+            provider: providerConfig.provider,
+            providerStatus:
+              providerConfig.provider === "vercel_sandbox"
+                ? "configured"
+                : providerConfig.provider === "local_fake"
+                  ? "test_only"
+                  : "unavailable",
+            activePath: "main.py",
+            files: [
+              {
+                path: "main.py",
+                language,
+                contents:
+                  "def answer():\n    # Try to make the visible check pass.\n    return None\n\nprint(answer())\n",
+                editable: true,
+                role: "starter",
+              },
+              {
+                path: "README.md",
+                language,
+                contents:
+                  "Change answer() in main.py, then run the visible check.",
+                editable: false,
+                role: "readme",
+              },
+            ],
+            tests: [
+              {
+                id: "visible-answer",
+                label: "answer() returns a concrete value",
+                command: "python3 main.py",
+                hidden: false,
+              },
+            ],
+            hiddenTestCount: 0,
+            runCommand: "python3 main.py",
+            testCommand: "python3 main.py",
+          },
+        }
+      : {
+          title,
+          summary,
+          workerSummary:
+            "Created a provider-backed TypeScript Code Spark starter artifact.",
+          artifactId: createArtifactId(),
+          payload: {
+            mode: sparkType === "test" ? "challenge" : "workspace",
+            language,
+            instructions:
+              "Predict what add() returns, run the visible check, then repair the function.",
+            provider: providerConfig.provider,
+            providerStatus:
+              providerConfig.provider === "vercel_sandbox"
+                ? "configured"
+                : providerConfig.provider === "local_fake"
+                  ? "test_only"
+                  : "unavailable",
+            activePath: "src/add.ts",
+            files: [
+              {
+                path: "src/add.ts",
+                language,
+                contents:
+                  "export function add(a: number, b: number): number {\n  // What should this return?\n  return 0;\n}\n",
+                editable: true,
+                role: "starter",
+              },
+              {
+                path: "tests/add.check.ts",
+                language,
+                contents:
+                  "import { add } from '../src/add.ts';\n\nif (add(2, 3) !== 5) {\n  throw new Error('Expected add(2, 3) to equal 5');\n}\n\nconsole.log('visible check passed');\n",
+                editable: false,
+                role: "test",
+              },
+            ],
+            tests: [
+              {
+                id: "visible-add",
+                label: "adds visible values",
+                command: "node tests/add.check.ts",
+                hidden: false,
+              },
+            ],
+            hiddenTestCount: 0,
+            runCommand: "node tests/add.check.ts",
+            testCommand: "node tests/add.check.ts",
+          },
+        };
+
+  const artifact = normalizeCodeSparkDraft(draft, sparkType);
+  const validation = validateCodeSparkPayload(artifact.payload);
+  if (!validation.ok) {
+    return {
+      status: "failed",
+      workerSummary: "Code Spark template failed validation.",
+      warnings: validation.warnings,
+      error: validation.errors.join(" "),
+    };
+  }
+
+  return {
+    status: "success",
+    workerSummary: draft.workerSummary ?? "Created Code Spark starter artifact.",
+    warnings: [
+      ...validation.warnings,
+      ...(providerConfig.reason ? [providerConfig.reason] : []),
+    ],
+    artifact,
+  };
+}
+
 function createSparkToolWithModels(workerModels: SparkWorkerModels) {
   return createTool<CreateSparkToolInput, CreateSparkToolResult>({
     description:
@@ -1125,7 +1279,9 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
             ? workerModels.sparkDesmos
             : input.sparkId === "quiz"
               ? workerModels.sparkQuiz
-              : workerModels.sparkFlash;
+              : input.sparkId === "flash_card"
+                ? workerModels.sparkFlash
+                : "code_spark_template";
 
       try {
         if (input.sparkId === "scene") {
@@ -1152,6 +1308,8 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
             workerModels,
             options.abortSignal,
           );
+        } else if (input.sparkId === "code" || input.sparkId === "test") {
+          result = buildCodeSpark(input, input.sparkId);
         } else {
           result = {
             status: "failed",

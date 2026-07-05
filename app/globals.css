@@ -983,6 +983,10 @@ body::after {
   --spark-shadow: var(--accent4);
 }
 
+.spark-card[data-spark-kind="spark_code"] {
+  --spark-shadow: var(--accent3);
+}
+
 /* Integrated card header (scene / desmos) */
 .spark-card-header {
   display: flex;
@@ -1009,6 +1013,10 @@ body::after {
 
 [data-spark-kind="spark_desmos_graph"]>.spark-card-header {
   background: #9b6dd4;
+}
+
+[data-spark-kind="spark_code"]>.spark-card-header {
+  background: #2f6f8f;
 }
 
 .spark-card-header .spark-type-badge {
@@ -1357,6 +1365,10 @@ body::after {
   background: color-mix(in srgb, var(--accent4) 7%, var(--bg-alt) 93%);
 }
 
+[data-spark-kind="spark_code"] .spark-panel-header {
+  background: color-mix(in srgb, #2f6f8f 8%, var(--bg-alt) 92%);
+}
+
 .spark-panel-title {
   font-family: var(--font-dm-serif), Georgia, serif;
   font-size: 1rem;
@@ -1408,6 +1420,244 @@ body::after {
 .spark-panel-body .spark-scene-content iframe {
   flex: 1;
   height: 100% !important;
+}
+
+/* ── Code/Test spark ──────────────────────────────────────── */
+
+.code-spark-shell {
+  display: flex;
+  min-height: 360px;
+  flex-direction: column;
+  background: #fffaf3;
+  color: var(--fg);
+}
+
+.code-spark-shell[data-expanded="false"] {
+  min-height: 420px;
+  max-height: 560px;
+}
+
+.code-spark-shell[data-expanded="true"] {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.code-spark-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 0.65rem 0.75rem;
+  background: #fff7e8;
+}
+
+.code-spark-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.code-spark-meta span {
+  border: 1px solid color-mix(in srgb, #2f6f8f 24%, var(--border) 76%);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #244f66;
+  padding: 0.18rem 0.5rem;
+  text-transform: capitalize;
+}
+
+.code-spark-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.4rem;
+}
+
+.code-spark-actions button {
+  min-height: 44px;
+  min-width: 44px;
+  border: 1px solid #1c1208;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--fg);
+  cursor: pointer;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.45rem 0.75rem;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.code-spark-actions button:hover:not(:disabled) {
+  background: #edf7f5;
+  transform: translateY(-1px);
+}
+
+.code-spark-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.code-spark-body {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: 168px minmax(0, 1fr) minmax(220px, 0.62fr);
+}
+
+.code-spark-files {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+  background: #f8efe2;
+  padding: 0.55rem;
+}
+
+.code-spark-files button {
+  display: flex;
+  min-height: 44px;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+}
+
+.code-spark-files button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-spark-files button small {
+  color: var(--fg-faint);
+  font-size: 0.65rem;
+}
+
+.code-spark-files button.active,
+.code-spark-files button:hover {
+  border-color: color-mix(in srgb, #2f6f8f 28%, var(--border) 72%);
+  background: #ffffff;
+  color: var(--fg);
+}
+
+.code-spark-editor {
+  min-width: 0;
+  min-height: 0;
+  background: #111820;
+}
+
+.code-spark-editor pre {
+  height: 100%;
+  margin: 0;
+  overflow: auto;
+  background: #111820;
+  color: #f5efe7;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  padding: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.code-spark-output {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: #ffffff;
+}
+
+.code-spark-output-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border-faint);
+  padding: 0.6rem 0.7rem;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.75rem;
+}
+
+.code-spark-output-head span {
+  color: var(--fg-muted);
+  font-size: 0.7rem;
+}
+
+.code-spark-output pre {
+  min-height: 0;
+  flex: 1;
+  margin: 0;
+  overflow: auto;
+  color: var(--fg);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+}
+
+.code-spark-error {
+  border-top: 1px solid #f1c5bc;
+  background: #fff0ee;
+  color: #8b352f;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.55rem 0.75rem;
+}
+
+@media (max-width: 760px) {
+  .code-spark-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .code-spark-actions button {
+    flex: 1;
+  }
+
+  .code-spark-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(220px, 1fr) minmax(180px, 0.7fr);
+  }
+
+  .code-spark-files {
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .code-spark-files button {
+    width: min(220px, 70vw);
+    flex-shrink: 0;
+  }
+
+  .code-spark-output {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
 }
 
 /* ── Quiz spark ────────────────────────────────────────────── */
