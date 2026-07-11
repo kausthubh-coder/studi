@@ -163,13 +163,13 @@ body::after {
 .sidebar-thread-delete-btn {
   position: absolute;
   top: 50%;
-  right: 0.72rem;
+  right: 0.18rem;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.45rem;
-  height: 1.45rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 999px;
   border: 1px solid transparent;
   color: var(--fg-faint);
@@ -371,31 +371,13 @@ body::after {
   box-shadow: 8px 8px 0px #1c1208;
 }
 
-/* Chat composer wrapper — floating over scroll content */
+/* Chat composer wrapper — occupies layout space so responses cannot hide below it. */
 .composer-footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex-shrink: 0;
   z-index: 10;
   padding: 0 1.5rem 1rem;
-  pointer-events: none;
-}
-
-.composer-footer > * {
-  pointer-events: auto;
-  position: relative;
-  z-index: 1;
-}
-
-.composer-footer::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  top: -2rem;
-  z-index: 0;
-  background: linear-gradient(to bottom, transparent, var(--bg) 60%);
-  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--bg) 28%);
 }
 
 .composer-card textarea {
@@ -2624,13 +2606,11 @@ body::after {
   color: var(--code-spark-muted);
 }
 
-.code-spark-test-results[data-tone="passed"]
-  .code-spark-test-results-status {
+.code-spark-test-results[data-tone="passed"] .code-spark-test-results-status {
   color: var(--code-spark-green);
 }
 
-.code-spark-test-results[data-tone="failed"]
-  .code-spark-test-results-status {
+.code-spark-test-results[data-tone="failed"] .code-spark-test-results-status {
   color: var(--code-spark-red);
 }
 

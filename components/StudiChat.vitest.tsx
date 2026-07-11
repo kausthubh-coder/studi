@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   generateUploadUrl: vi.fn(),
   saveAttachment: vi.fn(),
   syncBillingProfile: vi.fn(),
+  uiMessages: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("next/link", () => ({
@@ -32,7 +33,7 @@ vi.mock("@clerk/nextjs", () => ({
 
 vi.mock("@convex-dev/agent/react", () => ({
   useUIMessages: () => ({
-    results: [],
+    results: mocks.uiMessages,
     status: "Exhausted",
     loadMore: vi.fn(),
   }),
@@ -110,6 +111,7 @@ describe("StudiChat follow-up sending", () => {
       planKey: "free_onboarding",
       status: "onboarding",
     });
+    mocks.uiMessages = [];
 
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -125,9 +127,12 @@ describe("StudiChat follow-up sending", () => {
   it("sends follow-up messages through the chat action, not the raw mutation", async () => {
     render(<StudiChat />);
 
-    fireEvent.change(screen.getByPlaceholderText("What would you like to learn?"), {
-      target: { value: "Explain slope" },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to learn?"),
+      {
+        target: { value: "Explain slope" },
+      },
+    );
     fireEvent.click(screen.getByLabelText("Send message"));
 
     await waitFor(() => {
@@ -139,9 +144,8 @@ describe("StudiChat follow-up sending", () => {
       );
     });
 
-    const followupComposer = await screen.findByPlaceholderText(
-      "Ask a follow-up...",
-    );
+    const followupComposer =
+      await screen.findByPlaceholderText("Ask a follow-up...");
     fireEvent.change(followupComposer, {
       target: { value: "Can you give another example?" },
     });
@@ -160,5 +164,35 @@ describe("StudiChat follow-up sending", () => {
       );
     });
     expect(mocks.rawSendMessageMutation).not.toHaveBeenCalled();
+  });
+
+  it("keeps a durable live status above the composer while agent work is active", async () => {
+    const view = render(<StudiChat />);
+
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to learn?"),
+      {
+        target: { value: "Build a visual explanation" },
+      },
+    );
+    fireEvent.click(screen.getByLabelText("Send message"));
+
+    await screen.findByPlaceholderText("Ask a follow-up...");
+    mocks.uiMessages = [
+      {
+        key: "assistant_streaming",
+        role: "assistant",
+        status: "streaming",
+        parts: [],
+      },
+    ];
+    view.rerender(<StudiChat />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /working on your next step/i,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /stay visible above the composer/i,
+    );
   });
 });

@@ -146,12 +146,6 @@ export default function StudiChat() {
     { initialNumItems: 30, stream: true },
   );
 
-  useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
-  }, [selectedThreadId, uiMessages.results.length]);
-
   const currentAgentState = useMemo<AgentUiState>(
     () => deriveAgentUiState(uiMessages.results),
     [uiMessages.results],
@@ -606,6 +600,7 @@ export default function StudiChat() {
                 onPaste={onPaste}
                 onUpload={uploadFiles}
                 onRemoveAttachment={removeAttachment}
+                agentPhase={currentAgentState.phase}
               />
             </div>
 

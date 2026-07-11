@@ -8,6 +8,7 @@ import {
   IconX,
 } from "@/components/studi-chat/icons";
 import type { PendingAttachment } from "@/components/studi-chat/types";
+import type { AgentUiState } from "@/components/studi-chat/MessageRenderer";
 
 export function Composer({
   pendingAttachments,
@@ -20,6 +21,7 @@ export function Composer({
   onPaste,
   onUpload,
   onRemoveAttachment,
+  agentPhase = "idle",
   variant = "chat",
 }: {
   pendingAttachments: PendingAttachment[];
@@ -32,6 +34,7 @@ export function Composer({
   onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => Promise<void>;
   onUpload: (files: FileList) => Promise<void>;
   onRemoveAttachment: (attachmentId: Id<"attachments">) => void;
+  agentPhase?: AgentUiState["phase"];
   variant?: "chat" | "welcome";
 }) {
   const isWelcome = variant === "welcome";
@@ -74,121 +77,121 @@ export function Composer({
       className={isWelcome ? "composer-card is-welcome" : "composer-card"}
     >
       <>
-          {pendingAttachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 px-4 pt-3">
-              {pendingAttachments.map((attachment) => (
-                <div
-                  key={attachment.attachmentId}
-                  className="flex items-center gap-1.5 rounded-lg border border-border-faint bg-bg-alt px-2.5 py-1 text-xs text-fg-muted"
+        {pendingAttachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-4 pt-3">
+            {pendingAttachments.map((attachment) => (
+              <div
+                key={attachment.attachmentId}
+                className="flex items-center gap-1.5 rounded-lg border border-border-faint bg-bg-alt px-2.5 py-1 text-xs text-fg-muted"
+              >
+                {attachment.previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={attachment.previewUrl}
+                    alt={attachment.filename ?? "img"}
+                    className="h-6 w-6 rounded object-cover"
+                  />
+                ) : null}
+                <span className="max-w-36 truncate">
+                  {attachment.filename ?? "file"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveAttachment(attachment.attachmentId)}
+                  className="rounded p-0.5 transition-opacity hover:opacity-60"
                 >
-                  {attachment.previewUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={attachment.previewUrl}
-                      alt={attachment.filename ?? "img"}
-                      className="h-6 w-6 rounded object-cover"
-                    />
-                  ) : null}
-                  <span className="max-w-36 truncate">
-                    {attachment.filename ?? "file"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveAttachment(attachment.attachmentId)}
-                    className="rounded p-0.5 transition-opacity hover:opacity-60"
-                  >
-                    <IconX />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+                  <IconX />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            onPaste={(e) => {
-              void onPaste(e);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (canSend) {
-                  const form = e.currentTarget.closest("form");
-                  if (form) form.requestSubmit();
-                }
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => onInputChange(e.target.value)}
+          onPaste={(e) => {
+            void onPaste(e);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (canSend) {
+                const form = e.currentTarget.closest("form");
+                if (form) form.requestSubmit();
+              }
+            }
+          }}
+          placeholder={
+            isWelcome ? "What would you like to learn?" : "Ask a follow-up..."
+          }
+          rows={isWelcome ? 3 : 1}
+          className={isWelcome ? "min-h-[80px]" : "min-h-[42px] max-h-40"}
+        />
+
+        <div className="composer-bottom-row">
+          <div style={{ position: "relative" }}>
+            <button
+              ref={plusBtnRef}
+              type="button"
+              className={`composer-plus-btn${plusMenuOpen ? " is-open" : ""}`}
+              aria-label="More options"
+              onClick={() => setPlusMenuOpen((v) => !v)}
+            >
+              <IconPlus />
+            </button>
+
+            {plusMenuOpen && (
+              <div ref={plusMenuRef} className="composer-plus-menu">
+                <button
+                  type="button"
+                  className="composer-plus-menu-item"
+                  onClick={() => {
+                    closePlusMenu();
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  <IconPaperclip />
+                  <span>Upload file</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) {
+                void onUpload(e.target.files);
+                e.currentTarget.value = "";
               }
             }}
-            placeholder={
-              isWelcome ? "What would you like to learn?" : "Ask a follow-up..."
-            }
-            rows={isWelcome ? 3 : 1}
-            className={isWelcome ? "min-h-[80px]" : "min-h-[42px] max-h-40"}
           />
 
-          <div className="composer-bottom-row">
-            <div style={{ position: "relative" }}>
-              <button
-                ref={plusBtnRef}
-                type="button"
-                className={`composer-plus-btn${plusMenuOpen ? " is-open" : ""}`}
-                aria-label="More options"
-                onClick={() => setPlusMenuOpen((v) => !v)}
-              >
-                <IconPlus />
-              </button>
-
-              {plusMenuOpen && (
-                <div ref={plusMenuRef} className="composer-plus-menu">
-                  <button
-                    type="button"
-                    className="composer-plus-menu-item"
-                    onClick={() => {
-                      closePlusMenu();
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    <IconPaperclip />
-                    <span>Upload file</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files?.length) {
-                  void onUpload(e.target.files);
-                  e.currentTarget.value = "";
-                }
-              }}
-            />
-
-            <button
-              type="submit"
-              disabled={!canSend}
-              className="composer-send-btn"
-              aria-label="Send message"
-            >
-              {isComposerBusy ? (
-                <span
-                  className="status-loader-ring"
-                  style={{
-                    borderColor: "rgba(255,255,255,0.35)",
-                    borderTopColor: "#fff",
-                  }}
-                  aria-hidden
-                />
-              ) : (
-                <IconArrow />
-              )}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={!canSend}
+            className="composer-send-btn"
+            aria-label="Send message"
+          >
+            {isComposerBusy ? (
+              <span
+                className="status-loader-ring"
+                style={{
+                  borderColor: "rgba(255,255,255,0.35)",
+                  borderTopColor: "#fff",
+                }}
+                aria-hidden
+              />
+            ) : (
+              <IconArrow />
+            )}
+          </button>
+        </div>
       </>
     </form>
   );
@@ -197,8 +200,30 @@ export function Composer({
     return composerCard;
   }
 
+  const progressLabel =
+    agentPhase === "spark"
+      ? "Studi is building your interactive Spark. This can take about a minute."
+      : agentPhase === "tool"
+        ? "Studi is preparing the next learning step."
+        : "Studi is working on your next step.";
+
   return (
-    <div className="composer-footer">
+    <div className="composer-footer" data-testid="chat-composer">
+      {agentPhase !== "idle" ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="agent-progress-notice mx-auto mb-2 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-amber-950 shadow-sm"
+          style={{ maxWidth: "var(--column-max)" }}
+        >
+          <span className="status-loader-ring mt-0.5 shrink-0" aria-hidden />
+          <span className="text-xs leading-relaxed">
+            <strong className="block text-sm">{progressLabel}</strong>
+            New responses and build progress will stay visible above the
+            composer.
+          </span>
+        </div>
+      ) : null}
       <div className="mx-auto" style={{ maxWidth: "var(--column-max)" }}>
         {composerCard}
         <p className="mt-2 text-center font-heading text-[10px] italic text-fg-faint">
