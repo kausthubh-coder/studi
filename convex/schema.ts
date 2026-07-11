@@ -39,6 +39,21 @@ export default defineSchema({
     .index("by_threadId", ["threadId"])
     .index("by_userId_and_threadId", ["userId", "threadId"]),
 
+  chatRequestReceipts: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    requestId: v.string(),
+    promptMessageId: v.string(),
+    order: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_userId_and_threadId_and_requestId", [
+      "userId",
+      "threadId",
+      "requestId",
+    ])
+    .index("by_userId_and_threadId", ["userId", "threadId"]),
+
   attachments: defineTable({
     userId: v.string(),
     storageId: v.id("_storage"),

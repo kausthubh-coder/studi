@@ -9,6 +9,8 @@ import { modules } from "./test.setup";
 
 const internalBillingApi = internal as unknown as {
   billing: {
+    assertCanSendMessageInternal: FunctionReference<"mutation", "internal">;
+    assertCanUseAttachmentsInternal: FunctionReference<"mutation", "internal">;
     assertCanUseCodeSparkRunInternal: FunctionReference<"mutation", "internal">;
     devResetTestBillingUsageInternal: FunctionReference<"mutation", "internal">;
     incrementFreeOnboardingUsageInternal: FunctionReference<"mutation", "internal">;
@@ -116,6 +118,91 @@ describe("dev test billing reset", () => {
           );
         }
       }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses the paid subscription lifecycle for chat and attachment admission", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-10T12:00:00.000Z"));
+    try {
+      const cases = [
+        { status: "active", currentPeriodEnd: undefined, allowed: true },
+        {
+          status: "canceled",
+          currentPeriodEnd: Date.parse("2026-08-01T00:00:00.000Z"),
+          allowed: true,
+        },
+        {
+          status: "canceled",
+          currentPeriodEnd: Date.parse("2026-07-01T00:00:00.000Z"),
+          allowed: false,
+        },
+        { status: "past_due", currentPeriodEnd: undefined, allowed: false },
+        { status: "inactive", currentPeriodEnd: undefined, allowed: false },
+      ] as const;
+
+      for (const [index, testCase] of cases.entries()) {
+        const t = testConvex();
+        const userId = `paid_lifecycle_${testCase.status}_${index}`;
+        await t.mutation(internalBillingApi.billing.syncBillingProfileInternal, {
+          userId,
+          planKey: "intro",
+          status: testCase.status,
+          currentPeriodEnd: testCase.currentPeriodEnd,
+        });
+
+        const chatRequest = t.mutation(
+          internalBillingApi.billing.assertCanSendMessageInternal,
+          { userId },
+        );
+        const attachmentRequest = t.mutation(
+          internalBillingApi.billing.assertCanUseAttachmentsInternal,
+          { userId },
+        );
+
+        if (testCase.allowed) {
+          await expect(chatRequest).resolves.toMatchObject({
+            planKey: "intro",
+            status: testCase.status,
+          });
+          await expect(attachmentRequest).resolves.toMatchObject({
+            planKey: "intro",
+            status: testCase.status,
+          });
+        } else {
+          await expect(chatRequest).rejects.toThrow(
+            "Text tutoring requires an active paid plan.",
+          );
+          await expect(attachmentRequest).rejects.toThrow(
+            "Uploads require an active paid plan.",
+          );
+        }
+
+        const viewerState = await t
+          .withIdentity({ subject: userId })
+          .query(api.billing.getViewerBillingState, {});
+        expect(viewerState.lockedSurfaces).toEqual({
+          chat: !testCase.allowed,
+          attachments: !testCase.allowed,
+        });
+      }
+
+      const freeT = testConvex();
+      await expect(
+        freeT.mutation(internalBillingApi.billing.assertCanSendMessageInternal, {
+          userId: "guided_preview_user",
+        }),
+      ).resolves.toMatchObject({
+        planKey: "free_onboarding",
+        status: "onboarding",
+      });
+      await expect(
+        freeT.mutation(internalBillingApi.billing.assertCanUseAttachmentsInternal, {
+          userId: "guided_preview_user",
+        }),
+      ).rejects.toThrow("Uploads are available on paid plans only.");
     } finally {
       vi.useRealTimers();
     }

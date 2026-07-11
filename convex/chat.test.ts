@@ -12,6 +12,7 @@ const internalTestApi = internal as unknown as {
     beginAssistantGenerationInternal: FunctionReference<"mutation", "internal">;
     completeAssistantGenerationInternal: FunctionReference<"mutation", "internal">;
     cleanupFailedAssistantTurnInternal: FunctionReference<"mutation", "internal">;
+    deleteThreadRecordInternal: FunctionReference<"mutation", "internal">;
     expireAssistantGenerationInternal: FunctionReference<"mutation", "internal">;
     getGenerationControlInternal: FunctionReference<"query", "internal">;
     saveAssistantCancellationMessageInternal: FunctionReference<"mutation", "internal">;
@@ -120,6 +121,54 @@ describe("chat Convex auth and ownership", () => {
       planKey: "intro",
       status: "active",
     });
+  });
+
+  it("fails chat and both attachment upload stages closed for past-due plans", async () => {
+    const t = testConvex();
+    const ownedThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "past_due_user",
+      title: "Owned",
+    });
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "past_due_user",
+      threadId: ownedThread._id,
+      title: "Owned",
+      lastMessageAt: 1,
+    });
+    await t.mutation(internal.billing.syncBillingProfileInternal, {
+      userId: "past_due_user",
+      planKey: "intro",
+      status: "past_due",
+    });
+    const storageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(["diagram"], { type: "text/plain" })),
+    );
+    const authed = t.withIdentity({ subject: "past_due_user" });
+
+    await expect(authed.mutation(api.chat.generateUploadUrl, {})).rejects.toThrow(
+      "Uploads require an active paid plan.",
+    );
+    await expect(
+      authed.mutation(api.chat.saveAttachment, {
+        storageId,
+        filename: "diagram.txt",
+        mimeType: "text/plain",
+        size: 7,
+      }),
+    ).rejects.toThrow("Uploads require an active paid plan.");
+    await expect(
+      authed.mutation(api.chat.sendMessage, {
+        threadId: ownedThread._id,
+        prompt: "Explain this diagram",
+        requestId: "past_due_request",
+      }),
+    ).rejects.toThrow("Text tutoring requires an active paid plan.");
+
+    const persisted = await t.run(async (ctx) => ({
+      attachments: await ctx.db.query("attachments").collect(),
+      receipts: await ctx.db.query("chatRequestReceipts").collect(),
+    }));
+    expect(persisted).toEqual({ attachments: [], receipts: [] });
   });
 
   it("enforces thread ownership helper boundaries", async () => {
@@ -511,7 +560,6 @@ describe("chat Convex auth and ownership", () => {
       title: "New Thread",
       lastMessageAt: 1,
     });
-
     const authed = t.withIdentity({ subject: "user_a" });
     const first = await authed.mutation(api.chat.sendMessage, {
       threadId: agentThread._id,
@@ -538,6 +586,181 @@ describe("chat Convex auth and ownership", () => {
 
     const billing = await authed.query(api.billing.getViewerBillingState, {});
     expect(billing.usage.lifetimeFreePromptCount).toBe(1);
+  });
+
+  it("dedupes a non-adjacent A-to-B-to-A request replay for the same thread", async () => {
+    const t = testConvex();
+    const agentThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "New Thread",
+    });
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      title: "New Thread",
+      lastMessageAt: 1,
+    });
+    await t.mutation(internal.billing.syncBillingProfileInternal, {
+      userId: "user_a",
+      planKey: "pro",
+      status: "active",
+    });
+
+    const authed = t.withIdentity({ subject: "user_a" });
+    const first = await authed.mutation(api.chat.sendMessage, {
+      threadId: agentThread._id,
+      prompt: "Explain slope",
+      requestId: "request_a",
+    });
+    // Simulate the final request written before the receipt table shipped.
+    await t.run(async (ctx) => {
+      const receipts = await ctx.db.query("chatRequestReceipts").collect();
+      for (const receipt of receipts) {
+        await ctx.db.delete(receipt._id);
+      }
+    });
+    await authed.mutation(api.chat.sendMessage, {
+      threadId: agentThread._id,
+      prompt: "Now explain vectors",
+      requestId: "request_b",
+    });
+    const replay = await authed.mutation(api.chat.sendMessage, {
+      threadId: agentThread._id,
+      prompt: "This changed payload must not create another turn",
+      requestId: "request_a",
+    });
+
+    expect(replay).toEqual({
+      promptMessageId: first.promptMessageId,
+      deduped: true,
+    });
+
+    const messages = await t.query(
+      components.agent.messages.listMessagesByThreadId,
+      {
+        threadId: agentThread._id,
+        order: "asc",
+        excludeToolMessages: true,
+        paginationOpts: { cursor: null, numItems: 20 },
+      },
+    );
+    const userMessages = messages.page.filter(
+      (message) => message.message?.role === "user",
+    );
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages.map((message) => message.text)).not.toContain(
+      "This changed payload must not create another turn",
+    );
+
+    const billing = await authed.query(api.billing.getViewerBillingState, {});
+    expect(billing.usage.textPromptCount).toBe(2);
+
+    const receipts = await t.run(async (ctx) =>
+      ctx.db
+        .query("chatRequestReceipts")
+        .withIndex("by_userId_and_threadId", (q) =>
+          q.eq("userId", "user_a").eq("threadId", agentThread._id),
+        )
+        .collect(),
+    );
+    expect(receipts).toHaveLength(2);
+    expect(receipts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestId: "request_a",
+          promptMessageId: first.promptMessageId,
+          order: expect.any(Number),
+        }),
+        expect.objectContaining({
+          requestId: "request_b",
+          order: expect.any(Number),
+        }),
+      ]),
+    );
+  });
+
+  it("cleans durable request receipts in bounded thread-deletion batches", async () => {
+    vi.useFakeTimers();
+    const t = testConvex();
+    const agentThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Owned",
+    });
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      title: "Owned",
+      lastMessageAt: 1,
+    });
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 65; index += 1) {
+        await ctx.db.insert("chatRequestReceipts", {
+          userId: "user_a",
+          threadId: agentThread._id,
+          requestId: `request_${index}`,
+          promptMessageId: `prompt_${index}`,
+          order: index,
+          createdAt: index,
+        });
+      }
+    });
+
+    await t.mutation(internalTestApi.chat.deleteThreadRecordInternal, {
+      userId: "user_a",
+      threadId: agentThread._id,
+    });
+    const afterFirstBatch = await t.run(async (ctx) =>
+      ctx.db.query("chatRequestReceipts").collect(),
+    );
+    expect(afterFirstBatch).toHaveLength(1);
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const remaining = await t.run(async (ctx) => ({
+      receipts: await ctx.db.query("chatRequestReceipts").collect(),
+      threads: await ctx.db.query("userThreads").collect(),
+    }));
+    expect(remaining).toEqual({ receipts: [], threads: [] });
+  });
+
+  it("scopes the same request id independently across threads", async () => {
+    const t = testConvex();
+    await t.mutation(internal.billing.syncBillingProfileInternal, {
+      userId: "user_a",
+      planKey: "pro",
+      status: "active",
+    });
+    const firstThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "First",
+    });
+    const secondThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Second",
+    });
+    for (const threadId of [firstThread._id, secondThread._id]) {
+      await t.mutation(internal.chat.createThreadRecord, {
+        userId: "user_a",
+        threadId,
+        title: "Owned",
+        lastMessageAt: 1,
+      });
+    }
+
+    const authed = t.withIdentity({ subject: "user_a" });
+    const first = await authed.mutation(api.chat.sendMessage, {
+      threadId: firstThread._id,
+      prompt: "Explain slope",
+      requestId: "shared_request_id",
+    });
+    const second = await authed.mutation(api.chat.sendMessage, {
+      threadId: secondThread._id,
+      prompt: "Explain vectors",
+      requestId: "shared_request_id",
+    });
+
+    expect(first.deduped).toBe(false);
+    expect(second.deduped).toBe(false);
+    expect(second.promptMessageId).not.toBe(first.promptMessageId);
   });
 
   it("queues distinct follow-up action sends in the same thread", async () => {

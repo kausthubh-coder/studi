@@ -438,20 +438,48 @@ async function resolvePlanState(args: {
   planHint?: string;
 }) {
   const profile = await getBillingProfileDoc(args.ctx, args.userId);
+  return resolvePlanStateFromProfile({
+    profile,
+    planHint: args.planHint,
+  });
+}
+
+function resolvePlanStateFromProfile(args: {
+  profile: Doc<"billingProfiles"> | null;
+  planHint?: string;
+}) {
   const hintedPlanKey = normalizePlanKey(args.planHint);
   const planKey =
     args.planHint && hintedPlanKey !== "free_onboarding"
       ? hintedPlanKey
-      : profile?.planKey ?? "free_onboarding";
+      : args.profile?.planKey ?? "free_onboarding";
   const status =
     planKey === "free_onboarding"
       ? "onboarding"
-      : profile?.status ?? "active";
+      : args.profile?.status ?? "active";
 
   return {
     planKey,
     status: normalizeStatus(status),
   };
+}
+
+function hasCurrentPlanAccess(args: {
+  planKey: BillingPlanKey;
+  status: BillingStatus;
+  profile: Doc<"billingProfiles"> | null;
+  at: number;
+}) {
+  if (args.planKey === "free_onboarding") {
+    return true;
+  }
+
+  return (
+    args.status === "active" ||
+    (args.status === "canceled" &&
+      typeof args.profile?.currentPeriodEnd === "number" &&
+      args.profile.currentPeriodEnd > args.at)
+  );
 }
 
 function getUpgradeTarget(planKey: BillingPlanKey): "intro" | "pro" | undefined {
@@ -463,6 +491,7 @@ function getUpgradeTarget(planKey: BillingPlanKey): "intro" | "pro" | undefined 
 function buildViewerBillingState(args: {
   planKey: BillingPlanKey;
   status: BillingStatus;
+  hasCurrentPlanAccess: boolean;
   billingPeriod: string;
   usage: BillingUsageRecord;
   onboarding: {
@@ -479,11 +508,18 @@ function buildViewerBillingState(args: {
     args.onboarding.lifetimeFreeTextAiCostUsd >= caps.freeTextAiCostUsdLimit;
   const paidChatLocked =
     args.usage.textAiCostUsd >= caps.textAiCostUsdLimit || totalBudgetExceeded;
+  const paidLifecycleLocked =
+    args.planKey !== "free_onboarding" && !args.hasCurrentPlanAccess;
   const chatLocked =
-    args.planKey === "free_onboarding" ? freeChatLocked : paidChatLocked;
+    args.planKey === "free_onboarding"
+      ? freeChatLocked
+      : paidLifecycleLocked || paidChatLocked;
 
   let upgradeReason: string | undefined;
-  if (args.planKey === "free_onboarding") {
+  if (paidLifecycleLocked) {
+    upgradeReason =
+      "Your paid plan is not active. Update billing to keep learning.";
+  } else if (args.planKey === "free_onboarding") {
     upgradeReason = chatLocked
       ? "You've used your free onboarding chats. Choose a plan to keep going."
       : "Choose a paid plan to unlock uploads.";
@@ -523,7 +559,8 @@ function buildViewerBillingState(args: {
     },
     lockedSurfaces: {
       chat: chatLocked,
-      attachments: args.planKey === "free_onboarding",
+      attachments:
+        args.planKey === "free_onboarding" || paidLifecycleLocked,
     },
     upgradeReason,
   };
@@ -536,20 +573,39 @@ async function buildViewerBillingStateForUser(args: {
   userId: string;
   planHint?: string;
 }) {
-  const billingPeriod = getBillingPeriod(Date.now());
-  const [{ planKey, status }, usageDoc, onboardingDoc] = await Promise.all([
-    resolvePlanState({
-      ctx: args.ctx,
-      userId: args.userId,
-      planHint: args.planHint,
-    }),
+  return (await buildBillingContextForUser(args)).state;
+}
+
+async function buildBillingContextForUser(args: {
+  ctx: Parameters<typeof getBillingProfileDoc>[0] &
+    Parameters<typeof getBillingUsageDoc>[0] &
+    Parameters<typeof getBillingOnboardingDoc>[0];
+  userId: string;
+  planHint?: string;
+  at?: number;
+}) {
+  const now = args.at ?? Date.now();
+  const billingPeriod = getBillingPeriod(now);
+  const [profile, usageDoc, onboardingDoc] = await Promise.all([
+    getBillingProfileDoc(args.ctx, args.userId),
     getBillingUsageDoc(args.ctx, args.userId, billingPeriod),
     getBillingOnboardingDoc(args.ctx, args.userId),
   ]);
-
-  return buildViewerBillingState({
+  const { planKey, status } = resolvePlanStateFromProfile({
+    profile,
+    planHint: args.planHint,
+  });
+  const currentPlanAccess = hasCurrentPlanAccess({
     planKey,
     status,
+    profile,
+    at: now,
+  });
+
+  const state = buildViewerBillingState({
+    planKey,
+    status,
+    hasCurrentPlanAccess: currentPlanAccess,
     billingPeriod,
     usage: toUsageRecord(usageDoc),
     onboarding: {
@@ -557,6 +613,11 @@ async function buildViewerBillingStateForUser(args: {
       lifetimeFreeTextAiCostUsd: onboardingDoc?.lifetimeFreeTextAiCostUsd ?? 0,
     },
   });
+
+  return {
+    state,
+    hasCurrentPlanAccess: currentPlanAccess,
+  };
 }
 
 async function ensureUsageRow(
@@ -887,7 +948,7 @@ export const assertCanSendMessageInternal = internalMutation({
   },
   returns: billingProfileSnapshotValidator,
   handler: async (ctx, args) => {
-    const state = await buildViewerBillingStateForUser({
+    const { state, hasCurrentPlanAccess } = await buildBillingContextForUser({
       ctx,
       userId: args.userId,
       planHint: args.planHint,
@@ -900,6 +961,26 @@ export const assertCanSendMessageInternal = internalMutation({
         planKey: state.planKey,
         message: "Uploads are available on paid plans only.",
         upgradeTarget: "intro",
+      });
+    }
+
+    if (!hasCurrentPlanAccess && (args.attachmentCount ?? 0) > 0) {
+      throwBillingError({
+        code: "BILLING_REQUIRED",
+        surface: "attachments",
+        planKey: state.planKey,
+        message: "Uploads require an active paid plan.",
+        upgradeTarget: getUpgradeTarget(state.planKey),
+      });
+    }
+
+    if (!hasCurrentPlanAccess) {
+      throwBillingError({
+        code: "BILLING_REQUIRED",
+        surface: "chat",
+        planKey: state.planKey,
+        message: "Text tutoring requires an active paid plan.",
+        upgradeTarget: getUpgradeTarget(state.planKey),
       });
     }
 
@@ -934,19 +1015,29 @@ export const assertCanUseAttachmentsInternal = internalMutation({
   },
   returns: billingProfileSnapshotValidator,
   handler: async (ctx, args) => {
-    const state = await buildViewerBillingStateForUser({
+    const { state, hasCurrentPlanAccess } = await buildBillingContextForUser({
       ctx,
       userId: args.userId,
       planHint: args.planHint,
     });
 
-    if (state.lockedSurfaces.attachments) {
+    if (state.planKey === "free_onboarding") {
       throwBillingError({
         code: "PLAN_REQUIRED",
         surface: "attachments",
         planKey: state.planKey,
         message: "Uploads are available on paid plans only.",
         upgradeTarget: "intro",
+      });
+    }
+
+    if (!hasCurrentPlanAccess) {
+      throwBillingError({
+        code: "BILLING_REQUIRED",
+        surface: "attachments",
+        planKey: state.planKey,
+        message: "Uploads require an active paid plan.",
+        upgradeTarget: getUpgradeTarget(state.planKey),
       });
     }
 
@@ -965,29 +1056,21 @@ export const assertCanUseCodeSparkRunInternal = internalMutation({
   returns: codeSparkRunEntitlementValidator,
   handler: async (ctx, args) => {
     const now = Date.now();
-    const state = await buildViewerBillingStateForUser({
+    const { state, hasCurrentPlanAccess } = await buildBillingContextForUser({
       ctx,
       userId: args.userId,
       planHint: args.planHint,
+      at: now,
     });
 
-    if (state.planKey !== "free_onboarding") {
-      const profile = await getBillingProfileDoc(ctx, args.userId);
-      const hasCurrentPaidAccess =
-        state.status === "active" ||
-        (state.status === "canceled" &&
-          typeof profile?.currentPeriodEnd === "number" &&
-          profile.currentPeriodEnd > now);
-
-      if (!hasCurrentPaidAccess) {
-        throwBillingError({
-          code: "BILLING_REQUIRED",
-          surface: "chat",
-          planKey: state.planKey,
-          message: "Code Spark runs require an active paid plan.",
-          upgradeTarget: getUpgradeTarget(state.planKey),
-        });
-      }
+    if (!hasCurrentPlanAccess) {
+      throwBillingError({
+        code: "BILLING_REQUIRED",
+        surface: "chat",
+        planKey: state.planKey,
+        message: "Code Spark runs require an active paid plan.",
+        upgradeTarget: getUpgradeTarget(state.planKey),
+      });
     }
 
     if (state.lockedSurfaces.chat) {

@@ -93,6 +93,61 @@ function truncateTitle(value: string): string {
   return value.length > 60 ? `${value.slice(0, 60)}...` : value;
 }
 
+async function getChatRequestReceipt(
+  ctx: MutationCtx,
+  args: { userId: string; threadId: string; requestId: string },
+) {
+  return await ctx.db
+    .query("chatRequestReceipts")
+    .withIndex("by_userId_and_threadId_and_requestId", (q) =>
+      q
+        .eq("userId", args.userId)
+        .eq("threadId", args.threadId)
+        .eq("requestId", args.requestId),
+    )
+    .unique();
+}
+
+async function backfillLastChatRequestReceipt(
+  ctx: MutationCtx,
+  thread: {
+    userId: string;
+    threadId: string;
+    lastRequestId?: string;
+    lastPromptMessageId?: string;
+  },
+) {
+  if (!thread.lastRequestId || !thread.lastPromptMessageId) {
+    return;
+  }
+
+  const existing = await getChatRequestReceipt(ctx, {
+    userId: thread.userId,
+    threadId: thread.threadId,
+    requestId: thread.lastRequestId,
+  });
+  if (existing) {
+    return;
+  }
+
+  const [promptMessage] = await ctx.runQuery(
+    components.agent.messages.getMessagesByIds,
+    { messageIds: [thread.lastPromptMessageId] },
+  );
+  if (!promptMessage) {
+    return;
+  }
+
+  await ctx.db.insert("chatRequestReceipts", {
+    userId: thread.userId,
+    threadId: thread.threadId,
+    requestId: thread.lastRequestId,
+    promptMessageId: thread.lastPromptMessageId,
+    order: promptMessage.order,
+    createdAt: Date.now(),
+  });
+}
+
 function hasVisibleText(message: { text?: string }): boolean {
   return typeof message.text === "string" && message.text.trim().length > 0;
 }
@@ -369,15 +424,33 @@ export const sendMessage = mutation({
       throw new Error("Thread not found");
     }
 
+    const requestReceipt = await getChatRequestReceipt(ctx, {
+      userId: identity.subject,
+      threadId: args.threadId,
+      requestId: args.requestId,
+    });
+    if (requestReceipt) {
+      return {
+        promptMessageId: requestReceipt.promptMessageId,
+        deduped: true,
+      };
+    }
+
     if (
       ownedThread.lastRequestId === args.requestId &&
       typeof ownedThread.lastPromptMessageId === "string"
     ) {
+      await backfillLastChatRequestReceipt(ctx, ownedThread);
       return {
         promptMessageId: ownedThread.lastPromptMessageId,
         deduped: true,
       };
     }
+
+    // Preserve the final pre-deployment request before lastRequestId advances.
+    // New requests use the receipt table directly, while these two legacy
+    // fields remain as a compatibility fallback for existing thread rows.
+    await backfillLastChatRequestReceipt(ctx, ownedThread);
 
     const billingSnapshot = await ctx.runMutation(
       internalApi.billing.assertCanSendMessageInternal,
@@ -432,6 +505,15 @@ export const sendMessage = mutation({
         },
       },
     );
+
+    await ctx.db.insert("chatRequestReceipts", {
+      userId: identity.subject,
+      threadId: args.threadId,
+      requestId: args.requestId,
+      promptMessageId: messageId,
+      order: promptMessage.order,
+      createdAt: now,
+    });
 
     await ctx.db.patch(ownedThread._id, {
       lastMessageAt: now,
@@ -1002,6 +1084,31 @@ export const saveAssistantCancellationMessageInternal = internalMutation({
 
 const codeSparkSessionsPerDeleteBatch = 4;
 const codeSparkRowsPerDeleteBatch = 64;
+const chatRequestReceiptsPerDeleteBatch = 64;
+
+async function deleteChatRequestReceiptBatch(
+  ctx: MutationCtx,
+  args: { userId: string; threadId: string },
+) {
+  const receipts = await ctx.db
+    .query("chatRequestReceipts")
+    .withIndex("by_userId_and_threadId", (q) =>
+      q.eq("userId", args.userId).eq("threadId", args.threadId),
+    )
+    .take(chatRequestReceiptsPerDeleteBatch);
+  for (const receipt of receipts) {
+    await ctx.db.delete(receipt._id);
+  }
+
+  return Boolean(
+    await ctx.db
+      .query("chatRequestReceipts")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .first(),
+  );
+}
 
 async function deleteCodeSparkThreadBatch(
   ctx: MutationCtx,
@@ -1076,8 +1183,9 @@ export const continueDeleteThreadCodeSparksInternal = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const hasMore = await deleteCodeSparkThreadBatch(ctx, args);
-    if (hasMore) {
+    const hasMoreCodeSparkData = await deleteCodeSparkThreadBatch(ctx, args);
+    const hasMoreRequestReceipts = await deleteChatRequestReceiptBatch(ctx, args);
+    if (hasMoreCodeSparkData || hasMoreRequestReceipts) {
       await ctx.scheduler.runAfter(
         0,
         internalApi.chat.continueDeleteThreadCodeSparksInternal,
@@ -1107,8 +1215,9 @@ export const deleteThreadRecordInternal = internalMutation({
     }
 
     const hasMoreCodeSparkData = await deleteCodeSparkThreadBatch(ctx, args);
+    const hasMoreRequestReceipts = await deleteChatRequestReceiptBatch(ctx, args);
     await ctx.db.delete(thread._id);
-    if (hasMoreCodeSparkData) {
+    if (hasMoreCodeSparkData || hasMoreRequestReceipts) {
       await ctx.scheduler.runAfter(
         0,
         internalApi.chat.continueDeleteThreadCodeSparksInternal,
