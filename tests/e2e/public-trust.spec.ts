@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import axe from "axe-core";
 
 test.describe("public trust surfaces", () => {
   test("public responses include the security policy", async ({ request }) => {
@@ -70,5 +71,27 @@ test.describe("public trust surfaces", () => {
         expected.canonical,
       );
     }
+  });
+
+  test("branded 404 meets WCAG A and AA", async ({ page }) => {
+    await page.goto("/definitely-missing");
+    await page.addScriptTag({ content: axe.source });
+    const violations = await page.evaluate(async () => {
+      const axeApi = Reflect.get(window, "axe") as {
+        run: (
+          context: Document,
+          options: { runOnly: { type: "tag"; values: string[] } },
+        ) => Promise<{ violations: Array<{ id: string; nodes: unknown[] }> }>;
+      };
+      const results = await axeApi.run(document, {
+        runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+      });
+      return results.violations.map((violation) => ({
+        id: violation.id,
+        nodeCount: violation.nodes.length,
+      }));
+    });
+
+    expect(violations).toEqual([]);
   });
 });

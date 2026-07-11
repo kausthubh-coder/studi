@@ -1,6 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import SparkSceneRenderer from "./SparkSceneRenderer";
+import { SparkPanel } from "./SparkPanel";
 import {
   sparkSceneV2Version,
   sparkSceneVersion,
@@ -158,6 +160,52 @@ describe("SparkSceneRenderer", () => {
       artifact,
       "thread",
       "spark-instance",
+    );
+  });
+
+  it("moves focus into the expanded panel and restores it after close", async () => {
+    const artifact: SparkArtifact = {
+      kind: "spark_desmos_graph",
+      version: sparkSceneVersion,
+      sparkType: "desmos_graph",
+      mode: "readonly",
+      title: "Slope graph",
+      payload: { expressions: [{ id: "line", latex: "y=x" }] },
+    };
+
+    function FocusHarness() {
+      const [expanded, setExpanded] = useState(false);
+      return (
+        <>
+          <SparkSceneRenderer
+            artifact={artifact}
+            expandedSparkInstanceId={expanded ? "spark-instance" : null}
+            onExpandSpark={() => setExpanded(true)}
+            sparkInstanceId="spark-instance"
+            threadId="thread"
+          />
+          {expanded ? (
+            <SparkPanel
+              spark={{
+                artifact,
+                sparkInstanceId: "spark-instance",
+                threadId: "thread",
+              }}
+              onClose={() => setExpanded(false)}
+            />
+          ) : null}
+        </>
+      );
+    }
+
+    render(<FocusHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Expand spark" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Close spark panel" })).toHaveFocus(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close spark panel" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Expand spark" })).toHaveFocus(),
     );
   });
 });

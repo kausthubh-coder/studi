@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useRef } from "react";
 import type { ExpandedSpark } from "@/components/studi-chat/types";
 import HtmlCssJsSandboxScene from "@/components/sparks/scenes/HtmlCssJsSandboxScene";
 import DesmosGraphScene from "@/components/sparks/scenes/DesmosGraphScene";
@@ -28,6 +28,11 @@ export const SparkPanel = memo(function SparkPanel({
   onClose: () => void;
 }) {
   const { artifact } = spark;
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, [spark.sparkInstanceId]);
 
   let scene: React.ReactNode;
   switch (artifact.kind) {
@@ -73,6 +78,7 @@ export const SparkPanel = memo(function SparkPanel({
         </span>
         <p className="spark-panel-title">{artifact.title}</p>
         <button
+          ref={closeButtonRef}
           type="button"
           className="spark-panel-back"
           onClick={onClose}

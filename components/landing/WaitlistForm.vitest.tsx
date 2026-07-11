@@ -27,6 +27,9 @@ describe("WaitlistForm", () => {
     await waitFor(() => {
       expect(screen.getByText("You're on the list!")).toBeVisible();
     });
+    const success = screen.getByRole("status");
+    expect(success).toHaveAttribute("aria-live", "polite");
+    expect(success).toHaveFocus();
     expect(
       screen.getByRole("link", { name: /optional: answer 8 short steps/i }),
     ).toHaveAttribute("href", "/waitlist?source=landing");

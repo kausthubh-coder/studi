@@ -17,6 +17,10 @@ import {
   getStudiPlanStatus,
 } from "@/lib/billing/plan-catalog";
 import { buildMonthlyUsageDisplay } from "@/lib/billing/usage-display";
+import {
+  getNextSettingsTabIndex,
+  isSettingsTabNavigationKey,
+} from "@/components/settings/settings-tab-navigation";
 
 // ─── Formatting helpers ──────────────────────────────────────────────────────
 
@@ -441,16 +445,39 @@ export function UsagePanel() {
 
         {/* Tab bar */}
         <nav
+          role="tablist"
+          aria-label="Settings sections"
+          aria-orientation="horizontal"
           className="mt-6 flex gap-1 overflow-x-auto rounded-xl border p-1"
           style={{
             background: "var(--bg-alt)",
             borderColor: "var(--border-faint)",
           }}
         >
-          {TABS.map((tab) => (
+          {TABS.map((tab, index) => (
             <button
               key={tab.id}
+              id={`settings-tab-${tab.id}`}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={`settings-panel-${tab.id}`}
+              tabIndex={activeTab === tab.id ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
+              onKeyDown={(event) => {
+                if (!isSettingsTabNavigationKey(event.key)) return;
+                event.preventDefault();
+                const nextIndex = getNextSettingsTabIndex(
+                  index,
+                  event.key,
+                  TABS.length,
+                );
+                const nextTab = TABS[nextIndex];
+                setActiveTab(nextTab.id);
+                requestAnimationFrame(() => {
+                  document.getElementById(`settings-tab-${nextTab.id}`)?.focus();
+                });
+              }}
               className="flex shrink-0 items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all duration-150"
               style={{
                 fontFamily: "var(--font-jakarta)",
@@ -470,7 +497,13 @@ export function UsagePanel() {
       </header>
 
       {/* Tab content */}
-      <main className="mx-auto mt-6 w-full max-w-4xl">
+      <main
+        id={`settings-panel-${activeTab}`}
+        role="tabpanel"
+        aria-labelledby={`settings-tab-${activeTab}`}
+        tabIndex={0}
+        className="mx-auto mt-6 w-full max-w-4xl"
+      >
         {activeTab === "usage" && <UsageTab billing={billing} />}
         {activeTab === "billing" && <BillingTab />}
         {activeTab === "account" && <AccountTab />}

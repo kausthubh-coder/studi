@@ -123,16 +123,16 @@ test.describe("public routes", () => {
     );
   });
 
-  test("mobile landing keeps sign in visible and exposes FAQ state", async ({
+  test("mobile landing keeps Open chat visible and exposes FAQ state", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await waitForLandingHydration(page);
 
-    const signIn = page.getByRole("link", { name: "Sign in" }).first();
-    await expect(signIn).toBeVisible();
-    await expect(signIn).toHaveAttribute("href", "/chat");
+    const openChat = page.getByRole("link", { name: "Open chat" }).first();
+    await expect(openChat).toBeVisible();
+    await expect(openChat).toHaveAttribute("href", "/chat");
 
     const faq = page.getByRole("button", { name: "Is it free?" });
     await expect(faq).toHaveAttribute("aria-expanded", "false");
@@ -142,6 +142,28 @@ test.describe("public routes", () => {
     await faq.click();
     await expect(faq).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator(`[id="${panelId}"]`)).toBeVisible();
+  });
+
+  test("landing primary content remains visible without JavaScript", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const heading = page.getByRole("heading", {
+        name: /AI tutor that makes you feel/i,
+      });
+      await expect(heading).toBeVisible();
+      await expect(page.getByRole("link", { name: "Open chat" })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Email address" }).first()).toBeVisible();
+      await expect(heading).not.toHaveCSS("opacity", "0");
+    } finally {
+      await context.close();
+    }
   });
 
   test("Spark selection stays put after manual input", async ({ page }) => {

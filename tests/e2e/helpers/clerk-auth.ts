@@ -78,7 +78,10 @@ async function signInWithClerkTesting(page: Page): Promise<void> {
     throw new Error("E2E_CLERK_USER_EMAIL is required for @clerk/testing.");
   }
 
-  await page.goto("/");
+  // Public landing intentionally omits Clerk to keep acquisition static and
+  // resilient. Pricing mounts Clerk for its live billing table, so it is the
+  // lightweight public bootstrap surface for @clerk/testing.
+  await page.goto("/pricing");
   await clerk.signIn({ page, emailAddress: email });
   await page.goto("/chat");
 }

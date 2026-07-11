@@ -92,7 +92,7 @@ export function LandingPage() {
               href="/chat"
               className="font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border-2 border-[#1c1208] bg-white hover:bg-[#f5ede0] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
             >
-              Sign in
+              Open chat
             </a>
             <button
               type="button"
@@ -117,7 +117,7 @@ export function LandingPage() {
         {/* ── HERO ── */}
         <section className="px-4 md:px-6 max-w-7xl mx-auto py-12 md:py-20">
           <motion.div
-            initial="hidden"
+            initial={false}
             animate="visible"
             variants={{ visible: { transition: { staggerChildren: 0.12 } } }}
             className="flex flex-col lg:flex-row lg:items-center lg:gap-12 xl:gap-16 gap-10 w-full"
@@ -207,7 +207,7 @@ export function LandingPage() {
 
                   {/* Studi confirms + sparks */}
                   <motion.div
-                    initial={{ height: 0, opacity: 0 }}
+                    initial={false}
                     animate={{ height: "auto", opacity: 1 }}
                     transition={{ delay: 1.2, duration: 0.5 }}
                     className="flex gap-3 items-start self-end max-w-[95%] overflow-hidden"
@@ -257,7 +257,7 @@ export function LandingPage() {
           {/* ── PROBLEM ── */}
           <section>
             <motion.div
-              initial="hidden"
+              initial={false}
               whileInView="visible"
               viewport={viewportOpts}
               variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
@@ -319,7 +319,7 @@ export function LandingPage() {
           {/* ── HOW STUDI TEACHES ── */}
           <section>
             <motion.div
-              initial="hidden"
+              initial={false}
               whileInView="visible"
               viewport={viewportOpts}
               variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
@@ -383,7 +383,7 @@ export function LandingPage() {
           {/* ── SPARKS ── */}
           <section>
             <motion.div
-              initial="hidden"
+              initial={false}
               whileInView="visible"
               viewport={viewportOpts}
               variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
@@ -414,7 +414,7 @@ export function LandingPage() {
           {/* ── PRACTICE ── */}
           <section>
             <motion.div
-              initial="hidden"
+              initial={false}
               whileInView="visible"
               viewport={viewportOpts}
               variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
@@ -467,7 +467,7 @@ export function LandingPage() {
           {/* ── SPARKS ── */}
           <section>
             <motion.div
-              initial="hidden"
+              initial={false}
               whileInView="visible"
               viewport={viewportOpts}
               variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
@@ -559,7 +559,7 @@ export function LandingPage() {
           {/* ── SOCIAL PROOF ── */}
           <section>
             <motion.div
-              initial="hidden"
+              initial={false}
               whileInView="visible"
               viewport={viewportOpts}
               variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
@@ -633,7 +633,7 @@ export function LandingPage() {
           {/* ── CHATGPT CONTRAST ── */}
           <section>
             <motion.div
-              initial="hidden"
+              initial={false}
               whileInView="visible"
               viewport={viewportOpts}
               variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
@@ -704,7 +704,7 @@ export function LandingPage() {
           {/* ── FAQ ── */}
           <section>
             <motion.div
-              initial="hidden"
+              initial={false}
               whileInView="visible"
               viewport={viewportOpts}
               variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
@@ -737,7 +737,7 @@ export function LandingPage() {
           {/* ── FINAL CTA ── */}
           <section id="final-cta" className="py-12 md:py-20 flex flex-col items-center justify-center text-center">
             <motion.div
-              initial="hidden"
+              initial={false}
               whileInView="visible"
               viewport={viewportOpts}
               variants={{ visible: { transition: { staggerChildren: 0.1 } } }}

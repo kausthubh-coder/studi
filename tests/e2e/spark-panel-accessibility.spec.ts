@@ -32,6 +32,14 @@ test.describe("expanded Spark accessibility", () => {
     }
     expect(foundExpandableSpark).toBe(true);
 
+    const closePanel = page.getByRole("button", { name: "Close spark panel" });
+    await expect(closePanel).toBeFocused();
+    await closePanel.click();
+    const restoredExpand = page.getByRole("button", { name: "Expand spark" });
+    await expect(restoredExpand).toBeFocused();
+    await restoredExpand.click();
+    await expect(page.getByRole("button", { name: "Close spark panel" })).toBeFocused();
+
     const separator = page.getByRole("separator", {
       name: "Resize chat and Spark panels",
     });

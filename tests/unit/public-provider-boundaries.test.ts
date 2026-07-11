@@ -29,7 +29,17 @@ describe("public provider boundaries", () => {
     expect(landing).not.toContain("SignedIn");
     expect(landing).not.toContain("SignedOut");
     expect(landing).toContain('href="/chat"');
+    expect(landing).toContain("Open chat");
     expect(landing).toContain("Get Early Access");
     expect(landing).toContain("<WaitlistForm");
+    expect(landing).not.toContain('initial="hidden"');
+    expect(landing).not.toContain("initial={{ height: 0, opacity: 0 }}");
+  });
+
+  it("bootstraps default Clerk test auth from a route that mounts Clerk", () => {
+    const helper = read("tests/e2e/helpers/clerk-auth.ts");
+
+    expect(helper).toContain('await page.goto("/pricing")');
+    expect(helper).not.toContain('await page.goto("/");\n  await clerk.signIn');
   });
 });

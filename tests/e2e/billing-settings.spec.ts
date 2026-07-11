@@ -29,7 +29,19 @@ test.describe("billing settings truth", () => {
     await expect(page.getByText(/chat prompts? sent/i)).toBeVisible();
     await expect(page.getByText(/counted separately/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /Billing/ }).click();
+    const usageTab = page.getByRole("tab", { name: /Usage/ });
+    const billingTab = page.getByRole("tab", { name: /Billing/ });
+    await expect(usageTab).toHaveAttribute("aria-selected", "true");
+    await expect(billingTab).toHaveAttribute("aria-selected", "false");
+    await usageTab.focus();
+    await usageTab.press("ArrowRight");
+    await expect(billingTab).toBeFocused();
+    await expect(billingTab).toHaveAttribute("aria-selected", "true");
+    const panel = page.getByRole("tabpanel");
+    await expect(panel).toHaveAttribute(
+      "aria-labelledby",
+      await billingTab.getAttribute("id") ?? "",
+    );
     await expect(
       page.getByRole("heading", { name: "Choose by how often you learn" }),
     ).toBeVisible();

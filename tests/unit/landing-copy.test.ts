@@ -22,22 +22,22 @@ describe("landing copy", () => {
     expect(source).not.toMatch(/Code Spark/i);
   });
 
-  it("routes signed-out sign in through the protected chat page", () => {
+  it("routes the universal Open chat action through the protected chat page", () => {
     const source = readLandingSource();
 
-    expect(source).toMatch(/<a\s+href="\/chat"[\s\S]*?>\s*Sign in\s*<\/a>/);
+    expect(source).toMatch(/<a\s+href="\/chat"[\s\S]*?>\s*Open chat\s*<\/a>/);
     expect(source).not.toContain("SignInButton");
     expect(source).not.toContain('mode="modal"');
   });
 
-  it("keeps the signed-out sign in control visible on mobile", () => {
+  it("keeps the universal Open chat control visible on mobile", () => {
     const source = readLandingSource();
-    const signInAnchor = source.match(
-      /<a\s+href="\/chat"[\s\S]*?>\s*Sign in\s*<\/a>/,
+    const openChatAnchor = source.match(
+      /<a\s+href="\/chat"[\s\S]*?>\s*Open chat\s*<\/a>/,
     )?.[0];
 
-    expect(signInAnchor).toBeTruthy();
-    expect(signInAnchor).not.toMatch(/\bhidden\b/);
+    expect(openChatAnchor).toBeTruthy();
+    expect(openChatAnchor).not.toMatch(/\bhidden\b/);
   });
 
   it("gives FAQ buttons an identified controlled panel", () => {

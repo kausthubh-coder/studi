@@ -13,7 +13,7 @@ export default function NotFound() {
           </span>
         </div>
 
-        <p className="mb-3 font-ui text-xs font-bold uppercase tracking-[0.16em] text-accent2">
+        <p className="mb-3 font-ui text-xs font-bold uppercase tracking-[0.16em] text-[#217567]">
           A useful wrong turn
         </p>
         <h1 className="max-w-xl font-brand text-4xl leading-tight sm:text-6xl">
@@ -27,7 +27,7 @@ export default function NotFound() {
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Link
             href="/"
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border-2 border-fg bg-accent px-5 py-2.5 font-ui text-sm font-bold text-white shadow-[3px_3px_0_var(--fg)] transition hover:-translate-y-0.5"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border-2 border-fg bg-[#b64028] px-5 py-2.5 font-ui text-sm font-bold text-white shadow-[3px_3px_0_var(--fg)] transition hover:-translate-y-0.5"
           >
             Back to home
           </Link>

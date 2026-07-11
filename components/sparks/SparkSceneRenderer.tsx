@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import DesmosGraphScene from "@/components/sparks/scenes/DesmosGraphScene";
 import HtmlCssJsSandboxScene from "@/components/sparks/scenes/HtmlCssJsSandboxScene";
 import QuizScene from "@/components/sparks/scenes/QuizScene";
@@ -45,6 +45,17 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
   const isExpanded =
     isExpandable && expandedSparkInstanceId === sparkInstanceId;
   const badgeClass = getBadgeClass(artifact.kind);
+  const expandButtonRef = useRef<HTMLButtonElement>(null);
+  const wasExpandedRef = useRef(isExpanded);
+
+  useEffect(() => {
+    const wasExpanded = wasExpandedRef.current;
+    wasExpandedRef.current = isExpanded;
+    if (!wasExpanded || isExpanded) return;
+
+    const frame = requestAnimationFrame(() => expandButtonRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [isExpanded]);
 
   const handleExpand = useCallback(() => {
     onExpandSpark(artifact, threadId ?? null, sparkInstanceId);
@@ -118,6 +129,7 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
         </div>
         {isExpandable ? (
           <button
+            ref={expandButtonRef}
             type="button"
             className="spark-card-expand"
             onClick={handleExpand}

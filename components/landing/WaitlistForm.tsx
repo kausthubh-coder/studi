@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -15,11 +15,17 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
   const [errorMsg, setErrorMsg] = useState("");
   const [alreadyOnList, setAlreadyOnList] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const successRef = useRef<HTMLDivElement>(null);
   const noteId = useId();
 
   const joinWaitlist = useAction(api.waitlistPublic.joinWaitlist);
 
   const accentColor = variant === "teal" ? "#217567" : "#b64028";
+
+  useEffect(() => {
+    if (state !== "success") return;
+    successRef.current?.focus();
+  }, [state]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -56,6 +62,10 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
       <div className="w-full">
         {state === "success" ? (
           <motion.div
+            ref={successRef}
+            role="status"
+            aria-live="polite"
+            tabIndex={-1}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center py-4"
