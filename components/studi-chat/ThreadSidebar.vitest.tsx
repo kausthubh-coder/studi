@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ThreadSidebar } from "@/components/studi-chat/ThreadSidebar";
 
@@ -82,5 +83,37 @@ describe("ThreadSidebar destructive actions", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("moves focus to New thread after confirming destructive deletion", async () => {
+    function ConfirmDeleteHarness() {
+      const [deletingThreadId, setDeletingThreadId] = useState<string | null>(
+        null,
+      );
+      return (
+        <ThreadSidebar
+          threads={[thread]}
+          selectedThreadId="thread_1"
+          onSelectThread={vi.fn()}
+          onCreateThread={vi.fn()}
+          onDeleteThread={(pendingThread) =>
+            setDeletingThreadId(pendingThread.threadId)
+          }
+          deletingThreadId={deletingThreadId}
+        />
+      );
+    }
+
+    render(<ConfirmDeleteHarness />);
+    const trigger = screen.getByRole("button", {
+      name: `Delete ${thread.title}`,
+    });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Delete thread" }));
+
+    expect(trigger).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "New thread" })).toHaveFocus(),
+    );
   });
 });

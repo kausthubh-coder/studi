@@ -31,6 +31,7 @@ export function ThreadSidebar({
   const confirmDeleteRef = useRef<HTMLButtonElement>(null);
   const deleteDialogRef = useRef<HTMLDivElement>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const newThreadRef = useRef<HTMLButtonElement>(null);
 
   const closeDeleteDialog = useCallback(() => {
     setThreadPendingDelete(null);
@@ -109,6 +110,7 @@ export function ThreadSidebar({
 
         <div className="px-3 pb-3 pt-1">
           <button
+            ref={newThreadRef}
             type="button"
             onClick={onCreateThread}
             className="sidebar-new-btn flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"
@@ -242,6 +244,7 @@ export function ThreadSidebar({
                 className="thread-delete-modal-danger"
                 onClick={() => {
                   const thread = threadPendingDelete;
+                  deleteTriggerRef.current = newThreadRef.current;
                   closeDeleteDialog();
                   onDeleteThread(thread);
                 }}
