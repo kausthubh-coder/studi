@@ -312,6 +312,96 @@ describe("chat Convex auth and ownership", () => {
     ).rejects.toThrow("The response is not ready to stop yet");
   });
 
+  it("preserves meaningful partial output and appends one exact-turn stopped marker", async () => {
+    vi.useFakeTimers();
+    const t = testConvex();
+    const ownedThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Owned",
+    });
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: ownedThread._id,
+      title: "Owned",
+      lastMessageAt: 1,
+    });
+    const authed = t.withIdentity({ subject: "user_a" });
+    const canceledTurn = await authed.mutation(api.chat.sendMessage, {
+      threadId: ownedThread._id,
+      prompt: "Explain slope",
+      requestId: "request_partial_cancel",
+    });
+    const laterTurn = await authed.mutation(api.chat.sendMessage, {
+      threadId: ownedThread._id,
+      prompt: "Explain vectors",
+      requestId: "request_later_turn",
+    });
+    const savedPartial = await t.mutation(
+      components.agent.messages.addMessages,
+      {
+        threadId: ownedThread._id,
+        userId: "user_a",
+        promptMessageId: canceledTurn.promptMessageId,
+        messages: [
+          {
+            message: {
+              role: "assistant" as const,
+              content: "Slope compares vertical change to horizontal change, so",
+            },
+            status: "failed" as const,
+          },
+        ],
+      },
+    );
+
+    await t.mutation(
+      internalTestApi.chat.saveAssistantCancellationMessageInternal,
+      {
+        userId: "user_a",
+        threadId: ownedThread._id,
+        promptMessageId: canceledTurn.promptMessageId,
+      },
+    );
+    await t.mutation(
+      internalTestApi.chat.saveAssistantCancellationMessageInternal,
+      {
+        userId: "user_a",
+        threadId: ownedThread._id,
+        promptMessageId: canceledTurn.promptMessageId,
+      },
+    );
+
+    const [canceledPrompt, laterPrompt] = await t.query(
+      components.agent.messages.getMessagesByIds,
+      { messageIds: [canceledTurn.promptMessageId, laterTurn.promptMessageId] },
+    );
+    if (!canceledPrompt || !laterPrompt) throw new Error("Prompts were not saved");
+    const listed = await t.query(
+      components.agent.messages.listMessagesByThreadId,
+      {
+        threadId: ownedThread._id,
+        order: "asc",
+        excludeToolMessages: true,
+        paginationOpts: { cursor: null, numItems: 20 },
+      },
+    );
+    const partial = listed.page.find(
+      (message) => message._id === savedPartial.messages[0]!._id,
+    );
+    const stoppedMarkers = listed.page.filter(
+      (message) =>
+        message.message?.role === "assistant" &&
+        message.text?.includes("You stopped this response"),
+    );
+
+    expect(partial?.text).toContain(
+      "Slope compares vertical change to horizontal change",
+    );
+    expect(stoppedMarkers).toHaveLength(1);
+    expect(stoppedMarkers[0]?.order).toBe(canceledPrompt.order);
+    expect(stoppedMarkers[0]?.order).not.toBe(laterPrompt.order);
+  });
+
   it("expires leaked generation control and aborts its exact stale stream", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-11T12:00:00.000Z"));

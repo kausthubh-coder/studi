@@ -3,6 +3,7 @@ import type { ModelMessage } from "ai";
 import {
   pollGenerationCancellation,
   prepareStudiStreamStep,
+  shouldRetryAssistantGeneration,
 } from "./chatActions";
 
 describe("prepareStudiStreamStep", () => {
@@ -121,5 +122,19 @@ describe("pollGenerationCancellation", () => {
 
     expect(abortComponentStream).not.toHaveBeenCalled();
     expect(abortController.signal.aborted).toBe(true);
+  });
+});
+
+describe("shouldRetryAssistantGeneration", () => {
+  it("never retries a learner-canceled turn even when the provider error looks transient", () => {
+    expect(
+      shouldRetryAssistantGeneration(new Error("temporary provider failure"), true),
+    ).toBe(false);
+    expect(
+      shouldRetryAssistantGeneration(
+        new Error("temporary provider failure"),
+        false,
+      ),
+    ).toBe(true);
   });
 });

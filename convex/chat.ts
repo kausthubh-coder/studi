@@ -950,9 +950,33 @@ export const saveAssistantCancellationMessageInternal = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const cleanupResult = await cleanupFailedAssistantTurnState(ctx, args);
-    if (!cleanupResult.promptFound || cleanupResult.meaningfulContentFound) {
+    if (!cleanupResult.promptFound) {
       return null;
     }
+
+    const [promptMessage] = await ctx.runQuery(
+      components.agent.messages.getMessagesByIds,
+      { messageIds: [args.promptMessageId] },
+    );
+    if (!promptMessage || promptMessage.threadId !== args.threadId) return null;
+
+    const promptTurnMessages = await ctx.runQuery(
+      components.agent.messages.listMessagesByThreadId,
+      {
+        threadId: args.threadId,
+        order: "desc",
+        statuses: ["pending", "success", "failed"],
+        upToAndIncludingMessageId: args.promptMessageId,
+        paginationOpts: { cursor: null, numItems: 256 },
+      },
+    );
+    const cancellationAlreadySaved = promptTurnMessages.page.some(
+      (message) =>
+        message.order === promptMessage.order &&
+        message.message?.role === "assistant" &&
+        message.text?.trim() === assistantGenerationCanceledText,
+    );
+    if (cancellationAlreadySaved) return null;
 
     const ownedThread = await ctx.db
       .query("userThreads")

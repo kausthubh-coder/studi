@@ -120,6 +120,15 @@ function isRetriableAssistantGenerationError(error: unknown): boolean {
   return !/(?:unauthorized|thread not found)/i.test(message);
 }
 
+export function shouldRetryAssistantGeneration(
+  error: unknown,
+  cancellationRequested: boolean,
+): boolean {
+  return (
+    !cancellationRequested && isRetriableAssistantGenerationError(error)
+  );
+}
+
 export const createThread = action({
   args: {
     title: v.optional(v.string()),
@@ -414,8 +423,10 @@ export const generateAssistantReply = internalAction({
             },
           )) as GenerationControl;
           wasCanceled = generationControl?.state === "cancel_requested";
-          lastErrorRetriable =
-            !wasCanceled && isRetriableAssistantGenerationError(error);
+          lastErrorRetriable = shouldRetryAssistantGeneration(
+            error,
+            wasCanceled,
+          );
 
           if (lastErrorRetriable && attempt < maxAssistantGenerationAttempts) {
             try {
