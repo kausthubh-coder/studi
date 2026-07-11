@@ -107,10 +107,25 @@ test.describe("authenticated chat layout", () => {
         height: viewport.height,
       });
       if (viewport.name === "mobile") {
-        await expect(page.locator(".studi-thread-sidebar")).toHaveAttribute(
+        const mobileSidebar = page.locator(".studi-thread-sidebar");
+        await expect(mobileSidebar).toHaveAttribute(
           "data-mobile-open",
           "false",
         );
+        await expect
+          .poll(
+            async () => {
+              const sidebarBox = await mobileSidebar.boundingBox();
+              return sidebarBox === null || sidebarBox.x + sidebarBox.width <= 1;
+            },
+            {
+              message:
+                "closed mobile sidebar should finish moving fully off the left canvas",
+              timeout: 5_000,
+              intervals: [50, 100, 200],
+            },
+          )
+          .toBe(true);
       }
 
       if (hasActiveThread) {
