@@ -284,6 +284,77 @@ describe("spark validators", () => {
     );
   });
 
+  it("validates pointer targets even when slider metadata is misclassified or missing", () => {
+    const files = {
+      "index.html":
+        '<main><svg><circle id="outlier"></circle></svg></main>',
+      "script.js":
+        "const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
+    };
+    const capabilities = {
+      usesCanvas: false,
+      usesSvg: true,
+      needsNetwork: false,
+      recordsAnswers: true,
+    };
+
+    const misclassified = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Move an outlier and compare the summaries.",
+      files,
+      capabilities,
+      controls: [
+        {
+          id: "outlier",
+          type: "button",
+          label: "Move outlier",
+        },
+      ],
+      checkpoints: [],
+    });
+    expect(misclassified.ok).toBe(false);
+    expect(misclassified.errors.join(" ")).toMatch(
+      /outlier.*(?:keyboard|focus|pointer)|(?:keyboard|focus|pointer).*outlier/i,
+    );
+
+    const missingMetadata = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Move an outlier and compare the summaries.",
+      files,
+      capabilities,
+      controls: [],
+      checkpoints: [],
+    });
+    expect(missingMetadata.ok).toBe(false);
+    expect(missingMetadata.errors.join(" ")).toMatch(/outlier/i);
+
+    const nativeButton = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Reveal a hint after making a prediction.",
+      files: {
+        "index.html":
+          '<main><button id="hint" type="button">Show hint</button></main>',
+        "script.js":
+          "const hint = document.getElementById('hint'); hint?.addEventListener('pointerdown', showPressedState); hint?.addEventListener('click', revealHint); window.StudiScene?.onRestore((state) => restoreHint(state));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [
+        {
+          id: "hint",
+          type: "button",
+          label: "Show hint",
+        },
+      ],
+      checkpoints: [],
+    });
+    expect(nativeButton.ok).toBe(true);
+  });
+
   it("rejects unsafe scene v2 data after draft normalization", () => {
     const artifact = normalizeSparkSceneDraft({
       version: sparkSceneV2Version,

@@ -351,6 +351,198 @@ function validateSceneV2SliderAccessibility(
   return errors;
 }
 
+type PointerTargetExtraction = {
+  targetIds: Set<string>;
+  hasUnresolvedTarget: boolean;
+};
+
+function extractPointerTargets(
+  indexHtml: string,
+  code: string,
+): PointerTargetExtraction {
+  const targetIds = new Set<string>();
+  const variableIds = new Map<string, string>();
+  const lookupAssignments = [
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:document\s*\.\s*)?getElementById\s*\(\s*["']([^"']+)["']\s*\)/gi,
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:document\s*\.\s*)?querySelector\s*\(\s*["']#([^"']+)["']\s*\)/gi,
+  ];
+  for (const pattern of lookupAssignments) {
+    for (const match of code.matchAll(pattern)) {
+      const variableName = match[1];
+      const targetId = match[2];
+      if (variableName && targetId) variableIds.set(variableName, targetId);
+    }
+  }
+
+  const listenerPattern =
+    /\baddEventListener\s*\(\s*["'](?:pointerdown|mousedown|touchstart)["']/gi;
+  const propertyPattern =
+    /\.\s*on(?:pointerdown|mousedown|touchstart)\s*=/gi;
+  const pointerBindingCount =
+    Array.from(code.matchAll(listenerPattern)).length +
+    Array.from(code.matchAll(propertyPattern)).length;
+  let resolvedBindingCount = 0;
+
+  const directBindings = [
+    /(?:document\s*\.\s*)?getElementById\s*\(\s*["']([^"']+)["']\s*\)\s*\?*\.\s*addEventListener\s*\(\s*["'](?:pointerdown|mousedown|touchstart)["']/gi,
+    /(?:document\s*\.\s*)?querySelector\s*\(\s*["']#([^"']+)["']\s*\)\s*\?*\.\s*addEventListener\s*\(\s*["'](?:pointerdown|mousedown|touchstart)["']/gi,
+    /(?:document\s*\.\s*)?getElementById\s*\(\s*["']([^"']+)["']\s*\)\s*\?*\.\s*on(?:pointerdown|mousedown|touchstart)\s*=/gi,
+    /(?:document\s*\.\s*)?querySelector\s*\(\s*["']#([^"']+)["']\s*\)\s*\?*\.\s*on(?:pointerdown|mousedown|touchstart)\s*=/gi,
+  ];
+  for (const pattern of directBindings) {
+    for (const match of code.matchAll(pattern)) {
+      const targetId = match[1];
+      if (!targetId) continue;
+      targetIds.add(targetId);
+      resolvedBindingCount += 1;
+    }
+  }
+
+  const variableBindings = [
+    /\b([A-Za-z_$][\w$]*)\s*\?*\.\s*addEventListener\s*\(\s*["'](?:pointerdown|mousedown|touchstart)["']/gi,
+    /\b([A-Za-z_$][\w$]*)\s*\.\s*on(?:pointerdown|mousedown|touchstart)\s*=/gi,
+  ];
+  for (const pattern of variableBindings) {
+    for (const match of code.matchAll(pattern)) {
+      const variableName = match[1];
+      const targetId = variableName ? variableIds.get(variableName) : undefined;
+      if (!targetId) continue;
+      targetIds.add(targetId);
+      resolvedBindingCount += 1;
+    }
+  }
+
+  let hasUnresolvedTarget = resolvedBindingCount < pointerBindingCount;
+  const tagPattern = /<\s*([a-z][\w:-]*)\b([^>]*)>/gi;
+  for (const match of indexHtml.matchAll(tagPattern)) {
+    const attributes = match[2] ?? "";
+    const hasInlinePointerHandler =
+      /\bon(?:pointerdown|mousedown|touchstart)\s*=/i.test(attributes);
+    const draggable = readHtmlAttribute(attributes, "draggable");
+    const isDraggable =
+      (draggable !== null && draggable.toLowerCase() !== "false") ||
+      /\bdraggable\b(?!\s*=)/i.test(attributes);
+    if (!hasInlinePointerHandler && !isDraggable) continue;
+
+    const targetId = readHtmlAttribute(attributes, "id");
+    if (targetId) targetIds.add(targetId);
+    else hasUnresolvedTarget = true;
+  }
+
+  return { targetIds, hasUnresolvedTarget };
+}
+
+function isNativeKeyboardControl(element: SceneHtmlElement): boolean {
+  if (
+    element.tagName === "button" ||
+    element.tagName === "select" ||
+    element.tagName === "textarea" ||
+    element.tagName === "summary"
+  ) {
+    return true;
+  }
+  if (element.tagName === "input") {
+    return (
+      readHtmlAttribute(element.attributes, "type")?.toLowerCase() !== "hidden"
+    );
+  }
+  return (
+    element.tagName === "a" &&
+    readHtmlAttribute(element.attributes, "href") !== null
+  );
+}
+
+function hasCustomKeyboardSemantics(
+  element: SceneHtmlElement,
+  code: string,
+  targetId: string,
+): boolean {
+  const role = readHtmlAttribute(element.attributes, "role")?.toLowerCase();
+  const supportedRoles = new Set([
+    "button",
+    "checkbox",
+    "option",
+    "radio",
+    "slider",
+    "spinbutton",
+    "switch",
+  ]);
+  if (
+    !role ||
+    !supportedRoles.has(role) ||
+    readHtmlAttribute(element.attributes, "tabindex") !== "0" ||
+    !hasKeyboardHandlerForControl(code, targetId, element.attributes)
+  ) {
+    return false;
+  }
+
+  if (role === "slider" || role === "spinbutton") {
+    return (
+      readHtmlAttribute(element.attributes, "aria-valuemin") !== null &&
+      readHtmlAttribute(element.attributes, "aria-valuemax") !== null &&
+      readHtmlAttribute(element.attributes, "aria-valuenow") !== null
+    );
+  }
+  return true;
+}
+
+function validatePointerTargetAccessibility(
+  controls: unknown,
+  indexHtml: string,
+  code: string,
+): string[] {
+  const errors: string[] = [];
+  const declaredSliderIds = new Set(
+    Array.isArray(controls)
+      ? controls
+          .filter(
+            (control) =>
+              isPlainRecord(control) &&
+              control.type === "slider" &&
+              typeof control.id === "string" &&
+              control.id.trim(),
+          )
+          .map((control) =>
+            String((control as Record<string, unknown>).id).trim(),
+          )
+      : [],
+  );
+  const { targetIds, hasUnresolvedTarget } = extractPointerTargets(
+    indexHtml,
+    code,
+  );
+
+  if (hasUnresolvedTarget) {
+    errors.push(
+      "Pointer-start handlers must be bound to an interactive element with a stable id so keyboard access can be validated.",
+    );
+  }
+
+  for (const targetId of targetIds) {
+    if (declaredSliderIds.has(targetId)) continue;
+
+    const element = findSceneElementById(indexHtml, targetId);
+    if (!element) {
+      errors.push(
+        `Pointer target "${targetId}" must use the same stable id on its interactive element.`,
+      );
+      continue;
+    }
+    if (
+      isNativeKeyboardControl(element) ||
+      hasCustomKeyboardSemantics(element, code, targetId)
+    ) {
+      continue;
+    }
+
+    errors.push(
+      `Pointer target "${targetId}" must be a native keyboard control or expose a focusable interactive role and keyboard handler bound to that id.`,
+    );
+  }
+
+  return errors;
+}
+
 function validateSceneV2Controls(controls: unknown): string[] {
   const errors: string[] = [];
 
@@ -482,6 +674,10 @@ export function validateSceneV2Payload(
     .filter(([, contents]) => typeof contents === "string")
     .map(([, contents]) => contents)
     .join("\n");
+  const behaviorCode = [
+    typeof files["script.js"] === "string" ? files["script.js"] : "",
+    ...extractInlineScriptBlocks(indexHtml),
+  ].join("\n");
   errors.push(...validateSceneCodeSafety(combinedCode));
 
   errors.push(
@@ -489,6 +685,13 @@ export function validateSceneV2Payload(
       candidate.controls,
       indexHtml,
       combinedCode,
+    ),
+  );
+  errors.push(
+    ...validatePointerTargetAccessibility(
+      candidate.controls,
+      indexHtml,
+      behaviorCode,
     ),
   );
 
