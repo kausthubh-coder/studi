@@ -50,13 +50,18 @@ describe("landing copy", () => {
   });
 
   it("uses current Free, Starter, and Pro plan language", () => {
-    const source = readLandingSource();
+    const landingSource = readLandingSource();
+    const catalogSource = readFileSync(
+      join(rootDir, "lib/billing/plan-catalog.ts"),
+      "utf8",
+    );
 
-    expect(source).not.toMatch(/introduce a paid plan later/i);
-    expect(source).not.toMatch(/free for students/i);
-    expect(source).toMatch(/free preview/i);
-    expect(source).toMatch(/Starter/);
-    expect(source).toMatch(/Pro/);
+    expect(landingSource).not.toMatch(/introduce a paid plan later/i);
+    expect(landingSource).not.toMatch(/free for students/i);
+    expect(landingSource).toContain("PRICING_FAQ_ANSWER");
+    expect(catalogSource).toMatch(/free guided preview/i);
+    expect(catalogSource).toMatch(/Starter/);
+    expect(catalogSource).toMatch(/Pro/);
   });
 
   it("makes the long questionnaire optional after one-step signup", () => {
