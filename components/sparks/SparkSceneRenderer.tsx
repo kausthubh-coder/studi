@@ -51,11 +51,11 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
   useEffect(() => {
     const wasExpanded = wasExpandedRef.current;
     wasExpandedRef.current = isExpanded;
-    if (!wasExpanded || isExpanded) return;
+    if (!wasExpanded || isExpanded || expandedSparkInstanceId !== null) return;
 
     const frame = requestAnimationFrame(() => expandButtonRef.current?.focus());
     return () => cancelAnimationFrame(frame);
-  }, [isExpanded]);
+  }, [expandedSparkInstanceId, isExpanded]);
 
   const handleExpand = useCallback(() => {
     onExpandSpark(artifact, threadId ?? null, sparkInstanceId);

@@ -461,7 +461,7 @@ export function UsagePanel() {
               type="button"
               role="tab"
               aria-selected={activeTab === tab.id}
-              aria-controls={`settings-panel-${tab.id}`}
+              aria-controls="settings-panel"
               tabIndex={activeTab === tab.id ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               onKeyDown={(event) => {
@@ -498,7 +498,7 @@ export function UsagePanel() {
 
       {/* Tab content */}
       <main
-        id={`settings-panel-${activeTab}`}
+        id="settings-panel"
         role="tabpanel"
         aria-labelledby={`settings-tab-${activeTab}`}
         tabIndex={0}

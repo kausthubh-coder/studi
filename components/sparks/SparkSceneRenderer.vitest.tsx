@@ -208,4 +208,63 @@ describe("SparkSceneRenderer", () => {
       expect(screen.getByRole("button", { name: "Expand spark" })).toHaveFocus(),
     );
   });
+
+  it("does not steal panel focus when switching directly between Sparks", async () => {
+    const first: SparkArtifact = {
+      kind: "spark_desmos_graph",
+      version: sparkSceneVersion,
+      sparkType: "desmos_graph",
+      mode: "readonly",
+      title: "First graph",
+      payload: { expressions: [{ id: "first", latex: "y=x" }] },
+    };
+    const second: SparkArtifact = {
+      ...first,
+      title: "Second graph",
+      payload: { expressions: [{ id: "second", latex: "y=2x" }] },
+    };
+
+    function SwitchingHarness() {
+      const [expandedId, setExpandedId] = useState<string | null>(null);
+      const expandedArtifact = expandedId === "first" ? first : second;
+      return (
+        <>
+          {[
+            { artifact: first, id: "first" },
+            { artifact: second, id: "second" },
+          ].map(({ artifact, id }) => (
+            <SparkSceneRenderer
+              key={id}
+              artifact={artifact}
+              expandedSparkInstanceId={expandedId}
+              onExpandSpark={() => setExpandedId(id)}
+              sparkInstanceId={id}
+              threadId="thread"
+            />
+          ))}
+          {expandedId ? (
+            <SparkPanel
+              spark={{
+                artifact: expandedArtifact,
+                sparkInstanceId: expandedId,
+                threadId: "thread",
+              }}
+              onClose={() => setExpandedId(null)}
+            />
+          ) : null}
+        </>
+      );
+    }
+
+    render(<SwitchingHarness />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Expand spark" })[0]);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Close spark panel" })).toHaveFocus(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Expand spark" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Close spark panel" })).toHaveFocus(),
+    );
+    expect(screen.getByText("Second graph", { selector: ".spark-panel-title" })).toBeVisible();
+  });
 });

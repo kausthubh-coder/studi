@@ -31,6 +31,11 @@ test.describe("billing settings truth", () => {
 
     const usageTab = page.getByRole("tab", { name: /Usage/ });
     const billingTab = page.getByRole("tab", { name: /Billing/ });
+    for (const tab of await page.getByRole("tab").all()) {
+      const controlledId = await tab.getAttribute("aria-controls");
+      expect(controlledId).toBeTruthy();
+      await expect(page.locator(`#${controlledId}`)).toHaveCount(1);
+    }
     await expect(usageTab).toHaveAttribute("aria-selected", "true");
     await expect(billingTab).toHaveAttribute("aria-selected", "false");
     await usageTab.focus();
