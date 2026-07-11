@@ -9,7 +9,12 @@ import { modules } from "./test.setup";
 
 const internalTestApi = internal as unknown as {
   chat: {
+    beginAssistantGenerationInternal: FunctionReference<"mutation", "internal">;
+    completeAssistantGenerationInternal: FunctionReference<"mutation", "internal">;
     cleanupFailedAssistantTurnInternal: FunctionReference<"mutation", "internal">;
+    expireAssistantGenerationInternal: FunctionReference<"mutation", "internal">;
+    getGenerationControlInternal: FunctionReference<"query", "internal">;
+    saveAssistantCancellationMessageInternal: FunctionReference<"mutation", "internal">;
   };
 };
 
@@ -76,6 +81,10 @@ describe("chat Convex auth and ownership", () => {
       }),
     ).rejects.toThrow("Unauthorized");
 
+    await expect(
+      t.mutation(api.chat.cancelGeneration, { threadId: "thread_a" }),
+    ).rejects.toThrow("Unauthorized");
+
     await expect(t.query(api.billing.getViewerBillingState, {})).rejects.toThrow(
       "Unauthorized",
     );
@@ -136,6 +145,223 @@ describe("chat Convex auth and ownership", () => {
         threadId: "thread_a",
       }),
     ).rejects.toThrow("Thread not found");
+  });
+
+  it("aborts only the authenticated learner's exact active response stream", async () => {
+    vi.useFakeTimers();
+    const t = testConvex();
+    const ownedThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Owned",
+    });
+
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: ownedThread._id,
+      title: "Owned",
+      lastMessageAt: 1,
+    });
+    const sent = await t.withIdentity({ subject: "user_a" }).mutation(api.chat.sendMessage, {
+      threadId: ownedThread._id,
+      prompt: "Show me why slope is rise over run",
+      requestId: "request_cancel",
+    });
+    const [promptMessage] = await t.query(components.agent.messages.getMessagesByIds, {
+      messageIds: [sent.promptMessageId],
+    });
+    if (!promptMessage) throw new Error("Prompt message was not saved");
+
+    await t.mutation(components.agent.messages.addMessages, {
+      threadId: ownedThread._id,
+      userId: "user_a",
+      promptMessageId: sent.promptMessageId,
+      messages: [
+        {
+          message: { role: "assistant" as const, content: "" },
+          status: "pending" as const,
+        },
+      ],
+    });
+
+    const activeStreamId = await t.mutation(components.agent.streams.create, {
+      threadId: ownedThread._id,
+      userId: "user_a",
+      order: promptMessage.order,
+      stepOrder: promptMessage.stepOrder,
+      format: "UIMessageChunk",
+    });
+    const laterSent = await t.withIdentity({ subject: "user_a" }).mutation(api.chat.sendMessage, {
+      threadId: ownedThread._id,
+      prompt: "Now show a second example",
+      requestId: "request_cancel_later",
+    });
+    const [laterPromptMessage] = await t.query(components.agent.messages.getMessagesByIds, {
+      messageIds: [laterSent.promptMessageId],
+    });
+    if (!laterPromptMessage) throw new Error("Later prompt was not saved");
+    const laterActiveStreamId = await t.mutation(components.agent.streams.create, {
+      threadId: ownedThread._id,
+      userId: "user_a",
+      order: laterPromptMessage.order,
+      stepOrder: laterPromptMessage.stepOrder,
+      format: "UIMessageChunk",
+    });
+    const unrelatedStreamId = await t.mutation(components.agent.streams.create, {
+      threadId: ownedThread._id,
+      userId: "user_a",
+      order: laterPromptMessage.order + 1,
+      stepOrder: 0,
+      format: "UIMessageChunk",
+    });
+
+    await expect(
+      t.withIdentity({ subject: "user_b" }).mutation(api.chat.cancelGeneration, {
+        threadId: ownedThread._id,
+      }),
+    ).rejects.toThrow("Thread not found");
+
+    await expect(
+      t.withIdentity({ subject: "user_a" }).mutation(api.chat.cancelGeneration, {
+        threadId: ownedThread._id,
+      }),
+    ).resolves.toEqual({ stopped: true });
+
+    const streams = await t.query(components.agent.streams.list, {
+      threadId: ownedThread._id,
+      statuses: ["streaming", "aborted"],
+    });
+    expect(streams.find((stream) => stream.streamId === activeStreamId)?.status).toBe("aborted");
+    expect(streams.find((stream) => stream.streamId === laterActiveStreamId)?.status).toBe(
+      "aborted",
+    );
+    expect(streams.find((stream) => stream.streamId === unrelatedStreamId)?.status).toBe(
+      "streaming",
+    );
+    await expect(
+      t.query(internalTestApi.chat.getGenerationControlInternal, {
+        userId: "user_a",
+        threadId: ownedThread._id,
+        promptMessageId: sent.promptMessageId,
+      }),
+    ).resolves.toMatchObject({
+      order: promptMessage.order,
+      state: "cancel_requested",
+    });
+
+    await t.mutation(internalTestApi.chat.saveAssistantCancellationMessageInternal, {
+      userId: "user_a",
+      threadId: ownedThread._id,
+      promptMessageId: sent.promptMessageId,
+    });
+    await expect(
+      t.mutation(internalTestApi.chat.beginAssistantGenerationInternal, {
+        userId: "user_a",
+        threadId: ownedThread._id,
+        promptMessageId: laterSent.promptMessageId,
+      }),
+    ).resolves.toBe(false);
+    await t.mutation(internalTestApi.chat.completeAssistantGenerationInternal, {
+      userId: "user_a",
+      threadId: ownedThread._id,
+      promptMessageId: sent.promptMessageId,
+    });
+    await expect(
+      t.query(internalTestApi.chat.getGenerationControlInternal, {
+        userId: "user_a",
+        threadId: ownedThread._id,
+        promptMessageId: laterSent.promptMessageId,
+      }),
+    ).resolves.toMatchObject({
+      order: laterPromptMessage.order,
+      state: "cancel_requested",
+    });
+    const messages = await t.query(components.agent.messages.listMessagesByThreadId, {
+      threadId: ownedThread._id,
+      order: "asc",
+      excludeToolMessages: true,
+      paginationOpts: { cursor: null, numItems: 10 },
+    });
+    expect(messages.page.find((message) => message.message?.role === "assistant")?.text).toContain(
+      "You stopped this response",
+    );
+  });
+
+  it("does not claim cancellation before an abortable stream exists", async () => {
+    vi.useFakeTimers();
+    const t = testConvex();
+    const ownedThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Owned",
+    });
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: ownedThread._id,
+      title: "Owned",
+      lastMessageAt: 1,
+    });
+    await t.withIdentity({ subject: "user_a" }).mutation(api.chat.sendMessage, {
+      threadId: ownedThread._id,
+      prompt: "Explain vectors",
+      requestId: "request_no_stream",
+    });
+
+    await expect(
+      t.withIdentity({ subject: "user_a" }).mutation(api.chat.cancelGeneration, {
+        threadId: ownedThread._id,
+      }),
+    ).rejects.toThrow("The response is not ready to stop yet");
+  });
+
+  it("expires leaked generation control and aborts its exact stale stream", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-11T12:00:00.000Z"));
+    const t = testConvex();
+    const ownedThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Owned",
+    });
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: ownedThread._id,
+      title: "Owned",
+      lastMessageAt: 1,
+    });
+    const sent = await t.withIdentity({ subject: "user_a" }).mutation(api.chat.sendMessage, {
+      threadId: ownedThread._id,
+      prompt: "Explain vectors",
+      requestId: "request_expiry",
+    });
+    const [promptMessage] = await t.query(components.agent.messages.getMessagesByIds, {
+      messageIds: [sent.promptMessageId],
+    });
+    if (!promptMessage) throw new Error("Prompt message was not saved");
+    const streamId = await t.mutation(components.agent.streams.create, {
+      threadId: ownedThread._id,
+      userId: "user_a",
+      order: promptMessage.order,
+      stepOrder: promptMessage.stepOrder,
+      format: "UIMessageChunk",
+    });
+
+    vi.advanceTimersByTime(15 * 60 * 1000 + 1);
+    await t.mutation(internalTestApi.chat.expireAssistantGenerationInternal, {
+      userId: "user_a",
+      threadId: ownedThread._id,
+      promptMessageId: sent.promptMessageId,
+    });
+
+    await expect(
+      t.query(internalTestApi.chat.getGenerationControlInternal, {
+        userId: "user_a",
+        threadId: ownedThread._id,
+        promptMessageId: sent.promptMessageId,
+      }),
+    ).resolves.toBeNull();
+    const streams = await t.query(components.agent.streams.list, {
+      threadId: ownedThread._id,
+      statuses: ["streaming", "aborted"],
+    });
+    expect(streams.find((stream) => stream.streamId === streamId)?.status).toBe("aborted");
   });
 
   it("keeps attachment ownership on message payload resolution", async () => {

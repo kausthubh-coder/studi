@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ModelMessage } from "ai";
-import { prepareStudiStreamStep } from "./chatActions";
+import {
+  pollGenerationCancellation,
+  prepareStudiStreamStep,
+} from "./chatActions";
 
 describe("prepareStudiStreamStep", () => {
   it("strips signed thinking blocks from AI SDK multi-step replay messages", () => {
@@ -57,5 +60,66 @@ describe("prepareStudiStreamStep", () => {
     expect(JSON.stringify(step.messages)).not.toContain("thinking");
     expect(JSON.stringify(step.messages)).not.toContain("signature");
     expect(JSON.stringify(step.messages)).not.toContain("provider-private");
+  });
+});
+
+describe("pollGenerationCancellation", () => {
+  it("propagates an exact-order cancellation into the running provider/tool signal", async () => {
+    const abortController = new AbortController();
+    const abortComponentStream = vi.fn().mockResolvedValue(true);
+
+    await expect(
+      pollGenerationCancellation({
+        abortController,
+        order: 7,
+        readControl: async () => ({ order: 7, state: "cancel_requested" }),
+        listStreams: async () => [
+          { streamId: "older", order: 6, status: "streaming" },
+          { streamId: "current", order: 7, status: "aborted" },
+        ],
+        abortComponentStream,
+      }),
+    ).resolves.toBe(true);
+
+    expect(abortComponentStream).toHaveBeenCalledWith("current");
+    expect(abortController.signal.aborted).toBe(true);
+  });
+
+  it("waits for the current stream instead of faking a pre-stream cancellation", async () => {
+    const abortController = new AbortController();
+    const abortComponentStream = vi.fn();
+
+    await expect(
+      pollGenerationCancellation({
+        abortController,
+        order: 7,
+        readControl: async () => ({ order: 7, state: "cancel_requested" }),
+        listStreams: async () => [
+          { streamId: "older", order: 6, status: "streaming" },
+        ],
+        abortComponentStream,
+      }),
+    ).resolves.toBe(false);
+
+    expect(abortComponentStream).not.toHaveBeenCalled();
+    expect(abortController.signal.aborted).toBe(false);
+  });
+
+  it("aborts local provider work when the generation lease is removed", async () => {
+    const abortController = new AbortController();
+    const abortComponentStream = vi.fn();
+
+    await expect(
+      pollGenerationCancellation({
+        abortController,
+        order: 7,
+        readControl: async () => null,
+        listStreams: async () => [],
+        abortComponentStream,
+      }),
+    ).resolves.toBe(true);
+
+    expect(abortComponentStream).not.toHaveBeenCalled();
+    expect(abortController.signal.aborted).toBe(true);
   });
 });

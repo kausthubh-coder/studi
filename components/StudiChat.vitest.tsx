@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   sendFollowupMessage: vi.fn(),
   rawSendMessageMutation: vi.fn(),
   deleteThread: vi.fn(),
+  cancelGeneration: vi.fn(),
   backfillThreadActivity: vi.fn(),
   generateUploadUrl: vi.fn(),
   saveAttachment: vi.fn(),
@@ -64,6 +65,9 @@ vi.mock("convex/react", () => ({
     if (name === "chat:backfillThreadActivityForCurrentUser") {
       return mocks.backfillThreadActivity;
     }
+    if (name === "chat:cancelGeneration") {
+      return mocks.cancelGeneration;
+    }
     if (name === "chat:generateUploadUrl") {
       return mocks.generateUploadUrl;
     }
@@ -99,6 +103,7 @@ describe("StudiChat follow-up sending", () => {
       deduped: false,
     });
     mocks.deleteThread.mockResolvedValue({ deleted: true });
+    mocks.cancelGeneration.mockResolvedValue({ stopped: true });
     mocks.backfillThreadActivity.mockResolvedValue({ scanned: 0, patched: 0 });
     mocks.generateUploadUrl.mockResolvedValue("http://localhost/upload");
     mocks.saveAttachment.mockResolvedValue({
@@ -193,6 +198,48 @@ describe("StudiChat follow-up sending", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent(
       /stay visible above the composer/i,
+    );
+    expect(
+      screen.getByRole("button", { name: /stop response generation/i }),
+    ).toBeVisible();
+  });
+
+  it("stops the selected thread generation and reports cancellation failures in place", async () => {
+    const view = render(<StudiChat />);
+
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to learn?"),
+      { target: { value: "Build a visual explanation" } },
+    );
+    fireEvent.click(screen.getByLabelText("Send message"));
+    await screen.findByPlaceholderText("Ask a follow-up...");
+
+    mocks.uiMessages = [
+      {
+        key: "assistant_streaming",
+        role: "assistant",
+        status: "streaming",
+        parts: [],
+      },
+    ];
+    mocks.cancelGeneration.mockRejectedValueOnce(
+      new Error("The response finished before it could be stopped."),
+    );
+    view.rerender(<StudiChat />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /stop response generation/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.cancelGeneration).toHaveBeenCalledWith({
+        threadId: "thread_1",
+      });
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /finished before it could be stopped/i,
     );
   });
 });

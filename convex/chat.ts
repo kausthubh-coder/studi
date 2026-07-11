@@ -1,5 +1,7 @@
 import {
+  abortStream,
   listUIMessages,
+  listStreams,
   saveMessage,
   syncStreams,
   vStreamArgs,
@@ -69,6 +71,23 @@ const cleanupFailedAssistantTurnResultValidator = v.object({
 
 const assistantGenerationFailureText =
   "I hit a snag while generating that reply. Please try again in a moment.";
+const assistantGenerationCanceledText =
+  "You stopped this response. Ask a follow-up whenever you're ready.";
+const assistantGenerationLeaseMs = 15 * 60 * 1000;
+
+const generationStateValidator = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("cancel_requested"),
+);
+
+const generationControlValidator = v.union(
+  v.null(),
+  v.object({
+    order: v.number(),
+    state: generationStateValidator,
+  }),
+);
 
 function truncateTitle(value: string): string {
   return value.length > 60 ? `${value.slice(0, 60)}...` : value;
@@ -401,14 +420,18 @@ export const sendMessage = mutation({
     }
 
     const now = Date.now();
-    const { messageId } = await saveMessage(ctx, components.agent, {
-      threadId: args.threadId,
-      userId: identity.subject,
-      message: {
-        role: "user",
-        content,
+    const { messageId, message: promptMessage } = await saveMessage(
+      ctx,
+      components.agent,
+      {
+        threadId: args.threadId,
+        userId: identity.subject,
+        message: {
+          role: "user",
+          content,
+        },
       },
-    });
+    );
 
     await ctx.db.patch(ownedThread._id, {
       lastMessageAt: now,
@@ -418,11 +441,30 @@ export const sendMessage = mutation({
           : ownedThread.title,
       lastRequestId: args.requestId,
       lastPromptMessageId: messageId,
+      activeGenerations: [
+        ...(ownedThread.activeGenerations ?? []),
+        {
+          promptMessageId: messageId,
+          order: promptMessage.order,
+          state: "queued",
+          createdAt: now,
+          expiresAt: now + assistantGenerationLeaseMs,
+        },
+      ],
     });
 
     await ctx.scheduler.runAfter(
       0,
       internal.chatActions.generateAssistantReply,
+      {
+        threadId: args.threadId,
+        userId: identity.subject,
+        promptMessageId: messageId,
+      },
+    );
+    await ctx.scheduler.runAfter(
+      assistantGenerationLeaseMs,
+      internal.chat.expireAssistantGenerationInternal,
       {
         threadId: args.threadId,
         userId: identity.subject,
@@ -449,6 +491,210 @@ export const sendMessage = mutation({
       promptMessageId: messageId,
       deduped: false,
     };
+  },
+});
+
+export const cancelGeneration = mutation({
+  args: {
+    threadId: v.string(),
+  },
+  returns: v.object({ stopped: v.boolean() }),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", identity.subject).eq("threadId", args.threadId),
+      )
+      .unique();
+    if (!ownedThread) {
+      throw new Error("Thread not found");
+    }
+
+    const activeGenerations = ownedThread.activeGenerations ?? [];
+    if (activeGenerations.length === 0) {
+      throw new Error("The response finished before it could be stopped.");
+    }
+
+    const activeOrders = new Set(
+      activeGenerations.map((generation) => generation.order),
+    );
+    const streams = await listStreams(ctx, components.agent, {
+      threadId: args.threadId,
+      startOrder: Math.min(...activeOrders),
+      includeStatuses: ["streaming"],
+    });
+    const activeStreams = streams.filter((stream) =>
+      activeOrders.has(stream.order),
+    );
+    if (activeStreams.length === 0) {
+      throw new Error(
+        "The response is not ready to stop yet. Try again in a moment.",
+      );
+    }
+
+    let stopped = false;
+    for (const stream of activeStreams) {
+      stopped =
+        (await abortStream(ctx, components.agent, {
+          streamId: stream.streamId,
+          reason: "learner_requested_stop",
+        })) || stopped;
+    }
+    if (!stopped) {
+      throw new Error("The response finished before it could be stopped.");
+    }
+
+    await ctx.db.patch(ownedThread._id, {
+      activeGenerations: activeGenerations.map((generation) => ({
+        ...generation,
+        state: "cancel_requested" as const,
+        cancelRequestedAt: Date.now(),
+      })),
+    });
+    return { stopped: true };
+  },
+});
+
+export const beginAssistantGenerationInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    if (!ownedThread) throw new Error("Thread not found");
+    const generationIndex = (ownedThread.activeGenerations ?? []).findIndex(
+      (generation) => generation.promptMessageId === args.promptMessageId,
+    );
+    if (generationIndex < 0) {
+      return false;
+    }
+    const generation = ownedThread.activeGenerations![generationIndex]!;
+    if (generation.state === "cancel_requested") return false;
+    const activeGenerations = [...ownedThread.activeGenerations!];
+    activeGenerations[generationIndex] = {
+      ...generation,
+      state: "running",
+    };
+    await ctx.db.patch(ownedThread._id, {
+      activeGenerations,
+    });
+    return true;
+  },
+});
+
+export const getGenerationControlInternal = internalQuery({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: generationControlValidator,
+  handler: async (ctx, args) => {
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    const activeGeneration = ownedThread?.activeGenerations?.find(
+      (generation) => generation.promptMessageId === args.promptMessageId,
+    );
+    if (!activeGeneration) {
+      return null;
+    }
+    return {
+      order: activeGeneration.order,
+      state: activeGeneration.state,
+    };
+  },
+});
+
+export const completeAssistantGenerationInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    if (ownedThread?.activeGenerations) {
+      const remainingGenerations = ownedThread.activeGenerations.filter(
+        (generation) => generation.promptMessageId !== args.promptMessageId,
+      );
+      if (
+        remainingGenerations.length !== ownedThread.activeGenerations.length
+      ) {
+        await ctx.db.patch(ownedThread._id, {
+          activeGenerations:
+            remainingGenerations.length > 0 ? remainingGenerations : undefined,
+        });
+      }
+    }
+    return null;
+  },
+});
+
+export const expireAssistantGenerationInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    const generation = ownedThread?.activeGenerations?.find(
+      (candidate) => candidate.promptMessageId === args.promptMessageId,
+    );
+    if (!ownedThread || !generation || generation.expiresAt > Date.now()) {
+      return null;
+    }
+
+    const streams = await listStreams(ctx, components.agent, {
+      threadId: args.threadId,
+      startOrder: generation.order,
+      includeStatuses: ["streaming"],
+    });
+    for (const stream of streams) {
+      if (stream.order !== generation.order) continue;
+      await abortStream(ctx, components.agent, {
+        streamId: stream.streamId,
+        reason: "generation_lease_expired",
+      });
+    }
+
+    const remainingGenerations = ownedThread.activeGenerations!.filter(
+      (candidate) => candidate.promptMessageId !== args.promptMessageId,
+    );
+    await ctx.db.patch(ownedThread._id, {
+      activeGenerations:
+        remainingGenerations.length > 0 ? remainingGenerations : undefined,
+    });
+    return null;
   },
 });
 
@@ -691,6 +937,41 @@ export const saveAssistantFailureMessageInternal = internalMutation({
     await ctx.db.patch(ownedThread._id, {
       lastMessageAt: Date.now(),
     });
+    return null;
+  },
+});
+
+export const saveAssistantCancellationMessageInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const cleanupResult = await cleanupFailedAssistantTurnState(ctx, args);
+    if (!cleanupResult.promptFound || cleanupResult.meaningfulContentFound) {
+      return null;
+    }
+
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    if (!ownedThread) throw new Error("Thread not found");
+
+    await saveMessage(ctx, components.agent, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      message: {
+        role: "assistant",
+        content: assistantGenerationCanceledText,
+      },
+    });
+    await ctx.db.patch(ownedThread._id, { lastMessageAt: Date.now() });
     return null;
   },
 });

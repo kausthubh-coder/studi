@@ -21,6 +21,9 @@ export function Composer({
   onPaste,
   onUpload,
   onRemoveAttachment,
+  isStoppingGeneration = false,
+  stopGenerationError = null,
+  onStopGeneration,
   agentPhase = "idle",
   variant = "chat",
 }: {
@@ -34,6 +37,9 @@ export function Composer({
   onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => Promise<void>;
   onUpload: (files: FileList) => Promise<void>;
   onRemoveAttachment: (attachmentId: Id<"attachments">) => void;
+  isStoppingGeneration?: boolean;
+  stopGenerationError?: string | null;
+  onStopGeneration?: () => void;
   agentPhase?: AgentUiState["phase"];
   variant?: "chat" | "welcome";
 }) {
@@ -217,11 +223,28 @@ export function Composer({
           style={{ maxWidth: "var(--column-max)" }}
         >
           <span className="status-loader-ring mt-0.5 shrink-0" aria-hidden />
-          <span className="text-xs leading-relaxed">
+          <span className="min-w-0 flex-1 text-xs leading-relaxed">
             <strong className="block text-sm">{progressLabel}</strong>
             New responses and build progress will stay visible above the
             composer.
+            {stopGenerationError ? (
+              <span
+                role="alert"
+                className="mt-1 block font-semibold text-red-700"
+              >
+                {stopGenerationError}
+              </span>
+            ) : null}
           </span>
+          <button
+            type="button"
+            aria-label="Stop response generation"
+            disabled={isStoppingGeneration}
+            onClick={onStopGeneration}
+            className="min-h-11 shrink-0 rounded-full border border-amber-300 bg-white/70 px-4 text-xs font-semibold text-amber-950 transition hover:bg-white disabled:cursor-wait disabled:opacity-60"
+          >
+            {isStoppingGeneration ? "Stopping…" : "Stop"}
+          </button>
         </div>
       ) : null}
       <div className="mx-auto" style={{ maxWidth: "var(--column-max)" }}>

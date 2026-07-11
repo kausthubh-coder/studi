@@ -77,6 +77,7 @@ export default function StudiChat() {
   );
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
   const saveAttachment = useMutation(api.chat.saveAttachment);
+  const cancelGeneration = useMutation(api.chat.cancelGeneration);
   const syncBillingProfile = useAction(
     api.billingActions.syncCurrentUserBillingProfile,
   );
@@ -96,6 +97,10 @@ export default function StudiChat() {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isStoppingGeneration, setIsStoppingGeneration] = useState(false);
+  const [stopGenerationError, setStopGenerationError] = useState<string | null>(
+    null,
+  );
   const [pendingAttachments, setPendingAttachments] = useState<
     PendingAttachment[]
   >([]);
@@ -242,6 +247,7 @@ export default function StudiChat() {
       );
 
       setComposerError(null);
+      setStopGenerationError(null);
       setInput("");
       setPendingAttachments([]);
       setIsSending(true);
@@ -282,6 +288,33 @@ export default function StudiChat() {
     ],
   );
 
+  const handleStopGeneration = useCallback(async () => {
+    if (!selectedThreadId || isStoppingGeneration) return;
+    const targetThreadId = selectedThreadId;
+    setStopGenerationError(null);
+    setIsStoppingGeneration(true);
+    let stopAccepted = false;
+    try {
+      await cancelGeneration({ threadId: selectedThreadId });
+      stopAccepted = true;
+    } catch (error) {
+      console.error("Stop generation failed", error);
+      if (selectedThreadIdRef.current === targetThreadId) {
+        setStopGenerationError(getErrorMessage(error));
+      }
+    } finally {
+      if (!stopAccepted && selectedThreadIdRef.current === targetThreadId) {
+        setIsStoppingGeneration(false);
+      }
+    }
+  }, [cancelGeneration, isStoppingGeneration, selectedThreadId]);
+
+  useEffect(() => {
+    if (currentAgentState.phase === "idle") {
+      setIsStoppingGeneration(false);
+    }
+  }, [currentAgentState.phase]);
+
   const removeAttachment = useCallback((attachmentId: Id<"attachments">) => {
     setPendingAttachments((previous) => {
       const removed = previous.find(
@@ -300,6 +333,8 @@ export default function StudiChat() {
     setExpandedSpark(null);
     setMobilePanelView("chat");
     setInput("");
+    setIsStoppingGeneration(false);
+    setStopGenerationError(null);
     setPendingAttachments((previous) => {
       releaseAttachmentPreviewUrls(previous);
       return [];
@@ -313,6 +348,8 @@ export default function StudiChat() {
     setSelectedThreadId(id);
     setExpandedSpark(null);
     setMobilePanelView("chat");
+    setIsStoppingGeneration(false);
+    setStopGenerationError(null);
     setIsMobileSidebarOpen(false);
   }, []);
 
@@ -556,6 +593,9 @@ export default function StudiChat() {
                 onUpload={uploadFiles}
                 onRemoveAttachment={removeAttachment}
                 agentPhase={currentAgentState.phase}
+                isStoppingGeneration={isStoppingGeneration}
+                stopGenerationError={stopGenerationError}
+                onStopGeneration={() => void handleStopGeneration()}
               />
             </div>
 
