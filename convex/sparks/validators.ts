@@ -227,6 +227,130 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+type SceneHtmlElement = {
+  tagName: string;
+  attributes: string;
+};
+
+function readHtmlAttribute(attributes: string, name: string): string | null {
+  const match = attributes.match(
+    new RegExp(
+      `\\b${escapeRegExp(name)}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+      "i",
+    ),
+  );
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+function findSceneElementById(
+  indexHtml: string,
+  controlId: string,
+): SceneHtmlElement | null {
+  const tagPattern = /<\s*([a-z][\w:-]*)\b([^>]*)>/gi;
+  for (const match of indexHtml.matchAll(tagPattern)) {
+    const attributes = match[2] ?? "";
+    if (readHtmlAttribute(attributes, "id") === controlId) {
+      return {
+        tagName: (match[1] ?? "").toLowerCase(),
+        attributes,
+      };
+    }
+  }
+  return null;
+}
+
+function hasKeyboardHandlerForControl(
+  code: string,
+  controlId: string,
+  elementAttributes: string,
+): boolean {
+  if (/\bonkey(?:down|up)\s*=/i.test(elementAttributes)) {
+    return true;
+  }
+
+  const escapedId = escapeRegExp(controlId);
+  const lookup = `(?:document\\s*\\.\\s*)?(?:getElementById\\s*\\(\\s*["']${escapedId}["']\\s*\\)|querySelector\\s*\\(\\s*["']#${escapedId}["']\\s*\\))`;
+  const keyboardEvent = `["']key(?:down|up)["']`;
+  const directHandler = new RegExp(
+    `${lookup}\\s*\\?*\\.\\s*addEventListener\\s*\\(\\s*${keyboardEvent}`,
+    "i",
+  );
+  if (directHandler.test(code)) {
+    return true;
+  }
+
+  const assignmentPattern = new RegExp(
+    `\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${lookup}`,
+    "gi",
+  );
+  for (const match of code.matchAll(assignmentPattern)) {
+    const variableName = match[1];
+    if (!variableName) continue;
+    const variableHandler = new RegExp(
+      `\\b${escapeRegExp(variableName)}\\s*\\?*\\.\\s*addEventListener\\s*\\(\\s*${keyboardEvent}`,
+      "i",
+    );
+    const assignedHandler = new RegExp(
+      `\\b${escapeRegExp(variableName)}\\s*\\.\\s*onkey(?:down|up)\\s*=`,
+      "i",
+    );
+    if (variableHandler.test(code) || assignedHandler.test(code)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function validateSceneV2SliderAccessibility(
+  controls: unknown,
+  indexHtml: string,
+  code: string,
+): string[] {
+  if (!Array.isArray(controls)) return [];
+
+  const errors: string[] = [];
+  for (const control of controls) {
+    if (!isPlainRecord(control) || control.type !== "slider") continue;
+    const id = typeof control.id === "string" ? control.id.trim() : "";
+    if (!id) continue;
+
+    const element = findSceneElementById(indexHtml, id);
+    if (!element) {
+      errors.push(
+        `Slider control "${id}" must use the same stable id on its interactive element.`,
+      );
+      continue;
+    }
+
+    const isNativeRange =
+      element.tagName === "input" &&
+      readHtmlAttribute(element.attributes, "type")?.toLowerCase() === "range";
+    if (isNativeRange) continue;
+
+    const hasSliderSemantics =
+      readHtmlAttribute(element.attributes, "role")?.toLowerCase() ===
+        "slider" &&
+      readHtmlAttribute(element.attributes, "tabindex") === "0" &&
+      readHtmlAttribute(element.attributes, "aria-valuemin") !== null &&
+      readHtmlAttribute(element.attributes, "aria-valuemax") !== null &&
+      readHtmlAttribute(element.attributes, "aria-valuenow") !== null;
+    const hasKeyboardHandler = hasKeyboardHandlerForControl(
+      code,
+      id,
+      element.attributes,
+    );
+
+    if (!hasSliderSemantics || !hasKeyboardHandler) {
+      errors.push(
+        `Slider control "${id}" must be a native range input or a focusable role="slider" with value semantics and a keyboard handler bound to that control id.`,
+      );
+    }
+  }
+
+  return errors;
+}
+
 function validateSceneV2Controls(controls: unknown): string[] {
   const errors: string[] = [];
 
@@ -360,32 +484,13 @@ export function validateSceneV2Payload(
     .join("\n");
   errors.push(...validateSceneCodeSafety(combinedCode));
 
-  const hasPointerDrag =
-    /\b(?:pointerdown|mousedown|touchstart)\b|\bdraggable\s*=/i.test(
-      combinedCode,
-    );
-  if (hasPointerDrag) {
-    const hasKeyboardHandler = /\b(?:keydown|keyup|onkeydown)\b/i.test(
-      combinedCode,
-    );
-    const usesNativeRange = /<\s*input\b[^>]*\btype\s*=\s*["']?range\b/i.test(
+  errors.push(
+    ...validateSceneV2SliderAccessibility(
+      candidate.controls,
       indexHtml,
-    );
-    const hasFocusableCustomControl = /\btabindex\s*=\s*["']?0\b/i.test(
-      indexHtml,
-    );
-    const hasSliderSemantics =
-      /\brole\s*=\s*["']slider["']/i.test(indexHtml) &&
-      /\baria-valuenow\s*=/i.test(indexHtml);
-    if (
-      !usesNativeRange &&
-      (!hasKeyboardHandler || !hasFocusableCustomControl || !hasSliderSemantics)
-    ) {
-      errors.push(
-        "Pointer-only drag controls are not allowed. Use a native range input or a focusable slider with Arrow-key handling and current value semantics.",
-      );
-    }
-  }
+      combinedCode,
+    ),
+  );
 
   const hasStatefulMetadata =
     (Array.isArray(candidate.controls) && candidate.controls.length > 0) ||

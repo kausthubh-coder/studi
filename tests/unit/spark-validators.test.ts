@@ -243,6 +243,47 @@ describe("spark validators", () => {
     expect(nativeRange.ok).toBe(true);
   });
 
+  it("does not let one native range exempt a pointer-only SVG control", () => {
+    const mixedControls = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Compare two changes to the same distribution.",
+      files: {
+        "index.html":
+          '<main><label for="spread">Spread</label><input id="spread" type="range" min="0" max="20" value="6"><svg><circle id="outlier"></circle></svg></main>',
+        "script.js":
+          "const spread = document.getElementById('spread'); spread?.addEventListener('input', updateSpread); const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); window.StudiScene?.onRestore((state) => restore(state));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: true,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [
+        {
+          id: "spread",
+          type: "slider",
+          label: "Spread",
+          min: 0,
+          max: 20,
+        },
+        {
+          id: "outlier",
+          type: "slider",
+          label: "Outlier value",
+          min: 0,
+          max: 20,
+        },
+      ],
+      checkpoints: [],
+    });
+
+    expect(mixedControls.ok).toBe(false);
+    expect(mixedControls.errors.join(" ")).toMatch(
+      /outlier.*(?:keyboard|range|slider)|(?:keyboard|range|slider).*outlier/i,
+    );
+  });
+
   it("rejects unsafe scene v2 data after draft normalization", () => {
     const artifact = normalizeSparkSceneDraft({
       version: sparkSceneV2Version,

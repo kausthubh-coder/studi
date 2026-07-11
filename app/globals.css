@@ -3741,7 +3741,7 @@ body::after {
   .spark-chat-column {
     width: var(--spark-chat-width, 420px);
     max-width: var(--spark-chat-width, 420px);
-    min-width: 320px;
+    min-width: 0;
   }
 }
 

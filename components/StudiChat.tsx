@@ -106,7 +106,7 @@ export default function StudiChat() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const touchTrackingRef = useRef(false);
-  const sparkResizingRef = useRef(false);
+  const sparkSplitContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
@@ -361,53 +361,6 @@ export default function StudiChat() {
     }
   }, [expandedSpark]);
 
-  const handleSparkResizeStart = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      sparkResizingRef.current = true;
-      const onMove = (moveEvent: MouseEvent) => {
-        if (!sparkResizingRef.current) return;
-        const nextWidth = Math.min(
-          Math.max(moveEvent.clientX, 340),
-          window.innerWidth - 420,
-        );
-        setSparkChatWidth(nextWidth);
-      };
-      const onUp = () => {
-        sparkResizingRef.current = false;
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-      };
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    },
-    [],
-  );
-
-  const handleSparkResizeTouchStart = useCallback(
-    () => {
-      sparkResizingRef.current = true;
-      const onMove = (moveEvent: globalThis.TouchEvent) => {
-        if (!sparkResizingRef.current) return;
-        const touch = moveEvent.touches[0];
-        if (!touch) return;
-        const nextWidth = Math.min(
-          Math.max(touch.clientX, 340),
-          window.innerWidth - 420,
-        );
-        setSparkChatWidth(nextWidth);
-      };
-      const onEnd = () => {
-        sparkResizingRef.current = false;
-        window.removeEventListener("touchmove", onMove);
-        window.removeEventListener("touchend", onEnd);
-      };
-      window.addEventListener("touchmove", onMove);
-      window.addEventListener("touchend", onEnd);
-    },
-    [],
-  );
-
   const handleTouchStart = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
       if (!isMobile) {
@@ -544,6 +497,7 @@ export default function StudiChat() {
           />
         ) : (
           <div
+            ref={sparkSplitContainerRef}
             className={`flex flex-1 overflow-hidden ${
               expandedSpark ? "flex-col lg:flex-row" : ""
             }`}
@@ -610,16 +564,9 @@ export default function StudiChat() {
                 className={`flex min-w-0 flex-1 ${isMobile && mobilePanelView !== "spark" ? "hidden" : ""}`}
               >
                 <SparkResizeHandle
+                  containerRef={sparkSplitContainerRef}
                   width={sparkChatWidth}
-                  minWidth={340}
-                  maxWidth={Math.max(
-                    340,
-                    (typeof window === "undefined" ? 1440 : window.innerWidth) -
-                      420,
-                  )}
                   onWidthChange={setSparkChatWidth}
-                  onMouseDown={handleSparkResizeStart}
-                  onTouchStart={handleSparkResizeTouchStart}
                 />
                 <SparkPanel
                   spark={expandedSpark}
