@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   IconCompose,
   IconSettings,
@@ -29,24 +29,61 @@ export function ThreadSidebar({
   const [threadPendingDelete, setThreadPendingDelete] =
     useState<ThreadSummary | null>(null);
   const confirmDeleteRef = useRef<HTMLButtonElement>(null);
+  const deleteDialogRef = useRef<HTMLDivElement>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const closeDeleteDialog = useCallback(() => {
+    setThreadPendingDelete(null);
+  }, []);
 
   useEffect(() => {
-    if (!threadPendingDelete) return;
+    if (!threadPendingDelete) {
+      deleteTriggerRef.current?.focus();
+      return;
+    }
     confirmDeleteRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setThreadPendingDelete(null);
+        event.preventDefault();
+        closeDeleteDialog();
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusable = Array.from(
+        deleteDialogRef.current?.querySelectorAll<HTMLButtonElement>(
+          "button:not(:disabled)",
+        ) ?? [],
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!deleteDialogRef.current?.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [threadPendingDelete]);
+  }, [closeDeleteDialog, threadPendingDelete]);
 
   return (
     <>
       <aside
         className="studi-thread-sidebar flex h-screen flex-shrink-0 flex-col overflow-hidden border-r border-border-warm bg-bg-alt"
         data-mobile-open={isMobileOpen}
+        inert={threadPendingDelete ? true : undefined}
         style={{ width: "var(--sidebar-w)" }}
       >
         <div className="flex items-center justify-end px-3 pt-3 lg:hidden">
@@ -136,6 +173,7 @@ export function ThreadSidebar({
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
+                      deleteTriggerRef.current = event.currentTarget;
                       setThreadPendingDelete(thread);
                     }}
                     disabled={isDeleting}
@@ -168,11 +206,12 @@ export function ThreadSidebar({
           className="thread-delete-modal-overlay"
           onMouseDown={(event) => {
             if (event.currentTarget === event.target) {
-              setThreadPendingDelete(null);
+              closeDeleteDialog();
             }
           }}
         >
           <div
+            ref={deleteDialogRef}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="thread-delete-title"
@@ -193,7 +232,7 @@ export function ThreadSidebar({
               <button
                 type="button"
                 className="thread-delete-modal-cancel"
-                onClick={() => setThreadPendingDelete(null)}
+                onClick={closeDeleteDialog}
               >
                 Keep thread
               </button>
@@ -203,7 +242,7 @@ export function ThreadSidebar({
                 className="thread-delete-modal-danger"
                 onClick={() => {
                   const thread = threadPendingDelete;
-                  setThreadPendingDelete(null);
+                  closeDeleteDialog();
                   onDeleteThread(thread);
                 }}
               >

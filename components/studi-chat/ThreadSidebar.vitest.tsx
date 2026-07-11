@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ThreadSidebar } from "@/components/studi-chat/ThreadSidebar";
 
@@ -47,5 +47,40 @@ describe("ThreadSidebar destructive actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete thread" }));
 
     expect(onDeleteThread).toHaveBeenCalledWith(thread);
+  });
+
+  it("traps focus, makes the background inert, and restores the trigger", async () => {
+    render(
+      <ThreadSidebar
+        threads={[thread]}
+        selectedThreadId="thread_1"
+        onSelectThread={vi.fn()}
+        onCreateThread={vi.fn()}
+        onDeleteThread={vi.fn()}
+        deletingThreadId={null}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", {
+      name: `Delete ${thread.title}`,
+    });
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole("alertdialog");
+    const keep = screen.getByRole("button", { name: "Keep thread" });
+    const confirm = screen.getByRole("button", { name: "Delete thread" });
+    expect(confirm).toHaveFocus();
+    expect(dialog.closest("body")?.querySelector("aside")).toHaveAttribute(
+      "inert",
+    );
+
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(keep).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(confirm).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 });

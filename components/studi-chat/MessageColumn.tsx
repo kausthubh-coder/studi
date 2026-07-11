@@ -28,6 +28,7 @@ export function MessageColumn({
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const shouldFollowLatestRef = useRef(true);
+  const latestMessageKeyRef = useRef<string | null>(null);
 
   const scrollToLatest = useCallback(() => {
     const list = listRef.current;
@@ -49,10 +50,20 @@ export function MessageColumn({
   }, [selectedThreadId, scrollToLatest]);
 
   useLayoutEffect(() => {
+    const latestMessage = messages.at(-1);
+    const latestMessageKey = latestMessage?.key ?? null;
+    const learnerJustSent =
+      latestMessage?.role === "user" &&
+      latestMessageKey !== latestMessageKeyRef.current;
+    latestMessageKeyRef.current = latestMessageKey;
+
+    if (learnerJustSent) {
+      shouldFollowLatestRef.current = true;
+    }
     if (shouldFollowLatestRef.current) {
       scrollToLatest();
     }
-  }, [messages.length, scrollToLatest]);
+  }, [messages, scrollToLatest]);
 
   useEffect(() => {
     const content = contentRef.current;
