@@ -498,7 +498,7 @@ export default function StudiChat() {
         {threadDeleteError || billingBanner ? (
           <div
             className={`absolute left-1/2 z-20 w-full max-w-xl -translate-x-1/2 px-4 ${
-              expandedSpark && isMobile ? "top-14" : "top-3"
+              isMobile ? "top-14" : "top-3"
             }`}
           >
             {threadDeleteError ? (

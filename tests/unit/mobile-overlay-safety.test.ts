@@ -16,10 +16,11 @@ describe("mobile chat overlay safety", () => {
     );
   });
 
-  it("places runtime banners below expanded Spark navigation on mobile", () => {
+  it("places runtime banners below mobile workspace controls", () => {
     const chat = read("components/StudiChat.tsx");
 
-    expect(chat).toContain(
+    expect(chat).toContain('isMobile ? "top-14" : "top-3"');
+    expect(chat).not.toContain(
       'expandedSpark && isMobile ? "top-14" : "top-3"',
     );
   });
