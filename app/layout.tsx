@@ -45,7 +45,7 @@ export default function RootLayout({
       <body
         className={`${dmSerifDisplay.variable} ${plusJakartaSans.variable} ${sourceSerif.variable} antialiased`}
       >
-        <ClerkProvider dynamic>
+        <ClerkProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ClerkProvider>
       </body>
