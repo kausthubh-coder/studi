@@ -496,7 +496,11 @@ export default function StudiChat() {
 
       <main className="relative flex min-w-0 flex-1 overflow-hidden">
         {threadDeleteError || billingBanner ? (
-          <div className="absolute left-1/2 top-3 z-20 w-full max-w-xl -translate-x-1/2 px-4">
+          <div
+            className={`absolute left-1/2 z-20 w-full max-w-xl -translate-x-1/2 px-4 ${
+              expandedSpark && isMobile ? "top-14" : "top-3"
+            }`}
+          >
             {threadDeleteError ? (
               <div className="rounded-2xl border border-red-200 bg-red-50/95 px-4 py-3 text-sm text-red-900 shadow-sm backdrop-blur">
                 {threadDeleteError}
