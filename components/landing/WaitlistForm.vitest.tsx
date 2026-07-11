@@ -54,4 +54,22 @@ describe("WaitlistForm", () => {
       expect(document.getElementById(id!)).toBeInTheDocument();
     }
   });
+
+  it("shows the server's safe retry guidance when signup is rate limited", async () => {
+    joinWaitlist.mockResolvedValue({
+      success: false,
+      error: "Too many signup attempts right now. Please wait a moment and try again.",
+    });
+    render(<WaitlistForm />);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Email address" }), {
+      target: { value: "learner@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Get Early Access" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Too many signup attempts right now. Please wait a moment and try again.",
+    );
+    expect(screen.getByRole("button", { name: "Get Early Access" })).toBeEnabled();
+  });
 });

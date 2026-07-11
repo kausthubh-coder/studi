@@ -13,7 +13,6 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
   const [state, setState] = useState<FormState>("idle");
   const [email, setEmail] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [alreadyOnList, setAlreadyOnList] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const successRef = useRef<HTMLDivElement>(null);
   const noteId = useId();
@@ -30,7 +29,11 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = email.trim();
-    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    if (
+      !trimmed ||
+      trimmed.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)
+    ) {
       setErrorMsg("Please enter a valid email address.");
       setState("error");
       inputRef.current?.focus();
@@ -43,8 +46,6 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
     try {
       const result = await joinWaitlist({ email: trimmed });
       if (result.success) {
-        const isAlreadyOnList = result.alreadyOnList ?? false;
-        setAlreadyOnList(isAlreadyOnList);
         setState("success");
       } else {
         setErrorMsg(result.error ?? "Something went wrong. Please try again.");
@@ -71,7 +72,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
             className="text-center py-4"
           >
             <p className="font-brand text-2xl text-[#1c1208] mb-1">
-              {alreadyOnList ? "You're already on the list!" : "You're on the list!"}
+              You&apos;re on the list!
             </p>
             <p className="font-body text-[#6b5a47]">
               One email is all it takes. Check your inbox for updates.
@@ -92,6 +93,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
               <input
                 ref={inputRef}
                 type="email"
+                maxLength={254}
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);

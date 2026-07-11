@@ -1,11 +1,14 @@
 import { ConvexError } from "convex/values";
 import {
+  MINUTE,
   RateLimiter,
   SECOND,
   isRateLimitError,
 } from "@convex-dev/rate-limiter";
 import { components } from "./_generated/api";
 import type { BillingPlanKey } from "./billing";
+
+export const WAITLIST_JOIN_BURST_CAPACITY = 20;
 
 const rateLimiter = new RateLimiter(components.rateLimiter, {
   chatSendFreeOnboarding: {
@@ -25,6 +28,12 @@ const rateLimiter = new RateLimiter(components.rateLimiter, {
     rate: 1,
     period: SECOND,
     capacity: 6,
+  },
+  waitlistJoinPublic: {
+    kind: "token bucket",
+    rate: 60,
+    period: MINUTE,
+    capacity: WAITLIST_JOIN_BURST_CAPACITY,
   },
 });
 
@@ -82,4 +91,8 @@ export async function enforceChatSendRateLimit(
       planKey,
     });
   }
+}
+
+export async function enforcePublicWaitlistRateLimit(ctx: RateLimitCtx) {
+  return rateLimiter.limit(ctx, "waitlistJoinPublic");
 }
