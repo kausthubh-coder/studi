@@ -55,7 +55,7 @@ export default async function WaitlistPage({ searchParams }: WaitlistPageProps) 
         </nav>
 
         <header className="mx-auto max-w-3xl py-12 text-center md:py-16">
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[#3a9e8a]">
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[#217567]">
             Optional research
           </p>
           <h1 className="font-brand text-4xl leading-tight sm:text-5xl md:text-6xl">

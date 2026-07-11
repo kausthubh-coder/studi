@@ -19,7 +19,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
 
   const joinWaitlist = useAction(api.waitlistPublic.joinWaitlist);
 
-  const accentColor = variant === "teal" ? "#3a9e8a" : "#e05a3a";
+  const accentColor = variant === "teal" ? "#217567" : "#b64028";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,7 +68,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
             </p>
             <Link
               href="/waitlist?source=landing"
-              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl border-2 border-[#1c1208] bg-[#3a9e8a] px-4 py-2 font-bold text-white shadow-[3px_3px_0px_#1c1208] transition hover:bg-[#2c7a6a]"
+              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl border-2 border-[#1c1208] bg-[#217567] px-4 py-2 font-bold text-white shadow-[3px_3px_0px_#1c1208] transition hover:bg-[#16594f]"
             >
               Optional: answer 8 short steps →
             </Link>
@@ -91,13 +91,13 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
                 disabled={state === "loading"}
                 aria-label="Email address"
                 aria-describedby={noteId}
-                className="flex-1 px-4 py-3 rounded-xl border-2 border-[#1c1208] bg-white font-ui text-base placeholder:text-[#b8a99a] focus:outline-none focus:ring-2 focus:ring-[#e05a3a]/40 disabled:opacity-60 shadow-[2px_2px_0px_#1c1208]"
+                className="flex-1 px-4 py-3 rounded-xl border-2 border-[#1c1208] bg-white font-ui text-base placeholder:text-[#6b5a47] focus:outline-none focus:ring-2 focus:ring-[#e05a3a]/40 disabled:opacity-100 shadow-[2px_2px_0px_#1c1208]"
               />
               <button
                 type="submit"
                 disabled={state === "loading"}
-                style={{ backgroundColor: state === "loading" ? "#b8a99a" : accentColor }}
-                className="px-6 py-3 rounded-xl border-2 border-[#1c1208] text-white font-bold text-base whitespace-nowrap shadow-[3px_3px_0px_#1c1208] active:translate-y-0.5 active:shadow-[0px_0px_0px_#1c1208] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ backgroundColor: state === "loading" ? "#5f4f40" : accentColor }}
+                className="px-6 py-3 rounded-xl border-2 border-[#1c1208] text-white font-bold text-base whitespace-nowrap shadow-[3px_3px_0px_#1c1208] active:translate-y-0.5 active:shadow-[0px_0px_0px_#1c1208] transition-all disabled:opacity-100 disabled:cursor-not-allowed"
               >
                 {state === "loading" ? (
                   <span className="flex items-center gap-2">
@@ -124,7 +124,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
               )}
             </AnimatePresence>
 
-            <p id={noteId} className="text-xs text-[#9b8c7e] text-center font-ui">
+            <p id={noteId} className="text-xs text-[#6b5a47] text-center font-ui">
               {WAITLIST_PRICING_ASSURANCE}
               {" One email joins the waitlist; the questionnaire is optional."}
             </p>

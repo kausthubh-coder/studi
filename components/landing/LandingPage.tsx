@@ -107,7 +107,7 @@ export function LandingPage() {
                     input?.focus();
                   }, 600);
                 }}
-                className="font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
+                className="font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border-2 border-[#1c1208] bg-[#b64028] text-white hover:bg-[#9f351f] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
               >
                 Get Early Access
               </button>
@@ -115,7 +115,7 @@ export function LandingPage() {
           </SignedOut>
 
           <SignedIn>
-            <Link href="/chat" className="font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none">
+            <Link href="/chat" className="font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-[#b64028] text-white hover:bg-[#9f351f] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none">
               Open chat
             </Link>
           </SignedIn>
@@ -137,7 +137,7 @@ export function LandingPage() {
               {/* Eyebrow */}
               <motion.div variants={fadeUp} className="mb-5 inline-flex items-center gap-2 bg-[#e05a3a]/10 border-2 border-[#e05a3a]/30 rounded-full px-4 py-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#e05a3a] animate-pulse" />
-                <span className="font-bold text-sm text-[#e05a3a] uppercase tracking-wider">Now in early access</span>
+                <span className="font-bold text-sm text-[#b64028] uppercase tracking-wider">Now in early access</span>
               </motion.div>
 
               <motion.h1
@@ -165,7 +165,7 @@ export function LandingPage() {
                 <SignedIn>
                   <Link
                     href="/chat"
-                    className="inline-block w-full max-w-sm font-bold px-8 py-4 rounded-xl border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-all shadow-[4px_4px_0px_#1c1208] text-lg text-center"
+                    className="inline-block w-full max-w-sm font-bold px-8 py-4 rounded-xl border-2 border-[#1c1208] bg-[#b64028] text-white hover:bg-[#9f351f] transition-all shadow-[4px_4px_0px_#1c1208] text-lg text-center"
                   >
                     Enter Studi →
                   </Link>
@@ -173,7 +173,7 @@ export function LandingPage() {
               </motion.div>
 
               {/* Waitlist counter */}
-              <motion.p variants={fadeUp} className="text-sm font-bold text-[#9b8c7e] font-ui">
+              <motion.p variants={fadeUp} className="text-sm font-bold text-[#6b5a47] font-ui">
                 Join <span className="text-[#1c1208]">340+</span> students on the waitlist
               </motion.p>
             </div>
@@ -201,7 +201,7 @@ export function LandingPage() {
 
                   {/* Studi Socratic response */}
                   <div className="flex gap-3 items-start self-end max-w-[95%]">
-                    <div className="flex-1 bg-[#e05a3a] text-white p-3 md:p-4 rounded-xl rounded-tr-sm border-2 border-[#1c1208] shadow-[2px_2px_0px_#1c1208] text-sm md:text-base leading-relaxed order-first">
+                    <div className="flex-1 bg-[#b64028] text-white p-3 md:p-4 rounded-xl rounded-tr-sm border-2 border-[#1c1208] shadow-[2px_2px_0px_#1c1208] text-sm md:text-base leading-relaxed order-first">
                       Good question — let me ask you something first.<br /><br />
                       Look at this function:
                       <div className="mt-3 bg-[#1c1208] text-[#fdf8f2] p-3 rounded-xl border-2 border-[#1c1208] font-mono text-xs md:text-sm">
@@ -210,8 +210,8 @@ export function LandingPage() {
                         <p className="pl-8 text-[#e8a030]">return 1</p>
                         <p className="pl-4">return n * factorial(n - 1)</p>
                       </div>
-                      <div className="mt-3 bg-[#c44d2e]/30 border-2 border-white/30 rounded-xl p-3 font-bold text-sm md:text-base">
-                        What do you think would happen if we removed the <code className="bg-white/20 px-1 rounded">if n == 1</code> line entirely? Take a guess →
+                      <div className="mt-3 bg-[#8f2f1d] border-2 border-white/50 rounded-xl p-3 font-bold text-sm md:text-base">
+                        What do you think would happen if we removed the <code className="bg-[#fdf8f2] px-1 rounded text-[#7a2418]">if n == 1</code> line entirely? Take a guess →
                       </div>
                     </div>
                     <div className="bg-[#1c1208] text-white shrink-0 px-3 py-2 rounded-xl rounded-tr-sm border-2 border-[#1c1208] font-bold text-sm">Studi</div>
@@ -232,9 +232,9 @@ export function LandingPage() {
                     transition={{ delay: 1.2, duration: 0.5 }}
                     className="flex gap-3 items-start self-end max-w-[95%] overflow-hidden"
                   >
-                    <div className="flex-1 bg-[#3a9e8a] text-white p-3 md:p-4 rounded-xl rounded-tr-sm border-2 border-[#1c1208] shadow-[2px_2px_0px_#1c1208] text-sm md:text-base order-first">
+                    <div className="flex-1 bg-[#217567] text-white p-3 md:p-4 rounded-xl rounded-tr-sm border-2 border-[#1c1208] shadow-[2px_2px_0px_#1c1208] text-sm md:text-base order-first">
                       <span className="font-bold">Exactly right.</span> You just discovered it yourself. Now let's make sure it sticks —
-                      <div className="mt-2 inline-flex items-center gap-2 bg-white/20 border border-white/30 rounded-lg px-3 py-1.5 text-xs font-bold">
+                      <div className="mt-2 inline-flex items-center gap-2 bg-[#16594f] border border-white/50 rounded-lg px-3 py-1.5 text-xs font-bold">
                         <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-white" />
                         Generating call-stack Spark...
                       </div>
@@ -248,7 +248,7 @@ export function LandingPage() {
         </section>
 
         {/* ── MARQUEE ── */}
-        <div className="border-y-4 border-[#1c1208] bg-[#e05a3a] py-3 overflow-hidden relative">
+        <div className="border-y-4 border-[#1c1208] bg-[#b64028] py-3 overflow-hidden relative">
           <div
             className="flex gap-0 whitespace-nowrap"
             style={{ animation: "marquee 28s linear infinite" }}
@@ -264,7 +264,7 @@ export function LandingPage() {
                 ].map((item) => (
                   <span key={item} className="flex items-center gap-6 px-6">
                     <span className="font-bold text-white text-sm md:text-base uppercase tracking-wider">{item}</span>
-                    <span className="text-white/50 font-bold text-lg">·</span>
+                    <span className="text-white font-bold text-lg" aria-hidden="true">·</span>
                   </span>
                 ))}
               </span>
@@ -285,7 +285,7 @@ export function LandingPage() {
             >
               <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-7xl text-[#1c1208] leading-tight md:leading-[1.08] tracking-tight mb-8 text-center">
                 Stuck studying alone at 2am —{" "}
-                <span className="text-[#e05a3a]">and still not getting it?</span>
+                <span className="text-[#b64028]">and still not getting it?</span>
               </motion.h2>
 
               <motion.p variants={fadeUp} className="font-body text-lg md:text-2xl text-[#6b5a47] leading-relaxed text-center max-w-3xl mx-auto mb-14">
@@ -299,15 +299,15 @@ export function LandingPage() {
                 <div className="bg-gray-100 rounded-2xl border-2 border-gray-300 p-5 relative">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-8 h-8 rounded-full bg-gray-300 border-2 border-gray-400 flex items-center justify-center font-bold text-gray-600 text-xs">AI</div>
-                    <span className="font-bold text-gray-500 text-sm">ChatGPT</span>
+                    <span className="font-bold text-gray-600 text-sm">ChatGPT</span>
                   </div>
                   <p className="text-gray-600 text-sm leading-relaxed font-body">
                     Recursion is a programming technique where a function calls itself. It consists of a base case, which terminates the recursion, and a recursive case, which continues it. Each call creates a new stack frame...
                   </p>
-                  <p className="text-gray-500 text-sm mt-3 font-body">
+                  <p className="text-gray-600 text-sm mt-3 font-body">
                     The time complexity of recursive algorithms can be analyzed using the Master theorem...
                   </p>
-                  <p className="text-gray-400 text-sm mt-3 font-body italic">Hope that helps! Let me know if you have more questions.</p>
+                  <p className="text-gray-600 text-sm mt-3 font-body italic">Hope that helps! Let me know if you have more questions.</p>
                   {/* Sticky note */}
                   <div className="absolute -top-3 -right-3 bg-[#e8a030] border-2 border-[#1c1208] rounded-lg px-3 py-1.5 rotate-3 shadow-[2px_2px_0px_#1c1208]">
                     <p className="font-bold text-xs text-[#1c1208]">...okay but why?</p>
@@ -317,7 +317,7 @@ export function LandingPage() {
                 {/* Studi side */}
                 <div className="bg-white rounded-2xl border-2 border-[#3a9e8a] shadow-[4px_4px_0px_#3a9e8a] p-5 relative">
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 rounded-full bg-[#3a9e8a] border-2 border-[#1c1208] flex items-center justify-center font-bold text-white text-xs">S</div>
+                    <div className="w-8 h-8 rounded-full bg-[#217567] border-2 border-[#1c1208] flex items-center justify-center font-bold text-white text-xs">S</div>
                     <span className="font-bold text-[#1c1208] text-sm">Studi</span>
                   </div>
                   <p className="text-[#1c1208] text-sm font-body font-medium leading-relaxed">
@@ -326,7 +326,7 @@ export function LandingPage() {
                   <div className="mt-3 bg-[#fdf8f2] border-2 border-[#3a9e8a] rounded-xl p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="animate-pulse w-2 h-2 rounded-full bg-[#e05a3a]" />
-                      <span className="font-bold text-xs text-[#3a9e8a]">Call Stack Spark</span>
+                      <span className="font-bold text-xs text-[#217567]">Call Stack Spark</span>
                     </div>
                     <div className="font-mono text-xs text-gray-500">factorial(3) → factorial(2) → factorial(1) ...</div>
                   </div>
@@ -356,21 +356,21 @@ export function LandingPage() {
                 {[
                   {
                     step: "01",
-                    color: "#e05a3a",
+                    color: "#b64028",
                     title: "You ask.",
                     body: "\"I don't understand why recursion doesn't just loop forever.\"",
                     tag: "Any question, any subject",
                   },
                   {
                     step: "02",
-                    color: "#3a9e8a",
+                    color: "#217567",
                     title: "Studi asks back.",
                     body: "\"What do you think happens when n = 1? Walk me through it.\" + a call-stack Spark to visualise your thinking.",
                     tag: "Socratic method + Sparks",
                   },
                   {
                     step: "03",
-                    color: "#e8a030",
+                    color: "#8a5c10",
                     title: "You own it.",
                     body: "You work it out. The answer feels like your idea. Because it is — you discovered it.",
                     tag: "Intuition that sticks",
@@ -411,11 +411,11 @@ export function LandingPage() {
             >
               <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-7xl text-center mb-4 leading-tight">
                 Some concepts need to be{" "}
-                <span className="text-[#3a9e8a]">seen.</span>{" "}
+                <span className="text-[#217567]">seen.</span>{" "}
                 Or{" "}
-                <span className="text-[#e8a030]">touched.</span>{" "}
+                <span className="text-[#8a5c10]">touched.</span>{" "}
                 Or{" "}
-                <span className="text-[#e05a3a]">broken.</span>
+                <span className="text-[#b64028]">broken.</span>
               </motion.h2>
               <motion.p variants={fadeUp} className="text-center font-body text-lg md:text-xl text-[#6b5a47] mb-12 max-w-3xl mx-auto leading-relaxed">
                 Studi generates the right interactive tool for the right moment — a graph you can manipulate, a simulation you can break, a challenge you have to pass. Not an attachment. Not a link. Built for your exact question, inside the conversation.
@@ -425,7 +425,7 @@ export function LandingPage() {
                 <SparksShowcase />
               </motion.div>
 
-              <motion.p variants={fadeUp} className="text-center text-sm text-[#9b8c7e] font-ui mt-2">
+              <motion.p variants={fadeUp} className="text-center text-sm text-[#6b5a47] font-ui mt-2">
                 Every Spark is generated on the fly and tailored to exactly what you're stuck on.
               </motion.p>
             </motion.div>
@@ -456,26 +456,26 @@ export function LandingPage() {
                     Understand Calculus for Physics
                   </div>
                   <div className="space-y-5">
-                    <div className="flex gap-4 items-start opacity-50">
+                    <div className="flex gap-4 items-start text-[#6b5a47]">
                       <div className="w-8 h-8 rounded-full bg-[#1c1208] text-white flex items-center justify-center font-bold text-sm shrink-0 border-2 border-[#1c1208]">✓</div>
                       <div>
                         <h4 className="font-bold text-base line-through">Limits and Infinity</h4>
-                        <p className="text-xs text-gray-400">Completed yesterday</p>
+                        <p className="text-xs text-[#6b5a47]">Completed yesterday</p>
                       </div>
                     </div>
                     <div className="flex gap-4 items-start">
                       <div className="w-8 h-8 rounded-full bg-[#e8a030] text-[#1c1208] flex items-center justify-center font-bold text-lg shrink-0 border-2 border-[#1c1208]" />
                       <div>
-                        <div className="inline-block px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-[#e8a030]/20 text-[#e8a030] border border-[#e8a030] uppercase mb-1">In Progress</div>
+                        <div className="inline-block px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-[#e8a030]/20 text-[#8a5c10] border border-[#8a5c10] uppercase mb-1">In Progress</div>
                         <h4 className="font-bold text-xl">The Derivative</h4>
                         <p className="text-sm text-gray-600 font-medium">Visualising rates of change</p>
                       </div>
                     </div>
-                    <div className="flex gap-4 items-start opacity-50">
+                    <div className="flex gap-4 items-start text-[#6b5a47]">
                       <div className="w-8 h-8 rounded-full bg-white text-[#1c1208] flex items-center justify-center font-bold text-sm shrink-0 border-2 border-gray-300" />
                       <div>
                         <h4 className="font-bold text-base">Integrals</h4>
-                        <p className="text-xs text-gray-400">Locked — complete The Derivative first</p>
+                        <p className="text-xs text-[#6b5a47]">Locked — complete The Derivative first</p>
                       </div>
                     </div>
                   </div>
@@ -495,7 +495,7 @@ export function LandingPage() {
             >
               <div className="flex flex-col lg:flex-row gap-10 md:gap-16 items-center">
                 <div className="lg:w-5/12 text-left">
-                  <motion.div variants={fadeUp} className="inline-block mb-4 px-3 py-1 rounded-full border-2 border-[#e05a3a] bg-[#e05a3a]/10 font-bold text-xs uppercase tracking-wider text-[#e05a3a]">
+                  <motion.div variants={fadeUp} className="inline-block mb-4 px-3 py-1 rounded-full border-2 border-[#e05a3a] bg-[#e05a3a]/10 font-bold text-xs uppercase tracking-wider text-[#b64028]">
                     Sparks
                   </motion.div>
                   <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-6xl mb-6 leading-tight">
@@ -516,7 +516,7 @@ export function LandingPage() {
                       "Safe iframe rendering inside chat",
                     ].map((item) => (
                       <li key={item} className="flex items-center gap-3 font-ui font-bold text-[#1c1208] text-sm md:text-base">
-                        <span className="w-5 h-5 rounded-full bg-[#e05a3a] border-2 border-[#1c1208] flex items-center justify-center text-white text-xs shrink-0">✓</span>
+                        <span className="w-5 h-5 rounded-full bg-[#b64028] border-2 border-[#1c1208] flex items-center justify-center text-white text-xs shrink-0">✓</span>
                         {item}
                       </li>
                     ))}
@@ -531,7 +531,7 @@ export function LandingPage() {
                         <div className="w-2.5 h-2.5 rounded-full bg-[#3a9e8a]" />
                         <span>Function Spark</span>
                       </div>
-                      <span className="font-mono text-xs text-[#9b6dd4]">desmos_graph</span>
+                      <span className="font-mono text-xs text-[#7041a3]">desmos_graph</span>
                     </div>
 
                     <div className="grid grid-cols-[0.9fr_1.25fr] flex-1 min-h-0">
@@ -587,14 +587,14 @@ export function LandingPage() {
             >
               <motion.div variants={fadeUp} className="inline-flex items-center gap-3 mb-12 bg-white border-2 border-[#1c1208] rounded-full px-6 py-3 shadow-[4px_4px_0px_#1c1208]">
                 <div className="flex -space-x-2">
-                  {["#e05a3a", "#3a9e8a", "#e8a030"].map((c, i) => (
+                  {["#b64028", "#217567", "#8a5c10"].map((c, i) => (
                     <div key={i} className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: c }}>
                       {["P", "M", "D"][i]}
                     </div>
                   ))}
                 </div>
                 <p className="font-bold text-[#1c1208] text-sm md:text-base">
-                  Join <span className="text-[#e05a3a]">340+</span> students on the waitlist
+                  Join <span className="text-[#b64028]">340+</span> students on the waitlist
                 </p>
               </motion.div>
 
@@ -604,19 +604,19 @@ export function LandingPage() {
                     quote: "Studi helped me finally understand Big O notation. I'd been staring at it for weeks — it asked me one question and suddenly it clicked.",
                     name: "Priya K.",
                     role: "CS sophomore",
-                    color: "#e05a3a",
+                    color: "#b64028",
                   },
                   {
                     quote: "I've never felt like I actually got recursion until Studi made me walk through it myself. It doesn't give you the answer. It makes you find it.",
                     name: "Marcus T.",
                     role: "Self-taught developer",
-                    color: "#3a9e8a",
+                    color: "#217567",
                   },
                   {
                     quote: "The interactive Spark made the idea click immediately. I could move the pieces around instead of rereading another paragraph.",
                     name: "Daniela R.",
                     role: "Pre-med taking data science",
-                    color: "#e8a030",
+                    color: "#8a5c10",
                   },
                 ].map(({ quote, name, role, color }) => (
                   <motion.div
@@ -626,7 +626,7 @@ export function LandingPage() {
                   >
                     <div className="flex gap-1">
                       {[...Array(5)].map((_, i) => (
-                        <span key={i} className="text-[#e8a030] text-lg">★</span>
+                        <span key={i} className="text-[#8a5c10] text-lg">★</span>
                       ))}
                     </div>
                     <p className="font-body text-[#1c1208] leading-relaxed flex-1 text-sm md:text-base">
@@ -641,7 +641,7 @@ export function LandingPage() {
                       </div>
                       <div>
                         <p className="font-bold text-[#1c1208] text-sm">{name}</p>
-                        <p className="text-xs text-[#9b8c7e]">{role}</p>
+                        <p className="text-xs text-[#6b5a47]">{role}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -661,7 +661,7 @@ export function LandingPage() {
             >
               <motion.h2 variants={fadeUp} className="font-brand text-5xl sm:text-6xl md:text-8xl text-center mb-6 leading-tight tracking-tight">
                 ChatGPT answers.<br />
-                <span className="text-[#e05a3a]">Studi asks.</span>
+                <span className="text-[#b64028]">Studi asks.</span>
               </motion.h2>
               <motion.p variants={fadeUp} className="text-center font-body text-lg md:text-xl text-[#6b5a47] mb-12 max-w-2xl mx-auto">
                 The direction of information is completely different. ChatGPT flows answers at you. Studi draws them out of you.
@@ -670,7 +670,7 @@ export function LandingPage() {
               <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
                 {/* ChatGPT */}
                 <div className="bg-gray-100 rounded-3xl border-4 border-gray-300 p-6 md:p-8 relative">
-                  <p className="font-bold text-gray-400 text-xs uppercase tracking-widest mb-6">ChatGPT</p>
+                  <p className="font-bold text-gray-600 text-xs uppercase tracking-widest mb-6">ChatGPT</p>
                   <div className="space-y-3 mb-6">
                     {[
                       "Here is a detailed explanation of recursion...",
@@ -686,13 +686,13 @@ export function LandingPage() {
                   </div>
                   <div className="mt-6 flex items-start gap-3">
                     <span className="text-2xl">😶</span>
-                    <p className="font-body text-gray-500 text-sm italic">You copy-paste the answer. Move on. Forget it by tomorrow.</p>
+                    <p className="font-body text-gray-600 text-sm italic">You copy-paste the answer. Move on. Forget it by tomorrow.</p>
                   </div>
                 </div>
 
                 {/* Studi */}
                 <div className="bg-white rounded-3xl border-4 border-[#e05a3a] shadow-[8px_8px_0px_#e05a3a] p-6 md:p-8 relative">
-                  <p className="font-bold text-[#e05a3a] text-xs uppercase tracking-widest mb-6">Studi</p>
+                  <p className="font-bold text-[#b64028] text-xs uppercase tracking-widest mb-6">Studi</p>
                   <div className="space-y-3 mb-4">
                     <div className="bg-[#e05a3a]/10 border-2 border-[#e05a3a]/30 rounded-xl p-3 font-body text-sm text-[#1c1208]">
                       Before I explain — what do you think the function does when n equals 1?
@@ -700,11 +700,11 @@ export function LandingPage() {
                     <div className="bg-[#fdf8f2] border-2 border-[#3a9e8a] rounded-xl p-3">
                       <div className="flex items-center gap-2 mb-1.5">
                         <span className="w-2 h-2 rounded-full bg-[#e05a3a] animate-pulse" />
-                        <span className="font-bold text-xs text-[#3a9e8a]">Spark: Call Stack Visualiser</span>
+                        <span className="font-bold text-xs text-[#217567]">Spark: Call Stack Visualiser</span>
                       </div>
-                      <div className="font-mono text-xs text-gray-400">factorial(3) → factorial(2) → factorial(1) → 1</div>
+                      <div className="font-mono text-xs text-[#6b5a47]">factorial(3) → factorial(2) → factorial(1) → 1</div>
                     </div>
-                    <div className="bg-[#3a9e8a]/10 border-2 border-[#3a9e8a]/30 rounded-xl p-3 font-bold text-xs text-[#3a9e8a] flex items-center gap-2">
+                    <div className="bg-[#3a9e8a]/10 border-2 border-[#3a9e8a]/30 rounded-xl p-3 font-bold text-xs text-[#217567] flex items-center gap-2">
                       <span>✓</span> Spark check: base case identified correctly.
                     </div>
                   </div>
@@ -716,7 +716,7 @@ export function LandingPage() {
               </motion.div>
 
               <motion.p variants={fadeUp} className="font-brand text-2xl md:text-4xl text-center text-[#1c1208] max-w-3xl mx-auto">
-                There's a difference between being told something and <span className="text-[#e05a3a]">understanding it.</span> Studi is built for the second one.
+                There's a difference between being told something and <span className="text-[#b64028]">understanding it.</span> Studi is built for the second one.
               </motion.p>
             </motion.div>
           </section>
@@ -765,7 +765,7 @@ export function LandingPage() {
             >
               <motion.h2 variants={fadeUp} className="font-brand text-5xl sm:text-6xl md:text-8xl mb-5 tracking-tight leading-tight">
                 Stop being told.<br />
-                <span className="text-[#e05a3a]">Start figuring it out.</span>
+                <span className="text-[#b64028]">Start figuring it out.</span>
               </motion.h2>
               <motion.p variants={fadeUp} className="text-lg md:text-2xl font-body text-[#6b5a47] mb-8 max-w-xl mx-auto">
                 Join the waitlist. Be first when Studi launches.
@@ -780,7 +780,7 @@ export function LandingPage() {
                   "Works for any subject",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2 text-sm font-ui text-[#1c1208]">
-                    <span className="w-5 h-5 rounded-full bg-[#3a9e8a] border-2 border-[#1c1208] text-white flex items-center justify-center text-xs shrink-0 mt-0.5">✓</span>
+                    <span className="w-5 h-5 rounded-full bg-[#217567] border-2 border-[#1c1208] text-white flex items-center justify-center text-xs shrink-0 mt-0.5">✓</span>
                     {item}
                   </li>
                 ))}
@@ -794,8 +794,8 @@ export function LandingPage() {
                   </SignedOut>
                   <SignedIn>
                     <div className="text-center">
-                      <h3 className="font-bold text-xl mb-4 text-[#3a9e8a]">You're already in!</h3>
-                      <Link href="/chat" className="inline-block w-full font-bold px-6 py-4 rounded-xl border-2 border-[#1c1208] bg-[#3a9e8a] text-white shadow-[4px_4px_0px_#1c1208] text-lg hover:bg-[#2c7a6a] hover:-translate-y-1 transition-all">
+                      <h3 className="font-bold text-xl mb-4 text-[#217567]">You're already in!</h3>
+                      <Link href="/chat" className="inline-block w-full font-bold px-6 py-4 rounded-xl border-2 border-[#1c1208] bg-[#217567] text-white shadow-[4px_4px_0px_#1c1208] text-lg hover:bg-[#16594f] hover:-translate-y-1 transition-all">
                         Go to Dashboard
                       </Link>
                     </div>
@@ -814,7 +814,7 @@ export function LandingPage() {
             studi
             <span className="w-2.5 h-2.5 rounded-full bg-[#e05a3a] inline-block mb-1" />
           </div>
-          <p className="font-bold text-gray-400 uppercase tracking-widest text-xs">
+          <p className="font-bold text-[#6b5a47] uppercase tracking-widest text-xs">
             © 2026 Studi · The tutor that makes you feel like you figured it out yourself.
           </p>
         </div>

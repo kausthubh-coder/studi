@@ -1,4 +1,10 @@
 import { expect, test } from "@playwright/test";
+import axe from "axe-core";
+
+type AxeColorContrastFailure = {
+  target: string[];
+  summary: string | undefined;
+};
 
 test.describe("public routes", () => {
   test.describe.configure({ mode: "serial" });
@@ -8,6 +14,51 @@ test.describe("public routes", () => {
     await expect(
       page.locator('[data-studi-landing-hydrated="true"]'),
     ).toBeVisible({ timeout: 30_000 });
+  }
+
+  async function revealScrollTriggeredContent(
+    page: import("@playwright/test").Page,
+  ) {
+    const pageHeight = await page.evaluate(
+      () => document.documentElement.scrollHeight,
+    );
+
+    for (let y = 0; y < pageHeight; y += 500) {
+      await page.evaluate((scrollTop) => window.scrollTo(0, scrollTop), y);
+      await page.waitForTimeout(50);
+    }
+
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(700);
+  }
+
+  async function getColorContrastFailures(
+    page: import("@playwright/test").Page,
+  ): Promise<AxeColorContrastFailure[]> {
+    await page.addScriptTag({ content: axe.source });
+
+    return page.evaluate(async () => {
+      const axeApi = Reflect.get(window, "axe") as {
+        run: (
+          context: Document,
+          options: { runOnly: { type: "rule"; values: string[] } },
+        ) => Promise<{
+          violations: Array<{
+            nodes: Array<{ target: string[]; failureSummary?: string }>;
+          }>;
+        }>;
+      };
+      const results = await axeApi.run(document, {
+        runOnly: { type: "rule", values: ["color-contrast"] },
+      });
+
+      return results.violations.flatMap((violation) =>
+        violation.nodes.map((node) => ({
+          target: node.target,
+          summary: node.failureSummary,
+        })),
+      );
+    });
   }
 
   test("landing, pricing, and waitlist return page responses", async ({
@@ -21,6 +72,26 @@ test.describe("public routes", () => {
       expect(response?.ok(), `${path} should return a successful page`).toBe(
         true,
       );
+    }
+  });
+
+  test("landing and waitlist owned UI meet WCAG AA color contrast", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+
+    for (const path of ["/", "/waitlist"]) {
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+      if (path === "/") {
+        await waitForLandingHydration(page);
+        await revealScrollTriggeredContent(page);
+      }
+
+      expect(
+        await getColorContrastFailures(page),
+        `${path} should not have color-contrast violations`,
+      ).toEqual([]);
     }
   });
 

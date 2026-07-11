@@ -196,13 +196,13 @@ export function SparksShowcase() {
                             <div className="flex items-center gap-2">
                                 <div className={cn(
                                     "p-1.5 rounded-lg transition-colors shrink-0",
-                                    isActive ? spark.colorClass : "bg-gray-200 text-gray-500"
+                                    isActive ? spark.colorClass : "bg-gray-200 text-gray-600"
                                 )}>
                                     {spark.icon}
                                 </div>
                                 <h4 className={cn(
                                     "font-bold font-brand text-sm leading-tight",
-                                    isActive ? "text-[#1c1208]" : "text-gray-500"
+                                    isActive ? "text-[#1c1208]" : "text-[#5f4f40]"
                                 )}>
                                     {spark.title}
                                 </h4>
@@ -235,7 +235,7 @@ export function SparksShowcase() {
                     <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
                     <div className="ml-3 flex items-center gap-1.5">
                         <span className="animate-pulse motion-reduce:animate-none w-1.5 h-1.5 bg-[#e05a3a] rounded-full" />
-                        <span className="font-mono text-xs text-gray-400">Studi is generating a Spark...</span>
+                        <span className="font-mono text-xs text-[#6b5a47]">Studi is generating a Spark...</span>
                     </div>
                 </div>
 
