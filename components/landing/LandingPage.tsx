@@ -6,6 +6,7 @@ import Link from "next/link";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { motion, MotionConfig } from "framer-motion";
 import { useId, useState, useSyncExternalStore } from "react";
+import { PRICING_FAQ_ANSWER } from "@/lib/billing/plan-catalog";
 import { SparksShowcase } from "./SparksShowcase";
 import { WaitlistForm } from "./WaitlistForm";
 
@@ -735,7 +736,7 @@ export function LandingPage() {
               <motion.div variants={fadeUp} className="space-y-3">
                 <FaqItem
                   q="Is it free?"
-                  a="You can start with a Free preview. Starter adds full text tutoring with monthly limits, and Pro offers higher monthly limits. You'll always see the price before you choose."
+                  a={PRICING_FAQ_ANSWER}
                 />
                 <FaqItem
                   q="How is this different from ChatGPT?"

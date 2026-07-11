@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
+import { WAITLIST_PRICING_ASSURANCE } from "@/lib/billing/plan-catalog";
 
 type FormState = "idle" | "loading" | "success" | "error";
 
@@ -124,7 +125,8 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
             </AnimatePresence>
 
             <p id={noteId} className="text-xs text-[#9b8c7e] text-center font-ui">
-              One email joins the waitlist. No questionnaire or credit card required.
+              {WAITLIST_PRICING_ASSURANCE}
+              {" One email joins the waitlist; the questionnaire is optional."}
             </p>
           </form>
         )}

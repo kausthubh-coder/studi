@@ -121,6 +121,29 @@ describe("dev test billing reset", () => {
     }
   });
 
+  it("uses the canonical Starter name in capped-plan upgrade copy", async () => {
+    const t = testConvex();
+    await t.mutation(internalBillingApi.billing.syncBillingProfileInternal, {
+      userId: "user_starter_limit",
+      planKey: "intro",
+      status: "active",
+    });
+    await t.mutation(internalBillingApi.billing.recordTextAiCostInternal, {
+      userId: "user_starter_limit",
+      textPromptCount: 4,
+      textAiCostUsd: 1.5,
+    });
+
+    const state = await t
+      .withIdentity({ subject: "user_starter_limit" })
+      .query(api.billing.getViewerBillingState, {});
+
+    expect(state.upgradeReason).toBe(
+      "You've reached this month's Starter usage limit. Upgrade to Pro for higher monthly capacity.",
+    );
+    expect(state.upgradeReason).not.toMatch(/\bIntro\b/);
+  });
+
   it("resets only the allowlisted Clerk test user usage in dev", async () => {
     vi.stubEnv(
       "DEV_TEST_BILLING_RESET_TARGETS",

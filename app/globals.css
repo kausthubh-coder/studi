@@ -4613,3 +4613,21 @@ body::after {
 .voice-warning-banner-cta:hover {
   background: #8a5e14;
 }
+
+/* Reserve the space Clerk's client-rendered plan cards need before they mount. */
+.studi-pricing-table-reserve {
+  min-height: 27rem;
+  contain: layout;
+}
+
+@media (min-width: 48rem) {
+  .studi-pricing-table-reserve {
+    min-height: 18rem;
+  }
+}
+
+@media (min-width: 64rem) {
+  .studi-pricing-table-reserve {
+    min-height: 16rem;
+  }
+}

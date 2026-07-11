@@ -490,7 +490,7 @@ function buildViewerBillingState(args: {
   } else if (args.planKey === "intro") {
     if (chatLocked) {
       upgradeReason =
-        "You've reached this month's Intro usage limit. Upgrade to Pro for higher monthly capacity.";
+        "You've reached this month's Starter usage limit. Upgrade to Pro for higher monthly capacity.";
     }
   } else if (chatLocked) {
     upgradeReason =
