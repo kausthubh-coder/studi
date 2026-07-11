@@ -2,8 +2,6 @@
 
 /* eslint-disable react/no-unescaped-entities */
 
-import Link from "next/link";
-import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { motion, MotionConfig } from "framer-motion";
 import { useId, useState, useSyncExternalStore } from "react";
 import { PRICING_FAQ_ANSWER } from "@/lib/billing/plan-catalog";
@@ -89,36 +87,28 @@ export function LandingPage() {
             <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-[#e05a3a] inline-block mb-1" />
           </span>
 
-          <SignedOut>
-            <div className="flex items-center gap-2">
-              <a
-                href="/chat"
-                className="font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border-2 border-[#1c1208] bg-white hover:bg-[#f5ede0] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
-              >
-                Sign in
-              </a>
-              <button
-                type="button"
-                onClick={() => {
-                  const section = document.getElementById("get-early-access");
-                  section?.scrollIntoView({ behavior: "smooth", block: "center" });
-                  setTimeout(() => {
-                    const input = section?.querySelector<HTMLInputElement>("input[type='email']");
-                    input?.focus();
-                  }, 600);
-                }}
-                className="font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border-2 border-[#1c1208] bg-[#b64028] text-white hover:bg-[#9f351f] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
-              >
-                Get Early Access
-              </button>
-            </div>
-          </SignedOut>
-
-          <SignedIn>
-            <Link href="/chat" className="font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-[#b64028] text-white hover:bg-[#9f351f] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none">
-              Open chat
-            </Link>
-          </SignedIn>
+          <div className="flex items-center gap-2">
+            <a
+              href="/chat"
+              className="font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border-2 border-[#1c1208] bg-white hover:bg-[#f5ede0] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
+            >
+              Sign in
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                const section = document.getElementById("get-early-access");
+                section?.scrollIntoView({ behavior: "smooth", block: "center" });
+                setTimeout(() => {
+                  const input = section?.querySelector<HTMLInputElement>("input[type='email']");
+                  input?.focus();
+                }, 600);
+              }}
+              className="font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border-2 border-[#1c1208] bg-[#b64028] text-white hover:bg-[#9f351f] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
+            >
+              Get Early Access
+            </button>
+          </div>
         </div>
       </header>
 
@@ -159,17 +149,7 @@ export function LandingPage() {
 
               {/* Waitlist form */}
               <motion.div variants={fadeUp} id="get-early-access" className="w-full max-w-lg mx-auto lg:mx-0 mb-4">
-                <SignedOut>
-                  <WaitlistForm variant="coral" />
-                </SignedOut>
-                <SignedIn>
-                  <Link
-                    href="/chat"
-                    className="inline-block w-full max-w-sm font-bold px-8 py-4 rounded-xl border-2 border-[#1c1208] bg-[#b64028] text-white hover:bg-[#9f351f] transition-all shadow-[4px_4px_0px_#1c1208] text-lg text-center"
-                  >
-                    Enter Studi →
-                  </Link>
-                </SignedIn>
+                <WaitlistForm variant="coral" />
               </motion.div>
 
               {/* Waitlist counter */}
@@ -789,17 +769,7 @@ export function LandingPage() {
               <motion.div variants={fadeUp} className="w-full max-w-md mx-auto relative group">
                 <div className="absolute inset-0 bg-[#3a9e8a] rounded-3xl transform -rotate-2 transition-transform group-hover:-rotate-3" />
                 <div className="relative bg-white rounded-3xl border-4 border-[#1c1208] shadow-[6px_6px_0px_#1c1208] p-6 md:p-8">
-                  <SignedOut>
-                    <WaitlistForm variant="teal" />
-                  </SignedOut>
-                  <SignedIn>
-                    <div className="text-center">
-                      <h3 className="font-bold text-xl mb-4 text-[#217567]">You're already in!</h3>
-                      <Link href="/chat" className="inline-block w-full font-bold px-6 py-4 rounded-xl border-2 border-[#1c1208] bg-[#217567] text-white shadow-[4px_4px_0px_#1c1208] text-lg hover:bg-[#16594f] hover:-translate-y-1 transition-all">
-                        Go to Dashboard
-                      </Link>
-                    </div>
-                  </SignedIn>
+                  <WaitlistForm variant="teal" />
                 </div>
               </motion.div>
             </motion.div>

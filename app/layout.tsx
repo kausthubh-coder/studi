@@ -2,8 +2,6 @@ import { DM_Serif_Display, Plus_Jakarta_Sans, Source_Serif_4 } from "next/font/g
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
-import ConvexClientProvider from "@/components/ConvexClientProvider";
-import { ClerkProvider } from "@clerk/nextjs";
 import { siteMetadata } from "@/lib/site-metadata";
 
 const dmSerifDisplay = DM_Serif_Display({
@@ -38,9 +36,7 @@ export default function RootLayout({
       <body
         className={`${dmSerifDisplay.variable} ${plusJakartaSans.variable} ${sourceSerif.variable} antialiased`}
       >
-        <ClerkProvider>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
-        </ClerkProvider>
+        {children}
       </body>
     </html>
   );
