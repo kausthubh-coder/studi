@@ -28,7 +28,7 @@ The default mode uses `@clerk/testing` to sign in by email through Clerk's Backe
 This is the human-like browser path. Start Studi, create a one-time Clerk Agent Task URL, then open that URL in Codex Browser Use.
 
 ```bash
-PORT=3030 bun run dev
+PORT=3030 bun run dev:frontend
 ```
 
 In another terminal:
@@ -56,22 +56,36 @@ bun run test:e2e:auth
 
 You can set `E2E_CLERK_USER_ID` instead of `E2E_CLERK_USER_EMAIL`. Keep this scoped to dev/test users only.
 
+## Interpret auth evidence honestly
+
+The signed-out route-protection test proves that a learner reaches an operable Clerk identifier form. It does not prove an authenticated Studi session. Keep these signals separate:
+
+- If the frontend logs `Clerk: Refreshing the session token resulted in an infinite redirect loop`, treat authenticated coverage as blocked by a Clerk key, target, or stale-session mismatch even if the signed-out form loads.
+- An `@clerk/testing` pass and a Clerk Agent Task pass exercise different session paths. Report each result independently; one must not replace the other.
+- If Agent Task navigation fails with `page.goto: net::ERR_ABORTED; maybe frame was detached?`, report that exact navigation blocker. Clear target-domain cookies or use a fresh browser context, confirm the publishable and secret keys belong to the same Clerk instance, and rerun before claiming authenticated `/chat` coverage.
+- A passing signed-out or authenticated test against local does not clear a production Clerk or Cloudflare blocker. Run the same focused check against the intended target and name that target in the report.
+
 ## Convex per-agent backend
 
-For local, ephemeral agent work where webhooks and shared defaults are not required:
+For an isolated backend per worktree, use the installed Convex CLI's project-local deployment mode. Convex 1.32 stores this deployment's state under `.convex/local/default`, so each worktree gets separate data without mutating the shared cloud dev deployment. In the first terminal:
 
 ```bash
 bun install
-bunx convex dev --once
+bunx convex dev --configure existing --team team-slug --project project-slug --dev-deployment local
 ```
 
-For a cloud dev deployment per agent/worktree, create a fresh dev deployment, mint a deployment-scoped token, seed env, then push once:
+Keep this terminal running. The local backend is a child of `convex dev` and stops when that command exits. The CLI writes the selected local deployment URL to this worktree's ignored `.env.local`; if the initial push reports a missing deployment variable, its watcher remains available to retry after the variable changes.
+
+In a second terminal, from the same worktree, seed required backend variables one at a time with the supported `env set NAME value` command:
 
 ```bash
-bunx convex deployment create --type=dev --select team-slug:project-slug:dev/$USER-codex/$(basename "$PWD") --expiration "in 5 days"
-bunx convex deployment token create agent-token --save-env
-bunx convex env set --from-file ./path/to/.env.agent
-bunx convex dev --once
+bunx convex env set CLERK_JWT_ISSUER_DOMAIN https://your-clerk-domain.example
 ```
 
-That keeps agent tests away from the shared dev deployment while still giving the browser a real Convex URL.
+Wait for the first terminal to report a successful sync, leave it running, and start only the frontend in the second terminal:
+
+```bash
+PORT=3030 bun run dev:frontend
+```
+
+This local deployment is appropriate for isolated application and browser testing where external cloud-only integrations are not required. It is not evidence for Convex webhooks, production configuration, or cloud-provider behavior. A cloud-isolated preview requires a separately provisioned Convex Preview Deploy Key; the installed CLI cannot mint deployment tokens from this repo.
