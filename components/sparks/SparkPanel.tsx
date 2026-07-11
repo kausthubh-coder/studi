@@ -9,6 +9,7 @@ import FlashCardScene from "@/components/sparks/scenes/FlashCardScene";
 import CodeSparkScene from "@/components/sparks/scenes/CodeSparkScene";
 import { IconSparkle } from "@/components/studi-chat/icons";
 import { getSparkTypeLabel } from "@/lib/sparks/contracts";
+import { getSceneSessionKey } from "@/lib/sparks/scene-session-state";
 
 function getBadgeClass(kind: string): string {
   if (kind === "spark_scene") return "badge-scene";
@@ -31,7 +32,13 @@ export const SparkPanel = memo(function SparkPanel({
   let scene: React.ReactNode;
   switch (artifact.kind) {
     case "spark_scene":
-      scene = <HtmlCssJsSandboxScene payload={artifact.payload} isExpanded />;
+      scene = (
+        <HtmlCssJsSandboxScene
+          payload={artifact.payload}
+          isExpanded
+          sessionKey={getSceneSessionKey(spark.threadId, spark.sparkInstanceId)}
+        />
+      );
       break;
     case "spark_quiz":
       scene = <QuizScene payload={artifact.payload} isExpanded />;
@@ -71,8 +78,20 @@ export const SparkPanel = memo(function SparkPanel({
           onClick={onClose}
           aria-label="Close spark panel"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M12 4L4 12M4 4L12 12"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
           <span>Close</span>
         </button>

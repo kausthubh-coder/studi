@@ -41,6 +41,9 @@ const sceneV2Csp = [...sceneBaseCsp, "script-src 'unsafe-inline'"].join("; ");
 const studiSceneRuntimeScript = `
 (function () {
   var SOURCE = "studi-scene";
+  var HOST_SOURCE = "studi-host";
+  var restoreListeners = [];
+  var restoredState = null;
   function sanitizePayload(payload) {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
     var clean = {};
@@ -65,6 +68,31 @@ const studiSceneRuntimeScript = `
       payload: sanitizePayload(payload)
     }, "*");
   }
+  function applyControlValue(id, value) {
+    var element = document.getElementById(id);
+    if (!element) return;
+    if (element.type === "checkbox" || element.type === "radio") {
+      element.checked = value === true;
+    } else if ("value" in element && (typeof value === "string" || typeof value === "number")) {
+      element.value = String(value);
+    }
+    if (element.getAttribute("role") === "slider" && (typeof value === "string" || typeof value === "number")) {
+      element.setAttribute("aria-valuenow", String(value));
+    }
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  function applyRestoredState(state) {
+    restoredState = state;
+    var interactions = state && state.interactions && typeof state.interactions === "object" ? state.interactions : {};
+    Object.keys(interactions).forEach(function (id) {
+      applyControlValue(id, interactions[id]);
+    });
+    restoreListeners.slice().forEach(function (listener) {
+      try { listener(state); } catch (error) { post("error", { message: error && error.message ? error.message : "Scene restore failed" }); }
+    });
+    window.dispatchEvent(new CustomEvent("studi:restore", { detail: state }));
+  }
   window.StudiScene = {
     ready: function (payload) { post("ready", payload); },
     resize: function (height) {
@@ -72,8 +100,28 @@ const studiSceneRuntimeScript = `
     },
     interaction: function (id, value) { post("interaction", { id: String(id || "interaction"), value: typeof value === "undefined" ? null : value }); },
     checkpoint: function (id, value, correct) { post("checkpoint", { id: String(id || "checkpoint"), value: typeof value === "undefined" ? null : value, correct: correct === true }); },
+    onRestore: function (listener) {
+      if (typeof listener !== "function") return function () {};
+      restoreListeners.push(listener);
+      if (restoredState) listener(restoredState);
+      return function () { restoreListeners = restoreListeners.filter(function (candidate) { return candidate !== listener; }); };
+    },
+    getRestoredState: function () { return restoredState; },
     error: function (message) { post("error", { message: String(message || "Scene error") }); }
   };
+  window.addEventListener("message", function (event) {
+    if (event.source !== window.parent) return;
+    var data = event.data;
+    if (!data || data.source !== HOST_SOURCE || data.version !== 1 || data.type !== "restore") return;
+    var serialized = data.payload && data.payload.state;
+    if (typeof serialized !== "string" || serialized.length > 32768) return;
+    try {
+      var state = JSON.parse(serialized);
+      if (state && typeof state === "object" && !Array.isArray(state)) applyRestoredState(state);
+    } catch (_error) {
+      post("error", { message: "Scene restore state was invalid" });
+    }
+  });
   window.addEventListener("error", function (event) {
     post("error", { message: event.message || "Scene runtime error" });
   });

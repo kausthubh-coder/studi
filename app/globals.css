@@ -3807,13 +3807,20 @@ body::after {
 }
 
 .spark-resize-handle:hover,
-.spark-resize-handle:active {
+.spark-resize-handle:active,
+.spark-resize-handle:focus-visible {
   background: var(--accent-dim);
 }
 
 .spark-resize-handle:hover::after,
-.spark-resize-handle:active::after {
+.spark-resize-handle:active::after,
+.spark-resize-handle:focus-visible::after {
   opacity: 0.5;
+}
+
+.spark-resize-handle:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: -3px;
 }
 
 @media (min-width: 1024px) {

@@ -7,6 +7,7 @@ import QuizScene from "@/components/sparks/scenes/QuizScene";
 import FlashCardScene from "@/components/sparks/scenes/FlashCardScene";
 import CodeSparkScene from "@/components/sparks/scenes/CodeSparkScene";
 import { getSparkTypeLabel, type SparkArtifact } from "@/lib/sparks/contracts";
+import { getSceneSessionKey } from "@/lib/sparks/scene-session-state";
 import { IconSparkle, IconExpand } from "@/components/studi-chat/icons";
 
 type SparkSceneRendererProps = {
@@ -71,7 +72,11 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
   switch (artifact.kind) {
     case "spark_scene":
       scene = (
-        <HtmlCssJsSandboxScene payload={artifact.payload} isExpanded={false} />
+        <HtmlCssJsSandboxScene
+          payload={artifact.payload}
+          isExpanded={false}
+          sessionKey={getSceneSessionKey(threadId, sparkInstanceId)}
+        />
       );
       break;
     case "spark_quiz":
@@ -81,7 +86,9 @@ const SparkSceneRenderer = memo(function SparkSceneRenderer({
       scene = <FlashCardScene payload={artifact.payload} isExpanded={false} />;
       break;
     case "spark_desmos_graph":
-      scene = <DesmosGraphScene payload={artifact.payload} isExpanded={false} />;
+      scene = (
+        <DesmosGraphScene payload={artifact.payload} isExpanded={false} />
+      );
       break;
     case "spark_code":
       scene = (

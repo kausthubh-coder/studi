@@ -63,7 +63,8 @@ describe("spark validators", () => {
       learningObjective: "Sneak data out.",
       files: {
         "index.html": "<main>Bad</main>",
-        "script.js": "fetch('https://example.com'); localStorage.setItem('x', 'y'); eval('1 + 1');",
+        "script.js":
+          "fetch('https://example.com'); localStorage.setItem('x', 'y'); eval('1 + 1');",
       },
       capabilities: {
         usesCanvas: false,
@@ -128,7 +129,9 @@ describe("spark validators", () => {
     expect(invalid.errors.join(" ")).toMatch(/not allowed: bad\.js/i);
     expect(invalid.errors.join(" ")).toMatch(/Control 1 id/i);
     expect(invalid.errors.join(" ")).toMatch(/Control 1 label/i);
-    expect(invalid.errors.join(" ")).toMatch(/Control 1 min must be less than max/i);
+    expect(invalid.errors.join(" ")).toMatch(
+      /Control 1 min must be less than max/i,
+    );
     expect(invalid.errors.join(" ")).toMatch(/Control 2 choices/i);
     expect(invalid.errors.join(" ")).toMatch(/Checkpoint 1 choices/i);
   });
@@ -149,6 +152,95 @@ describe("spark validators", () => {
     expect(invalid.errors.join(" ")).toMatch(/capabilities must be an object/i);
     expect(invalid.errors.join(" ")).toMatch(/controls must be an array/i);
     expect(invalid.errors.join(" ")).toMatch(/checkpoints must be an array/i);
+  });
+
+  it("rejects pointer-only drag scenes without a keyboard contract", () => {
+    const pointerOnly = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Move an outlier and compare mean with median.",
+      files: {
+        "index.html": '<main><svg><circle id="outlier"></circle></svg></main>',
+        "script.js":
+          "document.getElementById('outlier')?.addEventListener('pointerdown', startDrag);",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: true,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [
+        {
+          id: "outlier",
+          type: "slider",
+          label: "Outlier value",
+          min: 0,
+          max: 20,
+        },
+      ],
+      checkpoints: [],
+    });
+
+    expect(pointerOnly.ok).toBe(false);
+    expect(pointerOnly.errors.join(" ")).toMatch(/keyboard|pointer-only/i);
+
+    const keyboardAccessible = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Move an outlier and compare mean with median.",
+      files: {
+        "index.html":
+          '<main><svg><circle id="outlier" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="20" aria-valuenow="6"></circle></svg></main>',
+        "script.js":
+          "const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); point?.addEventListener('keydown', moveWithArrowKeys); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: true,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [
+        {
+          id: "outlier",
+          type: "slider",
+          label: "Outlier value",
+          min: 0,
+          max: 20,
+        },
+      ],
+      checkpoints: [],
+    });
+
+    expect(keyboardAccessible.ok).toBe(true);
+
+    const nativeRange = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Move an outlier and compare mean with median.",
+      files: {
+        "index.html":
+          '<main><label for="outlier">Outlier</label><input id="outlier" type="range" min="0" max="20" value="6"></main>',
+        "script.js":
+          "const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [
+        {
+          id: "outlier",
+          type: "slider",
+          label: "Outlier value",
+          min: 0,
+          max: 20,
+        },
+      ],
+      checkpoints: [],
+    });
+
+    expect(nativeRange.ok).toBe(true);
   });
 
   it("rejects unsafe scene v2 data after draft normalization", () => {

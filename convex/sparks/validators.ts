@@ -180,7 +180,10 @@ const blockedSceneCodePatterns: Array<[RegExp, string]> = [
   [/\bWebSocket\b/i, "WebSocket is not allowed in Scene Spark v2."],
   [/\bEventSource\b/i, "EventSource is not allowed in Scene Spark v2."],
   [/\bsendBeacon\s*\(/i, "sendBeacon() is not allowed in Scene Spark v2."],
-  [/\bnavigator\.sendBeacon\s*\(/i, "sendBeacon() is not allowed in Scene Spark v2."],
+  [
+    /\bnavigator\.sendBeacon\s*\(/i,
+    "sendBeacon() is not allowed in Scene Spark v2.",
+  ],
   [/\blocalStorage\b/i, "Browser storage is not allowed in Scene Spark v2."],
   [/\bsessionStorage\b/i, "Browser storage is not allowed in Scene Spark v2."],
   [/\bindexedDB\b/i, "Browser storage is not allowed in Scene Spark v2."],
@@ -190,12 +193,24 @@ const blockedSceneCodePatterns: Array<[RegExp, string]> = [
   [/\bimport\s*\(/i, "Dynamic import is not allowed in Scene Spark v2."],
   [/\bwindow\.open\s*\(/i, "Popups are not allowed in Scene Spark v2."],
   [/\bopen\s*\(/i, "Popups are not allowed in Scene Spark v2."],
-  [/\btop\.location\b/i, "Top-level navigation is not allowed in Scene Spark v2."],
-  [/\bparent\.location\b/i, "Parent navigation is not allowed in Scene Spark v2."],
+  [
+    /\btop\.location\b/i,
+    "Top-level navigation is not allowed in Scene Spark v2.",
+  ],
+  [
+    /\bparent\.location\b/i,
+    "Parent navigation is not allowed in Scene Spark v2.",
+  ],
   [/\bwindow\.location\b/i, "Navigation is not allowed in Scene Spark v2."],
   [/\bdocument\.location\b/i, "Navigation is not allowed in Scene Spark v2."],
-  [/\blocation\.(assign|replace|href)\b/i, "Navigation is not allowed in Scene Spark v2."],
-  [/\bnavigator\.serviceWorker\b/i, "Service workers are not allowed in Scene Spark v2."],
+  [
+    /\blocation\.(assign|replace|href)\b/i,
+    "Navigation is not allowed in Scene Spark v2.",
+  ],
+  [
+    /\bnavigator\.serviceWorker\b/i,
+    "Service workers are not allowed in Scene Spark v2.",
+  ],
 ];
 
 function validateSceneCodeSafety(code: string): string[] {
@@ -226,8 +241,7 @@ function validateSceneV2Controls(controls: unknown): string[] {
       return;
     }
     const id = typeof control.id === "string" ? control.id : "";
-    const controlLabel =
-      typeof control.label === "string" ? control.label : "";
+    const controlLabel = typeof control.label === "string" ? control.label : "";
     if (!id.trim()) {
       errors.push(`${label} id is required.`);
     }
@@ -320,10 +334,7 @@ export function validateSceneV2Payload(
   }
 
   const fileEntries = Object.entries(files);
-  if (
-    typeof files["index.html"] !== "string" ||
-    !files["index.html"].trim()
-  ) {
+  if (typeof files["index.html"] !== "string" || !files["index.html"].trim()) {
     errors.push("Scene v2 requires files.index.html.");
   }
 
@@ -341,14 +352,53 @@ export function validateSceneV2Payload(
     }
   }
 
+  const indexHtml =
+    typeof files["index.html"] === "string" ? files["index.html"] : "";
   const combinedCode = fileEntries
     .filter(([, contents]) => typeof contents === "string")
     .map(([, contents]) => contents)
     .join("\n");
   errors.push(...validateSceneCodeSafety(combinedCode));
 
-  const indexHtml =
-    typeof files["index.html"] === "string" ? files["index.html"] : "";
+  const hasPointerDrag =
+    /\b(?:pointerdown|mousedown|touchstart)\b|\bdraggable\s*=/i.test(
+      combinedCode,
+    );
+  if (hasPointerDrag) {
+    const hasKeyboardHandler = /\b(?:keydown|keyup|onkeydown)\b/i.test(
+      combinedCode,
+    );
+    const usesNativeRange = /<\s*input\b[^>]*\btype\s*=\s*["']?range\b/i.test(
+      indexHtml,
+    );
+    const hasFocusableCustomControl = /\btabindex\s*=\s*["']?0\b/i.test(
+      indexHtml,
+    );
+    const hasSliderSemantics =
+      /\brole\s*=\s*["']slider["']/i.test(indexHtml) &&
+      /\baria-valuenow\s*=/i.test(indexHtml);
+    if (
+      !usesNativeRange &&
+      (!hasKeyboardHandler || !hasFocusableCustomControl || !hasSliderSemantics)
+    ) {
+      errors.push(
+        "Pointer-only drag controls are not allowed. Use a native range input or a focusable slider with Arrow-key handling and current value semantics.",
+      );
+    }
+  }
+
+  const hasStatefulMetadata =
+    (Array.isArray(candidate.controls) && candidate.controls.length > 0) ||
+    (Array.isArray(candidate.checkpoints) && candidate.checkpoints.length > 0);
+  if (
+    hasStatefulMetadata &&
+    !/\bStudiScene\s*\?*\.\s*onRestore\s*\(/i.test(combinedCode)
+  ) {
+    errors.push(
+      "Interactive Scene v2 controls must restore progress with window.StudiScene.onRestore(...).",
+    );
+  }
+
   const externalScriptSrcs = extractExternalScriptSrcs(indexHtml);
   if (externalScriptSrcs.length > 0) {
     errors.push(
@@ -357,7 +407,9 @@ export function validateSceneV2Payload(
   }
 
   if (/<\s*link\b[^>]*\bhref\s*=/i.test(indexHtml)) {
-    errors.push("External stylesheets and preloads are not allowed in Scene Spark v2.");
+    errors.push(
+      "External stylesheets and preloads are not allowed in Scene Spark v2.",
+    );
   }
 
   if (/<\s*meta\b[^>]*http-equiv\s*=\s*["']?refresh/i.test(indexHtml)) {

@@ -29,6 +29,7 @@ import type {
   ThreadSummary,
 } from "@/components/studi-chat/types";
 import { SparkPanel } from "@/components/sparks/SparkPanel";
+import { SparkResizeHandle } from "@/components/sparks/SparkResizeHandle";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { IconCompose } from "@/components/studi-chat/icons";
 
@@ -608,11 +609,17 @@ export default function StudiChat() {
               <div
                 className={`flex min-w-0 flex-1 ${isMobile && mobilePanelView !== "spark" ? "hidden" : ""}`}
               >
-                <div
-                  className="spark-resize-handle"
+                <SparkResizeHandle
+                  width={sparkChatWidth}
+                  minWidth={340}
+                  maxWidth={Math.max(
+                    340,
+                    (typeof window === "undefined" ? 1440 : window.innerWidth) -
+                      420,
+                  )}
+                  onWidthChange={setSparkChatWidth}
                   onMouseDown={handleSparkResizeStart}
                   onTouchStart={handleSparkResizeTouchStart}
-                  title="Drag to resize"
                 />
                 <SparkPanel
                   spark={expandedSpark}

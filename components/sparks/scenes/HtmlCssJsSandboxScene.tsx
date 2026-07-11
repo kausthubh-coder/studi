@@ -6,29 +6,42 @@ import {
   buildSceneSrcDoc,
   isStudiSceneMessage,
 } from "@/lib/sparks/scene-runtime";
+import {
+  getSceneSessionState,
+  recordSceneSessionMessage,
+} from "@/lib/sparks/scene-session-state";
 
 type HtmlCssJsSandboxSceneProps = {
   payload: SceneSparkPayload;
   isExpanded: boolean;
+  sessionKey?: string;
 };
 
 const HtmlCssJsSandboxScene = memo(function HtmlCssJsSandboxScene({
   payload,
   isExpanded,
+  sessionKey,
 }: HtmlCssJsSandboxSceneProps) {
   const srcDoc = useMemo(() => buildSceneSrcDoc(payload), [payload]);
 
   return (
-    <SandboxFrame key={srcDoc} srcDoc={srcDoc} isExpanded={isExpanded} />
+    <SandboxFrame
+      key={srcDoc}
+      srcDoc={srcDoc}
+      isExpanded={isExpanded}
+      sessionKey={sessionKey}
+    />
   );
 });
 
 const SandboxFrame = memo(function SandboxFrame({
   srcDoc,
   isExpanded,
+  sessionKey,
 }: {
   srcDoc: string;
   isExpanded: boolean;
+  sessionKey?: string;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">(
@@ -42,8 +55,9 @@ const SandboxFrame = memo(function SandboxFrame({
       setStatus((currentStatus) =>
         currentStatus === "ready" ? currentStatus : "failed",
       );
-      setErrorMessage((currentMessage) =>
-        currentMessage ?? "Scene did not report that it was ready.",
+      setErrorMessage(
+        (currentMessage) =>
+          currentMessage ?? "Scene did not report that it was ready.",
       );
     }, 5_000);
 
@@ -55,9 +69,27 @@ const SandboxFrame = memo(function SandboxFrame({
         return;
       }
 
+      if (sessionKey) {
+        recordSceneSessionMessage(sessionKey, event.data);
+      }
+
       if (event.data.type === "ready") {
         setStatus("ready");
         setErrorMessage(null);
+        const sessionState = sessionKey
+          ? getSceneSessionState(sessionKey)
+          : null;
+        if (sessionState) {
+          iframeRef.current?.contentWindow?.postMessage(
+            {
+              source: "studi-host",
+              version: 1,
+              type: "restore",
+              payload: { state: JSON.stringify(sessionState) },
+            },
+            "*",
+          );
+        }
         return;
       }
 
@@ -85,7 +117,7 @@ const SandboxFrame = memo(function SandboxFrame({
       window.clearTimeout(timeoutId);
       window.removeEventListener("message", handleMessage);
     };
-  }, []);
+  }, [sessionKey]);
 
   return (
     <div className="spark-scene-content">
@@ -104,7 +136,10 @@ const SandboxFrame = memo(function SandboxFrame({
         </div>
       ) : null}
       {status === "failed" ? (
-        <div className="spark-scene-status spark-scene-status-error" role="alert">
+        <div
+          className="spark-scene-status spark-scene-status-error"
+          role="alert"
+        >
           {errorMessage ?? "Scene could not start."}
         </div>
       ) : null}
