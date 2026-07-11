@@ -191,7 +191,7 @@ describe("spark validators", () => {
         "index.html":
           '<main><svg><circle id="outlier" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="20" aria-valuenow="6"></circle></svg></main>',
         "script.js":
-          "const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); point?.addEventListener('keydown', moveWithArrowKeys); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
+          "const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); point?.addEventListener('keydown', moveWithArrowKeys); window.StudiScene?.interaction('outlier', point?.getAttribute('aria-valuenow')); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
       },
       capabilities: {
         usesCanvas: false,
@@ -220,7 +220,7 @@ describe("spark validators", () => {
         "index.html":
           '<main><label for="outlier">Outlier</label><input id="outlier" type="range" min="0" max="20" value="6"></main>',
         "script.js":
-          "const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); point?.addEventListener('input', updateOutlier); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
+          "const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); point?.addEventListener('input', updateOutlier); window.StudiScene?.interaction('outlier', point?.value); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
       },
       capabilities: {
         usesCanvas: false,
@@ -335,7 +335,7 @@ describe("spark validators", () => {
         "index.html":
           '<main><button id="hint" type="button">Show hint</button></main>',
         "script.js":
-          "const hint = document.getElementById('hint'); hint?.addEventListener('pointerdown', showPressedState); hint?.addEventListener('click', revealHint); window.StudiScene?.onRestore((state) => restoreHint(state));",
+          "const hint = document.getElementById('hint'); hint?.addEventListener('pointerdown', showPressedState); hint?.addEventListener('click', revealHint); window.StudiScene?.interaction('hint', true); window.StudiScene?.onRestore((state) => restoreHint(state));",
       },
       capabilities: {
         usesCanvas: false,
@@ -417,6 +417,90 @@ describe("spark validators", () => {
     expect(pointerOnlyNativeRange.errors.join(" ")).toMatch(
       /outlier-range.*(?:input|change|keyboard)|(?:input|change|keyboard).*outlier-range/i,
     );
+  });
+
+  it("requires stateful metadata to emit restorable host state", () => {
+    const controlWithoutEmission = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Move an outlier and compare the summaries.",
+      files: {
+        "index.html":
+          '<main><input id="outlier" type="range" min="0" max="20" value="6"></main>',
+        "script.js":
+          "const outlier = document.getElementById('outlier'); outlier?.addEventListener('input', updateOutlier); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [
+        {
+          id: "outlier",
+          type: "slider",
+          label: "Outlier value",
+          min: 0,
+          max: 20,
+        },
+      ],
+      checkpoints: [],
+    });
+    expect(controlWithoutEmission.ok).toBe(false);
+    expect(controlWithoutEmission.errors.join(" ")).toMatch(/interaction/i);
+
+    const checkpointWithoutEmission = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Predict whether the mean changes.",
+      files: {
+        "index.html":
+          '<main><button id="predict" type="button">Check prediction</button></main>',
+        "script.js":
+          "document.getElementById('predict')?.addEventListener('click', checkPrediction); window.StudiScene?.onRestore((state) => restorePrediction(state));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [],
+      checkpoints: [
+        {
+          id: "predict",
+          prompt: "Does the mean change?",
+          answerType: "boolean",
+        },
+      ],
+    });
+    expect(checkpointWithoutEmission.ok).toBe(false);
+    expect(checkpointWithoutEmission.errors.join(" ")).toMatch(/checkpoint/i);
+
+    const checkpointWithEmission = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Predict whether the mean changes.",
+      files: {
+        "index.html":
+          '<main><button id="predict" type="button">Check prediction</button></main>',
+        "script.js":
+          "document.getElementById('predict')?.addEventListener('click', checkPrediction); window.StudiScene?.checkpoint('predict', true, true); window.StudiScene?.onRestore((state) => restorePrediction(state));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [],
+      checkpoints: [
+        {
+          id: "predict",
+          prompt: "Does the mean change?",
+          answerType: "boolean",
+        },
+      ],
+    });
+    expect(checkpointWithEmission.ok).toBe(true);
   });
 
   it("rejects unsafe scene v2 data after draft normalization", () => {

@@ -749,15 +749,33 @@ export function validateSceneV2Payload(
     ),
   );
 
-  const hasStatefulMetadata =
-    (Array.isArray(candidate.controls) && candidate.controls.length > 0) ||
-    (Array.isArray(candidate.checkpoints) && candidate.checkpoints.length > 0);
+  const hasControls =
+    Array.isArray(candidate.controls) && candidate.controls.length > 0;
+  const hasCheckpoints =
+    Array.isArray(candidate.checkpoints) && candidate.checkpoints.length > 0;
+  const hasStatefulMetadata = hasControls || hasCheckpoints;
   if (
     hasStatefulMetadata &&
     !/\bStudiScene\s*\?*\.\s*onRestore\s*\(/i.test(combinedCode)
   ) {
     errors.push(
       "Interactive Scene v2 controls must restore progress with window.StudiScene.onRestore(...).",
+    );
+  }
+  if (
+    hasControls &&
+    !/\bStudiScene\s*\?*\.\s*interaction\s*\(/i.test(behaviorCode)
+  ) {
+    errors.push(
+      "Scene v2 controls must emit progress with window.StudiScene.interaction(...).",
+    );
+  }
+  if (
+    hasCheckpoints &&
+    !/\bStudiScene\s*\?*\.\s*checkpoint\s*\(/i.test(behaviorCode)
+  ) {
+    errors.push(
+      "Scene v2 checkpoints must emit answers with window.StudiScene.checkpoint(...).",
     );
   }
 
