@@ -57,6 +57,14 @@ test.describe("expanded Spark accessibility", () => {
     });
 
     await page.setViewportSize({ width: 390, height: 844 });
+    const mobileSidebar = page.locator(".studi-thread-sidebar");
+    await expect(mobileSidebar).toHaveAttribute("data-mobile-open", "false");
+    await expect
+      .poll(async () => {
+        const box = await mobileSidebar.boundingBox();
+        return box === null || box.x + box.width <= 1;
+      })
+      .toBe(true);
     const chatTab = page.getByRole("button", { name: "Chat", exact: true });
     const sparkTab = page.getByRole("button", { name: "Spark", exact: true });
     await expect(chatTab).toHaveAttribute("aria-pressed", "false");
