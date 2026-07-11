@@ -259,20 +259,24 @@ function findSceneElementById(
   return null;
 }
 
-function hasKeyboardHandlerForControl(
+function hasEventHandlerForControl(
   code: string,
   controlId: string,
   elementAttributes: string,
+  eventNames: string[],
 ): boolean {
-  if (/\bonkey(?:down|up)\s*=/i.test(elementAttributes)) {
+  const eventPattern = eventNames.map(escapeRegExp).join("|");
+  if (
+    new RegExp(`\\bon(?:${eventPattern})\\s*=`, "i").test(elementAttributes)
+  ) {
     return true;
   }
 
   const escapedId = escapeRegExp(controlId);
   const lookup = `(?:document\\s*\\.\\s*)?(?:getElementById\\s*\\(\\s*["']${escapedId}["']\\s*\\)|querySelector\\s*\\(\\s*["']#${escapedId}["']\\s*\\))`;
-  const keyboardEvent = `["']key(?:down|up)["']`;
+  const namedEvent = `["'](?:${eventPattern})["']`;
   const directHandler = new RegExp(
-    `${lookup}\\s*\\?*\\.\\s*addEventListener\\s*\\(\\s*${keyboardEvent}`,
+    `${lookup}\\s*\\?*\\.\\s*addEventListener\\s*\\(\\s*${namedEvent}`,
     "i",
   );
   if (directHandler.test(code)) {
@@ -287,11 +291,11 @@ function hasKeyboardHandlerForControl(
     const variableName = match[1];
     if (!variableName) continue;
     const variableHandler = new RegExp(
-      `\\b${escapeRegExp(variableName)}\\s*\\?*\\.\\s*addEventListener\\s*\\(\\s*${keyboardEvent}`,
+      `\\b${escapeRegExp(variableName)}\\s*\\?*\\.\\s*addEventListener\\s*\\(\\s*${namedEvent}`,
       "i",
     );
     const assignedHandler = new RegExp(
-      `\\b${escapeRegExp(variableName)}\\s*\\.\\s*onkey(?:down|up)\\s*=`,
+      `\\b${escapeRegExp(variableName)}\\s*\\.\\s*on(?:${eventPattern})\\s*=`,
       "i",
     );
     if (variableHandler.test(code) || assignedHandler.test(code)) {
@@ -300,6 +304,17 @@ function hasKeyboardHandlerForControl(
   }
 
   return false;
+}
+
+function hasKeyboardHandlerForControl(
+  code: string,
+  controlId: string,
+  elementAttributes: string,
+): boolean {
+  return hasEventHandlerForControl(code, controlId, elementAttributes, [
+    "keydown",
+    "keyup",
+  ]);
 }
 
 function validateSceneV2SliderAccessibility(
@@ -452,6 +467,42 @@ function isNativeKeyboardControl(element: SceneHtmlElement): boolean {
   );
 }
 
+function hasNativeActivationEquivalent(
+  element: SceneHtmlElement,
+  code: string,
+  targetId: string,
+): boolean {
+  let activationEvents: string[];
+  if (
+    element.tagName === "button" ||
+    element.tagName === "summary" ||
+    element.tagName === "a"
+  ) {
+    activationEvents = ["click"];
+  } else if (element.tagName === "input") {
+    const inputType =
+      readHtmlAttribute(element.attributes, "type")?.toLowerCase() ?? "text";
+    activationEvents = ["button", "submit", "reset", "image"].includes(
+      inputType,
+    )
+      ? ["click"]
+      : inputType === "checkbox" || inputType === "radio"
+        ? ["click", "change"]
+        : ["input", "change"];
+  } else {
+    activationEvents = ["input", "change"];
+  }
+
+  return (
+    hasEventHandlerForControl(
+      code,
+      targetId,
+      element.attributes,
+      activationEvents,
+    ) || hasKeyboardHandlerForControl(code, targetId, element.attributes)
+  );
+}
+
 function hasCustomKeyboardSemantics(
   element: SceneHtmlElement,
   code: string,
@@ -519,8 +570,6 @@ function validatePointerTargetAccessibility(
   }
 
   for (const targetId of targetIds) {
-    if (declaredSliderIds.has(targetId)) continue;
-
     const element = findSceneElementById(indexHtml, targetId);
     if (!element) {
       errors.push(
@@ -528,10 +577,15 @@ function validatePointerTargetAccessibility(
       );
       continue;
     }
-    if (
-      isNativeKeyboardControl(element) ||
-      hasCustomKeyboardSemantics(element, code, targetId)
-    ) {
+    if (isNativeKeyboardControl(element)) {
+      if (hasNativeActivationEquivalent(element, code, targetId)) continue;
+      errors.push(
+        `Pointer target "${targetId}" must bind a same-target click, input, change, or keyboard handler so native keyboard activation performs the same behavior.`,
+      );
+      continue;
+    }
+    if (declaredSliderIds.has(targetId)) continue;
+    if (hasCustomKeyboardSemantics(element, code, targetId)) {
       continue;
     }
 

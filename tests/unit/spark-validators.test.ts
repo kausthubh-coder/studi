@@ -220,7 +220,7 @@ describe("spark validators", () => {
         "index.html":
           '<main><label for="outlier">Outlier</label><input id="outlier" type="range" min="0" max="20" value="6"></main>',
         "script.js":
-          "const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
+          "const point = document.getElementById('outlier'); point?.addEventListener('pointerdown', startDrag); point?.addEventListener('input', updateOutlier); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
       },
       capabilities: {
         usesCanvas: false,
@@ -353,6 +353,70 @@ describe("spark validators", () => {
       checkpoints: [],
     });
     expect(nativeButton.ok).toBe(true);
+  });
+
+  it("rejects a native button whose only behavior is pointerdown", () => {
+    const pointerOnlyNativeButton = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Move an outlier and compare the summaries.",
+      files: {
+        "index.html":
+          '<main><button id="outlier" type="button">Move outlier</button></main>',
+        "script.js":
+          "const outlier = document.getElementById('outlier'); outlier?.addEventListener('pointerdown', moveOutlier); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [
+        {
+          id: "outlier",
+          type: "button",
+          label: "Move outlier",
+        },
+      ],
+      checkpoints: [],
+    });
+
+    expect(pointerOnlyNativeButton.ok).toBe(false);
+    expect(pointerOnlyNativeButton.errors.join(" ")).toMatch(
+      /outlier.*(?:click|keyboard|activation)|(?:click|keyboard|activation).*outlier/i,
+    );
+
+    const pointerOnlyNativeRange = validateSceneV2Payload({
+      version: sparkSceneV2Version,
+      learningObjective: "Move an outlier and compare the summaries.",
+      files: {
+        "index.html":
+          '<main><input id="outlier-range" type="range" min="0" max="20" value="6"></main>',
+        "script.js":
+          "const range = document.getElementById('outlier-range'); range?.addEventListener('pointerdown', moveOutlier); window.StudiScene?.onRestore((state) => restoreOutlier(state));",
+      },
+      capabilities: {
+        usesCanvas: false,
+        usesSvg: false,
+        needsNetwork: false,
+        recordsAnswers: true,
+      },
+      controls: [
+        {
+          id: "outlier-range",
+          type: "slider",
+          label: "Outlier value",
+          min: 0,
+          max: 20,
+        },
+      ],
+      checkpoints: [],
+    });
+
+    expect(pointerOnlyNativeRange.ok).toBe(false);
+    expect(pointerOnlyNativeRange.errors.join(" ")).toMatch(
+      /outlier-range.*(?:input|change|keyboard)|(?:input|change|keyboard).*outlier-range/i,
+    );
   });
 
   it("rejects unsafe scene v2 data after draft normalization", () => {
