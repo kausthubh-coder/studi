@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useId, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { BrainCircuit, Box, Calculator, LibraryBig } from "lucide-react";
+import { getNextSparkTabIndex } from "./spark-tab-navigation";
 
 export type SparkDemo = {
     id: string;
@@ -14,7 +15,8 @@ export type SparkDemo = {
     content: React.ReactNode;
 };
 
-const SPARKS_DATA: SparkDemo[] = [
+function getSparksData(reduceMotion: boolean): SparkDemo[] {
+  return [
     {
         id: "scene",
         title: "Interactive Scene",
@@ -24,18 +26,18 @@ const SPARKS_DATA: SparkDemo[] = [
         content: (
             <div className="w-full h-full flex items-center justify-center bg-teal-50 rounded-xl border border-teal-200 overflow-hidden relative">
                 <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                    animate={reduceMotion ? { rotate: 0 } : { rotate: 360 }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: 10, repeat: Infinity, ease: "linear" }}
                     className="w-24 h-24 border-4 border-teal-500 rounded-lg absolute"
                 />
                 <motion.div
-                    animate={{ rotate: -360 }}
-                    transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+                    animate={reduceMotion ? { rotate: 0 } : { rotate: -360 }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: 15, repeat: Infinity, ease: "linear" }}
                     className="w-16 h-16 border-4 border-teal-400 rounded-full absolute"
                 />
                 <motion.div
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
+                    animate={reduceMotion ? { scale: 1 } : { scale: [1, 1.2, 1] }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: 2, repeat: Infinity }}
                     className="w-5 h-5 bg-teal-600 rounded-full absolute"
                 />
                 <p className="font-bold text-teal-800 z-10 bg-white/90 px-3 py-1 rounded-full text-sm shadow-sm backdrop-blur-sm absolute bottom-4">Collision Physics</p>
@@ -57,9 +59,9 @@ const SPARKS_DATA: SparkDemo[] = [
                             fill="none"
                             stroke="#a855f7"
                             strokeWidth="3"
-                            initial={{ pathLength: 0 }}
+                            initial={reduceMotion ? false : { pathLength: 0 }}
                             animate={{ pathLength: 1 }}
-                            transition={{ duration: 2, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+                            transition={reduceMotion ? { duration: 0 } : { duration: 2, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
                         />
                         <motion.path
                             d="M0 50 Q 25 80, 50 40 T 100 60"
@@ -67,9 +69,9 @@ const SPARKS_DATA: SparkDemo[] = [
                             stroke="#c084fc"
                             strokeWidth="1.5"
                             strokeDasharray="4 2"
-                            initial={{ pathLength: 0 }}
+                            initial={reduceMotion ? false : { pathLength: 0 }}
                             animate={{ pathLength: 1 }}
-                            transition={{ duration: 3, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 0.5 }}
+                            transition={reduceMotion ? { duration: 0 } : { duration: 3, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 0.5 }}
                         />
                     </motion.svg>
                 </div>
@@ -108,8 +110,8 @@ const SPARKS_DATA: SparkDemo[] = [
                 <motion.div
                     className="w-full h-full max-w-sm absolute inset-4 bg-white border-2 border-emerald-300 rounded-2xl shadow-xl flex flex-col items-center justify-center text-center p-6"
                     initial={{ rotateY: 0 }}
-                    animate={{ rotateY: 180 }}
-                    transition={{ duration: 2, repeat: Infinity, repeatType: "reverse", repeatDelay: 1.5 }}
+                    animate={reduceMotion ? { rotateY: 0 } : { rotateY: 180 }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: 2, repeat: Infinity, repeatType: "reverse", repeatDelay: 1.5 }}
                     style={{ transformStyle: "preserve-3d" }}
                 >
                     <div className="absolute inset-0 flex items-center justify-center backface-hidden bg-emerald-50 rounded-2xl border-2 border-emerald-200">
@@ -125,30 +127,65 @@ const SPARKS_DATA: SparkDemo[] = [
             </div>
         )
     }
-];
+  ];
+}
+
+const ROTATE_INTERVAL_MS = 4_500;
 
 export function SparksShowcase() {
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [paused, setPaused] = useState(false);
+    const reduceMotion = Boolean(useReducedMotion());
+    const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const panelId = `spark-showcase-panel-${useId()}`;
+    const sparks = getSparksData(reduceMotion);
 
     useEffect(() => {
+        if (paused || reduceMotion) return;
         const timer = setInterval(() => {
-            setCurrentIndex((prev) => (prev + 1) % SPARKS_DATA.length);
-        }, 4000);
+            setCurrentIndex((prev) => (prev + 1) % sparks.length);
+        }, ROTATE_INTERVAL_MS);
         return () => clearInterval(timer);
-    }, []);
+    }, [paused, reduceMotion, sparks.length]);
 
-    const activeSpark = SPARKS_DATA[currentIndex];
+    const activeSpark = sparks[currentIndex];
+
+    function selectSpark(index: number, moveFocus = false) {
+        setPaused(true);
+        setCurrentIndex(index);
+        if (moveFocus) tabRefs.current[index]?.focus();
+    }
 
     return (
         <div className="w-full max-w-5xl mx-auto flex flex-col md:flex-row gap-6 items-stretch min-h-[480px] mb-8">
             {/* Left side: Navigation */}
-            <div className="w-full md:w-[200px] lg:w-[220px] flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0 shrink-0">
-                {SPARKS_DATA.map((spark, index) => {
+            <div
+                className="w-full md:w-[200px] lg:w-[220px] flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0 shrink-0"
+                role="tablist"
+                aria-label="Spark types"
+            >
+                {sparks.map((spark, index) => {
                     const isActive = index === currentIndex;
                     return (
                         <button
                             key={spark.id}
-                            onClick={() => setCurrentIndex(index)}
+                            ref={(element) => {
+                                tabRefs.current[index] = element;
+                            }}
+                            id={`spark-tab-${spark.id}`}
+                            type="button"
+                            role="tab"
+                            aria-selected={isActive}
+                            aria-controls={panelId}
+                            tabIndex={isActive ? 0 : -1}
+                            onFocus={() => setPaused(true)}
+                            onClick={() => selectSpark(index)}
+                            onKeyDown={(event) => {
+                                const nextIndex = getNextSparkTabIndex(index, event.key, sparks.length);
+                                if (nextIndex === index && !["Home", "End"].includes(event.key)) return;
+                                event.preventDefault();
+                                selectSpark(nextIndex, true);
+                            }}
                             className={cn(
                                 "relative text-left p-3 rounded-2xl border-2 transition-all duration-300 ease-out shrink-0 md:shrink",
                                 isActive
@@ -185,13 +222,19 @@ export function SparksShowcase() {
             </div>
 
             {/* Right side: Content */}
-            <div className="flex-1 relative rounded-3xl border-4 border-[#1c1208] bg-white shadow-[8px_8px_0px_#1c1208] overflow-hidden flex flex-col p-2 min-h-[320px]">
+            <div
+                id={panelId}
+                role="tabpanel"
+                aria-labelledby={`spark-tab-${activeSpark.id}`}
+                tabIndex={0}
+                className="flex-1 relative rounded-3xl border-4 border-[#1c1208] bg-white shadow-[8px_8px_0px_#1c1208] overflow-hidden flex flex-col p-2 min-h-[320px]"
+            >
                 <div className="w-full h-8 border-b-2 border-gray-100 flex items-center px-4 gap-2 mb-2 shrink-0">
                     <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
                     <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                     <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
                     <div className="ml-3 flex items-center gap-1.5">
-                        <span className="animate-pulse w-1.5 h-1.5 bg-[#e05a3a] rounded-full" />
+                        <span className="animate-pulse motion-reduce:animate-none w-1.5 h-1.5 bg-[#e05a3a] rounded-full" />
                         <span className="font-mono text-xs text-gray-400">Studi is generating a Spark...</span>
                     </div>
                 </div>
@@ -200,10 +243,10 @@ export function SparksShowcase() {
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={activeSpark.id}
-                            initial={{ y: 16, opacity: 0, filter: "blur(4px)" }}
+                            initial={reduceMotion ? false : { y: 16, opacity: 0, filter: "blur(4px)" }}
                             animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
-                            exit={{ y: -16, opacity: 0, filter: "blur(4px)" }}
-                            transition={{ duration: 0.35, ease: "easeOut" }}
+                            exit={reduceMotion ? undefined : { y: -16, opacity: 0, filter: "blur(4px)" }}
+                            transition={reduceMotion ? { duration: 0 } : { duration: 0.35, ease: "easeOut" }}
                             className="absolute inset-0 p-2"
                         >
                             {activeSpark.content}

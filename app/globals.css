@@ -475,6 +475,17 @@ body::after {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .studi-landing *,
+  .studi-landing *::before,
+  .studi-landing *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @keyframes plus-menu-in {
   from {
     opacity: 0;

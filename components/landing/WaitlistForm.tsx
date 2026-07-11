@@ -1,23 +1,20 @@
 "use client";
 
-/* eslint-disable react/no-unescaped-entities */
-
-import { useState, useRef } from "react";
+import { useId, useRef, useState } from "react";
+import Link from "next/link";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 
 type FormState = "idle" | "loading" | "success" | "error";
 
-const TALLY_FORM_URL = "https://tally.so/r/WOAjRv";
-
 export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal" }) {
   const [state, setState] = useState<FormState>("idle");
   const [email, setEmail] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [showModal, setShowModal] = useState(false);
   const [alreadyOnList, setAlreadyOnList] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const noteId = useId();
 
   const joinWaitlist = useAction(api.waitlistPublic.joinWaitlist);
 
@@ -42,7 +39,6 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
         const isAlreadyOnList = result.alreadyOnList ?? false;
         setAlreadyOnList(isAlreadyOnList);
         setState("success");
-        setShowModal(true);
       } else {
         setErrorMsg(result.error ?? "Something went wrong. Please try again.");
         setState("error");
@@ -67,14 +63,16 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
               {alreadyOnList ? "You're already on the list!" : "You're on the list!"}
             </p>
             <p className="font-body text-[#6b5a47]">
-              Check your inbox for updates.{" "}
-              <button
-                type="button"
-                onClick={() => setShowModal(true)}
-                className="underline font-bold text-[#1c1208] hover:text-[#e05a3a] transition-colors"
-              >
-                Get ahead in line →
-              </button>
+              One email is all it takes. Check your inbox for updates.
+            </p>
+            <Link
+              href="/waitlist?source=landing"
+              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl border-2 border-[#1c1208] bg-[#3a9e8a] px-4 py-2 font-bold text-white shadow-[3px_3px_0px_#1c1208] transition hover:bg-[#2c7a6a]"
+            >
+              Optional: answer 8 short steps →
+            </Link>
+            <p className="mt-2 text-xs font-ui text-[#6b5a47]">
+              About two minutes. This is not required to keep your spot.
             </p>
           </motion.div>
         ) : (
@@ -90,6 +88,8 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
                 }}
                 placeholder="your@email.com"
                 disabled={state === "loading"}
+                aria-label="Email address"
+                aria-describedby={noteId}
                 className="flex-1 px-4 py-3 rounded-xl border-2 border-[#1c1208] bg-white font-ui text-base placeholder:text-[#b8a99a] focus:outline-none focus:ring-2 focus:ring-[#e05a3a]/40 disabled:opacity-60 shadow-[2px_2px_0px_#1c1208]"
               />
               <button
@@ -100,7 +100,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
               >
                 {state === "loading" ? (
                   <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin motion-reduce:animate-none inline-block" />
                     Joining...
                   </span>
                 ) : (
@@ -115,6 +115,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
+                  role="alert"
                   className="text-sm font-bold text-red-600 px-1"
                 >
                   {errorMsg}
@@ -122,79 +123,13 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
               )}
             </AnimatePresence>
 
-            <p className="text-xs text-[#9b8c7e] text-center font-ui">
-              No credit card required. Free for students.
+            <p id={noteId} className="text-xs text-[#9b8c7e] text-center font-ui">
+              One email joins the waitlist. No questionnaire or credit card required.
             </p>
           </form>
         )}
       </div>
 
-      {/* Success Modal */}
-      <AnimatePresence>
-        {showModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowModal(false)}
-              className="fixed inset-0 bg-[#1c1208]/60 z-50 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 20 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className="fixed z-50 inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto"
-            >
-              <div className="relative bg-white rounded-3xl border-4 border-[#1c1208] shadow-[8px_8px_0px_#3a9e8a] p-8 text-center">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full border-2 border-[#1c1208] font-bold text-sm hover:bg-[#f5ede0] transition-colors"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-
-                <div className="w-14 h-14 bg-[#3a9e8a] rounded-2xl border-4 border-[#1c1208] flex items-center justify-center mx-auto mb-4 text-white text-2xl font-bold">
-                  ✓
-                </div>
-
-                <h2 className="font-brand text-3xl text-[#1c1208] mb-2">
-                  {alreadyOnList ? "Already on the list!" : "You're on the list!"}
-                </h2>
-                <p className="font-body text-[#6b5a47] mb-6 leading-relaxed">
-                  {alreadyOnList
-                    ? "Your email is already registered. Want to move up in line?"
-                    : "We'll let you know the moment Studi opens its doors."}
-                  <br />
-                  <span className="font-bold text-[#1c1208]">
-                    Take 2 minutes to fill out our full form and get ahead of the queue.
-                  </span>
-                </p>
-
-                <a
-                  href={TALLY_FORM_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block w-full font-bold px-6 py-4 rounded-xl border-2 border-[#1c1208] bg-[#3a9e8a] text-white hover:bg-[#2c7a6a] transition-all shadow-[4px_4px_0px_#1c1208] text-lg mb-3"
-                >
-                  Get ahead in line →
-                </a>
-
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="text-sm text-[#9b8c7e] hover:text-[#6b5a47] transition-colors font-ui"
-                >
-                  No thanks, I'll wait my turn
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </>
   );
 }

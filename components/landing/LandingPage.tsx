@@ -4,8 +4,8 @@
 
 import Link from "next/link";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
-import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { motion, MotionConfig } from "framer-motion";
+import { useId, useState, useSyncExternalStore } from "react";
 import { SparksShowcase } from "./SparksShowcase";
 import { WaitlistForm } from "./WaitlistForm";
 
@@ -15,47 +15,62 @@ const fadeUp = {
 };
 
 const viewportOpts = { once: true, margin: "-80px" };
+const subscribeToHydration = () => () => {};
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
 
-// FAQ accordion item
-function FaqItem({ q, a }: { q: string; a: string }) {
+export function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
+  const id = useId();
+  const buttonId = `faq-button-${id}`;
+  const panelId = `faq-panel-${id}`;
+
   return (
     <div className="border-2 border-[#1c1208] rounded-2xl overflow-hidden bg-white">
       <button
+        id={buttonId}
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls={panelId}
         className="w-full flex items-center justify-between px-6 py-5 text-left font-bold font-ui text-base md:text-lg text-[#1c1208] hover:bg-[#fdf8f2] transition-colors"
       >
         <span>{q}</span>
         <span
           className="shrink-0 ml-4 w-7 h-7 flex items-center justify-center rounded-full border-2 border-[#1c1208] bg-white text-[#1c1208] font-bold text-lg transition-transform"
           style={{ transform: open ? "rotate(45deg)" : "rotate(0deg)" }}
+          aria-hidden="true"
         >
           +
         </span>
       </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="overflow-hidden"
-          >
-            <p className="px-6 pb-5 font-body text-[#6b5a47] leading-relaxed border-t-2 border-dashed border-gray-200 pt-4">
-              {a}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div
+        id={panelId}
+        role="region"
+        aria-labelledby={buttonId}
+        hidden={!open}
+      >
+        <p className="px-6 pb-5 font-body text-[#6b5a47] leading-relaxed border-t-2 border-dashed border-gray-200 pt-4">
+          {a}
+        </p>
+      </div>
     </div>
   );
 }
 
 export function LandingPage() {
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
+
   return (
-    <div className="min-h-screen bg-[#fdf8f2] text-[#1c1208] selection:bg-[#e05a3a]/20 font-ui overflow-hidden">
+    <MotionConfig reducedMotion="user">
+    <div
+      className="studi-landing min-h-screen bg-[#fdf8f2] text-[#1c1208] selection:bg-[#e05a3a]/20 font-ui overflow-hidden"
+      data-studi-landing-hydrated={hydrated ? "true" : "false"}
+    >
       {/* Dot grid background */}
       <div
         className="fixed inset-0 pointer-events-none opacity-[0.03] z-0"
@@ -77,7 +92,7 @@ export function LandingPage() {
             <div className="flex items-center gap-2">
               <a
                 href="/chat"
-                className="hidden sm:block font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-white hover:bg-[#f5ede0] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
+                className="font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border-2 border-[#1c1208] bg-white hover:bg-[#f5ede0] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
               >
                 Sign in
               </a>
@@ -91,7 +106,7 @@ export function LandingPage() {
                     input?.focus();
                   }, 600);
                 }}
-                className="font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
+                className="font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
               >
                 Get Early Access
               </button>
@@ -720,7 +735,7 @@ export function LandingPage() {
               <motion.div variants={fadeUp} className="space-y-3">
                 <FaqItem
                   q="Is it free?"
-                  a="Studi is free for students during early access. We'll introduce a paid plan later with fair student pricing — we'll always offer a meaningful free tier."
+                  a="You can start with a Free preview. Starter adds full text tutoring with monthly limits, and Pro offers higher monthly limits. You'll always see the price before you choose."
                 />
                 <FaqItem
                   q="How is this different from ChatGPT?"
@@ -804,5 +819,6 @@ export function LandingPage() {
         </div>
       </footer>
     </div>
+    </MotionConfig>
   );
 }
