@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "npm-run-all --parallel dev:frontend dev:backend",
-    "dev:frontend": "next dev",
+    "dev:frontend": "next dev --webpack",
     "dev:backend": "convex dev",
     "predev": "bun run prompts:sync && convex dev --until-success",
     "build": "next build",
@@ -15,11 +15,16 @@
     "test": "bun run test:unit && bun run test:convex",
     "test:unit": "vitest run --config vitest.config.ts",
     "test:convex": "vitest run --config vitest.convex.config.ts",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --grep-invert @live-code-spark-provider",
+    "test:e2e:auth": "playwright test tests/e2e/authenticated-chat.spec.ts",
+    "test:e2e:code-spark:real": "E2E_CODE_SPARK_REAL_CHAT=1 playwright test tests/e2e/code-spark-real-chat.spec.ts --grep @live-code-spark-provider",
+    "test:e2e:code-spark:visual": "E2E_CODE_SPARK_REAL_CHAT=1 playwright test tests/e2e/code-spark-redesign-visual.spec.ts --grep @live-code-spark-provider",
     "test:all": "bun run test && bun run test:e2e",
     "check": "bun run prompts:check && bun run lint && bun run test && bun run build",
     "prompts:sync": "bun lib/prompts/sync.ts",
     "prompts:check": "bun lib/prompts/sync.ts --check",
+    "browser:auth-url": "bun scripts/create-clerk-agent-task.ts",
+    "billing:reset-dev-test-user": "bun scripts/reset-dev-test-billing.ts",
     "playground": "bunx @convex-dev/agent-playground"
   },
   "dependencies": {

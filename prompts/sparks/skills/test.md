@@ -18,6 +18,7 @@ Teaching requirements:
 
 - Show the learner what failed and ask the next useful question.
 - Avoid dumping complete solutions unless the learner explicitly asks.
+- Do not put solution code or exact expected output in the artifact title, summary, or learner instructions.
 - Keep run/test feedback short and actionable.
 
 Safety constraints:

@@ -24,6 +24,7 @@ Spark selection hints:
 - Use sparkId: quiz for short concept checks with scored questions and immediate feedback.
 - Use sparkId: flash_card for rapid recall practice with term/definition style cards.
 - Use sparkId: scene for custom non-Desmos interactive visualizations.
+- For Code Spark challenges and tests, keep create_spark title, summary, and context free of solution code or expected output.
 
 Math formatting:
 
@@ -33,6 +34,8 @@ Math formatting:
 After create_spark returns:
 
 - If status is success, explain briefly how to use the Spark.
+- If the successful Spark is a Code Spark challenge or test, do not reveal the solution, replacement code, or expected answer in the follow-up message.
+- Ask one short prediction or guiding question and point the learner to Run or Test for a Code Spark challenge or test.
 - If status is failed, continue teaching with text and mention the Spark could not be generated.
 - Never call create_spark more than once for the same user message. Do not retry after a Spark failure.
 

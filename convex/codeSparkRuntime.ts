@@ -1,7 +1,10 @@
 "use node";
 
 import type { CodeSparkLanguage } from "../lib/sparks/contracts";
-import { getCodeSparkProviderConfig } from "../lib/code-sparks/config";
+import {
+  getCodeSparkProviderConfig,
+  requiresExplicitVercelSandboxAuth,
+} from "../lib/code-sparks/config";
 import type {
   CodeSparkRuntimeCommand,
   CodeSparkRuntimeFile,
@@ -12,13 +15,42 @@ import type {
   CreateCodeSparkSessionInput,
 } from "../lib/code-sparks/types";
 
+type VercelSandboxConstructor = (typeof import("@vercel/sandbox"))["Sandbox"];
+type VercelSandboxHandle = Awaited<
+  ReturnType<VercelSandboxConstructor["get"]>
+>;
+
 const outputCap = 12_000;
 const minTimeoutMs = 10_000;
 const maxTimeoutMs = 45_000;
 const sandboxTimeoutMs = 2 * 60_000;
+const providerUnavailableMessage =
+  "Code Spark runtime provider is unavailable. Try again in a moment.";
+const providerTimeoutMessage =
+  "Code Spark runtime timed out. Try a smaller change.";
+let sandboxNameSequence = 0;
 
 function now() {
   return Date.now();
+}
+
+function sessionKeyHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function nextSandboxName(sessionKey: string): string {
+  sandboxNameSequence = (sandboxNameSequence + 1) % 1_000_000;
+  return [
+    "studi-code-spark",
+    sessionKeyHash(sessionKey),
+    now().toString(36),
+    sandboxNameSequence.toString(36),
+  ].join("-");
 }
 
 function capOutput(value: string): string {
@@ -232,41 +264,133 @@ function vercelCredentialsFromEnv() {
   const token = process.env.VERCEL_TOKEN;
   const teamId = process.env.VERCEL_TEAM_ID;
   const projectId = process.env.VERCEL_PROJECT_ID;
-  return token && teamId && projectId ? { token, teamId, projectId } : {};
+  if (token && teamId && projectId) {
+    return { token, teamId, projectId };
+  }
+
+  if (requiresExplicitVercelSandboxAuth()) {
+    throw new Error(
+      "Vercel Sandbox production outside Vercel requires VERCEL_TOKEN with VERCEL_TEAM_ID and VERCEL_PROJECT_ID.",
+    );
+  }
+
+  const oidcToken = process.env.VERCEL_OIDC_TOKEN;
+  if (!oidcToken) {
+    return {};
+  }
+
+  const [, encodedPayload] = oidcToken.split(".");
+  if (!encodedPayload) {
+    throw new Error("Invalid VERCEL_OIDC_TOKEN: missing payload.");
+  }
+
+  const payload = JSON.parse(
+    Buffer.from(encodedPayload, "base64url").toString("utf8"),
+  ) as { owner_id?: unknown; project_id?: unknown };
+  if (
+    typeof payload.owner_id !== "string" ||
+    typeof payload.project_id !== "string"
+  ) {
+    throw new Error("Invalid VERCEL_OIDC_TOKEN: missing owner or project.");
+  }
+
+  return {
+    token: oidcToken,
+    teamId: payload.owner_id,
+    projectId: payload.project_id,
+  };
 }
 
 class VercelSandboxCodeSparkRuntimeProvider implements CodeSparkRuntimeProvider {
   readonly provider = "vercel_sandbox" as const;
+  private readonly ownedSandboxes = new Map<string, VercelSandboxHandle>();
 
   private async getSandbox(sessionKey: string, language: CodeSparkLanguage) {
     const { Sandbox } = await import("@vercel/sandbox");
-    const uniqueName = `${sessionKey}-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-    return await Sandbox.create({
+    const requestedName = nextSandboxName(sessionKey);
+    let sandbox: VercelSandboxHandle;
+    try {
+      sandbox = await Sandbox.create({
+        ...vercelCredentialsFromEnv(),
+        name: requestedName,
+        runtime: language === "python" ? "python3.13" : "node24",
+        timeout: sandboxTimeoutMs,
+        persistent: false,
+        networkPolicy: "deny-all",
+        tags: {
+          surface: "code_spark",
+          language,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const recoveryError = await this.deleteSandbox(requestedName);
+      if (recoveryError) {
+        throw new Error(
+          `${message}\nSandbox creation may have succeeded, but recovery lookup/delete failed: ${recoveryError}. persistent: false and the provider timeout remain the final safety net.`,
+        );
+      }
+      throw new Error(
+        `${message}\nSandbox creation response failed; recovery lookup and delete completed.`,
+      );
+    }
+    this.ownedSandboxes.set(sandbox.name, sandbox);
+    return sandbox;
+  }
+
+  private async findSandbox(sessionId: string) {
+    const owned = this.ownedSandboxes.get(sessionId);
+    if (owned) return owned;
+    const { Sandbox } = await import("@vercel/sandbox");
+    return await Sandbox.get({
       ...vercelCredentialsFromEnv(),
-      name: uniqueName,
-      runtime: language === "python" ? "python3.13" : "node24",
-      timeout: sandboxTimeoutMs,
-      persistent: false,
-      networkPolicy: "deny-all",
-      tags: {
-        surface: "code_spark",
-        language,
-      },
+      name: sessionId,
     });
+  }
+
+  private async deleteSandbox(
+    sessionId: string,
+    knownSandbox?: VercelSandboxHandle,
+  ): Promise<string | undefined> {
+    try {
+      let sandbox = knownSandbox ?? this.ownedSandboxes.get(sessionId);
+      if (sandbox === undefined) {
+        const { Sandbox } = await import("@vercel/sandbox");
+        sandbox = await Sandbox.get({
+          ...vercelCredentialsFromEnv(),
+          name: sessionId,
+        });
+      }
+      await sandbox.delete();
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    } finally {
+      this.ownedSandboxes.delete(sessionId);
+    }
   }
 
   async createSession(
     input: CreateCodeSparkSessionInput,
   ): Promise<CodeSparkRuntimeSession> {
     const sandbox = await this.getSandbox(input.sessionKey, input.language);
-    await sandbox.writeFiles(
-      input.files.map((file) => ({
-        path: file.path,
-        content: file.contents,
-      })),
-    );
+    try {
+      await sandbox.writeFiles(
+        input.files.map((file) => ({
+          path: file.path,
+          content: Buffer.from(file.contents),
+        })),
+      );
+    } catch (error) {
+      const cleanupError = await this.deleteSandbox(sandbox.name, sandbox);
+      if (cleanupError) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${message}\nSandbox cleanup warning: ${cleanupError}`,
+        );
+      }
+      throw error;
+    }
     return {
       provider: this.provider,
       providerSessionId: sandbox.name,
@@ -292,12 +416,22 @@ class VercelSandboxCodeSparkRuntimeProvider implements CodeSparkRuntimeProvider 
     sessionId: string,
     file: CodeSparkRuntimeFilePatch,
   ): Promise<CodeSparkRuntimeFile> {
-    const { Sandbox } = await import("@vercel/sandbox");
-    const sandbox = await Sandbox.get({
-      ...vercelCredentialsFromEnv(),
-      name: sessionId,
-    });
-    await sandbox.writeFiles([{ path: file.path, content: file.contents }]);
+    let sandbox: VercelSandboxHandle | undefined;
+    try {
+      sandbox = await this.findSandbox(sessionId);
+      await sandbox.writeFiles([
+        { path: file.path, content: Buffer.from(file.contents) },
+      ]);
+    } catch (error) {
+      const cleanupError = await this.deleteSandbox(sessionId, sandbox);
+      if (cleanupError) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${message}\nSandbox cleanup warning: ${cleanupError}`,
+        );
+      }
+      throw error;
+    }
     return cloneFile(file);
   }
 
@@ -307,15 +441,20 @@ class VercelSandboxCodeSparkRuntimeProvider implements CodeSparkRuntimeProvider 
   ): Promise<CodeSparkRuntimeRunResult> {
     const startedAt = now();
     const language = command.language ?? "typescript";
-    const { cmd, args } = commandForLanguage(language, command.command);
-    const { Sandbox } = await import("@vercel/sandbox");
-    const sandbox = await Sandbox.get({
-      ...vercelCredentialsFromEnv(),
-      name: sessionId,
-    });
-    let resultRecord: CodeSparkRuntimeRunResult;
+    let sandbox: VercelSandboxHandle | undefined;
+    let resultRecord: CodeSparkRuntimeRunResult = {
+      provider: this.provider,
+      status: "failed",
+      stdout: "",
+      stderr: "Code Spark execution did not start.",
+      durationMs: 0,
+      command: command.command,
+      timedOut: false,
+    };
 
     try {
+      const { cmd, args } = commandForLanguage(language, command.command);
+      sandbox = await this.findSandbox(sessionId);
       const result = await sandbox.runCommand(cmd, args, {
         timeoutMs: clampTimeout(command.timeoutMs),
       });
@@ -335,29 +474,26 @@ class VercelSandboxCodeSparkRuntimeProvider implements CodeSparkRuntimeProvider 
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const timedOut = /timeout|timed out/i.test(message);
+      const learnerMessage = timedOut
+        ? providerTimeoutMessage
+        : providerUnavailableMessage;
       resultRecord = {
         provider: this.provider,
-        status: timedOut ? "timed_out" : "failed",
+        status: timedOut ? "timed_out" : "unavailable",
         stdout: "",
-        stderr: capOutput(message),
+        stderr: learnerMessage,
         durationMs: Math.max(1, now() - startedAt),
         command: command.command,
         timedOut,
-        reason: message,
+        reason: learnerMessage,
       };
-    }
-
-    try {
-      await sandbox.delete();
-    } catch (error) {
-      const cleanupError = error instanceof Error ? error.message : String(error);
-      resultRecord = {
-        ...resultRecord,
-        stderr: capOutput(
-          `${resultRecord.stderr}\nSandbox cleanup warning: ${cleanupError}`,
-        ),
-        reason: resultRecord.reason ?? cleanupError,
-      };
+    } finally {
+      const cleanupError = await this.deleteSandbox(sessionId, sandbox);
+      if (cleanupError) {
+        // Provider diagnostics stay server-side. Learners should not see SDK
+        // paths, identifiers, or cleanup internals in persisted run output.
+        void cleanupError;
+      }
     }
 
     return resultRecord;
@@ -381,12 +517,10 @@ class VercelSandboxCodeSparkRuntimeProvider implements CodeSparkRuntimeProvider 
   }
 
   async stop(sessionId: string): Promise<void> {
-    const { Sandbox } = await import("@vercel/sandbox");
-    const sandbox = await Sandbox.get({
-      ...vercelCredentialsFromEnv(),
-      name: sessionId,
-    });
-    await sandbox.stop();
+    const cleanupError = await this.deleteSandbox(sessionId);
+    if (cleanupError) {
+      throw new Error(cleanupError);
+    }
   }
 }
 

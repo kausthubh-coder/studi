@@ -52,3 +52,12 @@ next-env.d.ts
 # scratch / temp artifacts
 /.tmp/
 /.tmp/**
+
+# local Oracle/browser evidence (may contain machine or provider metadata)
+/.artifacts/claude*/
+/.artifacts/screenshots/
+/.artifacts/thread-*/
+/.artifacts/demos/
+/test-results/
+/.design/
+/.sandbox/

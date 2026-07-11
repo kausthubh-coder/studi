@@ -79,7 +79,7 @@ describe("SparkSceneRenderer", () => {
     expect(srcDoc).toContain('data-studi-scene-file="script.js"');
   });
 
-  it("renders inline Code Spark controls and expands through the shared panel model", async () => {
+  it("renders runnable inline Code Spark controls and expands through the shared panel model", async () => {
     const onExpandSpark = vi.fn();
     const artifact: SparkArtifact = {
       kind: "spark_code",
@@ -134,10 +134,24 @@ describe("SparkSceneRenderer", () => {
     );
 
     expect(screen.getByText("Add numbers")).toBeInTheDocument();
+    // Inline is compact, but still directly usable without opening the panel.
+    expect(
+      screen.getByRole("note", { name: "Challenge guidance" }),
+    ).toHaveTextContent("Return the sum.");
+    expect(screen.queryByText("Challenge Spark")).not.toBeInTheDocument();
+    expect(screen.getByText("Return the sum.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Test" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Lab" })).toBeDisabled();
-    expect(screen.getByText("Visible checks only")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /run adds visible numbers/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Terminal" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Test results" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("monaco editor")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /expand/i }));
     expect(onExpandSpark).toHaveBeenCalledWith(

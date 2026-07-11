@@ -1,6 +1,14 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+const storedCodeSparkLanguageValidator = v.union(
+  v.literal("typescript"),
+  v.literal("python"),
+  v.literal("c"),
+  v.literal("rust"),
+  v.literal("mixed"),
+);
+
 export default defineSchema({
   userThreads: defineTable({
     userId: v.string(),
@@ -51,6 +59,11 @@ export default defineSchema({
     textPromptCount: v.number(),
     textAiCostUsd: v.number(),
     totalEstimatedCostUsd: v.number(),
+    voiceEstimatedCostUsd: v.optional(v.number()),
+    voiceSeconds: v.optional(v.number()),
+    voiceSessionCount: v.optional(v.number()),
+    lastVoiceActivityAt: v.optional(v.number()),
+    labActiveSeconds: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_userId_and_billingPeriod", ["userId", "billingPeriod"]),
 
@@ -96,6 +109,8 @@ export default defineSchema({
       v.literal("agent_usage"),
       v.literal("agent_runtime"),
       v.literal("spark"),
+      v.literal("voice"),
+      v.literal("lab"),
     ),
     name: v.string(),
     status: v.union(v.literal("success"), v.literal("failed")),
@@ -125,13 +140,7 @@ export default defineSchema({
     sparkId: v.string(),
     title: v.string(),
     mode: v.union(v.literal("workspace"), v.literal("challenge")),
-    language: v.union(
-      v.literal("typescript"),
-      v.literal("python"),
-      v.literal("c"),
-      v.literal("rust"),
-      v.literal("mixed"),
-    ),
+    language: storedCodeSparkLanguageValidator,
     provider: v.union(
       v.literal("vercel_sandbox"),
       v.literal("daytona"),
@@ -170,13 +179,7 @@ export default defineSchema({
   codeSparkFiles: defineTable({
     sessionId: v.id("codeSparkSessions"),
     path: v.string(),
-    language: v.union(
-      v.literal("typescript"),
-      v.literal("python"),
-      v.literal("c"),
-      v.literal("rust"),
-      v.literal("mixed"),
-    ),
+    language: storedCodeSparkLanguageValidator,
     contents: v.string(),
     version: v.number(),
     hash: v.string(),
@@ -238,7 +241,65 @@ export default defineSchema({
     timedOut: v.boolean(),
     triggeredBy: v.union(v.literal("user"), v.literal("agent")),
     createdAt: v.number(),
-  }).index("by_sessionId_and_createdAt", ["sessionId", "createdAt"]),
+  })
+    .index("by_sessionId_and_createdAt", ["sessionId", "createdAt"])
+    .index("by_createdAt", ["createdAt"]),
+
+  codeSparkRunReservations: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    sparkId: v.string(),
+    sessionId: v.id("codeSparkSessions"),
+    status: v.union(
+      v.literal("reserved"),
+      v.literal("completed"),
+      v.literal("released"),
+    ),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    finalizedAt: v.optional(v.number()),
+  })
+    .index("by_userId_and_createdAt", ["userId", "createdAt"])
+    .index("by_userId_status_and_createdAt", [
+      "userId",
+      "status",
+      "createdAt",
+    ])
+    .index("by_userId_status_expiresAt", ["userId", "status", "expiresAt"])
+    .index("by_status_and_expiresAt", ["status", "expiresAt"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_threadId", ["threadId"])
+    .index("by_sessionId", ["sessionId"]),
+
+  // Operational execution telemetry only. It is not a billing ledger and does
+  // not grant, price, or authorize Code Spark execution.
+  codeSparkUsage: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    sparkId: v.string(),
+    sessionId: v.id("codeSparkSessions"),
+    reservationId: v.id("codeSparkRunReservations"),
+    provider: v.union(
+      v.literal("vercel_sandbox"),
+      v.literal("daytona"),
+      v.literal("e2b"),
+      v.literal("local_fake"),
+      v.literal("unavailable"),
+    ),
+    status: v.union(
+      v.literal("passed"),
+      v.literal("failed"),
+      v.literal("timed_out"),
+      v.literal("unavailable"),
+    ),
+    durationMs: v.number(),
+    timedOut: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_threadId", ["threadId"])
+    .index("by_reservationId", ["reservationId"])
+    .index("by_userId_and_createdAt", ["userId", "createdAt"])
+    .index("by_createdAt", ["createdAt"]),
 
   waitlistWebhookEvents: defineTable({
     source: v.literal("tally_waitlist"),

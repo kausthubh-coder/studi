@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FakeCodeSparkRuntimeProvider,
   getCodeSparkProviderConfig,
@@ -22,6 +22,10 @@ const files: CodeSparkRuntimeFile[] = [
     role: "starter",
   },
 ];
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("Code Spark runtime provider boundary", () => {
   it("keeps local_fake available for deterministic non-production tests", async () => {
@@ -85,6 +89,108 @@ describe("Code Spark runtime provider boundary", () => {
     vi.stubEnv("VERCEL_ENV", "");
     vi.stubEnv("CODE_SPARK_PROVIDER", "");
     vi.stubEnv("VERCEL_OIDC_TOKEN", "test-token");
+
+    const config = getCodeSparkProviderConfig();
+
+    expect(config.provider).toBe("vercel_sandbox");
+  });
+
+  it("requires explicit Vercel token auth in production outside Vercel", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CONVEX_DEPLOYMENT", "prod:studi");
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("VERCEL_ENV", "");
+    vi.stubEnv("CODE_SPARK_PROVIDER", "vercel_sandbox");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "local-short-lived-token");
+    vi.stubEnv("VERCEL_TOKEN", "");
+    vi.stubEnv("VERCEL_TEAM_ID", "");
+    vi.stubEnv("VERCEL_PROJECT_ID", "");
+
+    const config = getCodeSparkProviderConfig();
+
+    expect(config.provider).toBe("unavailable");
+    expect(config.reason).toMatch(/VERCEL_TOKEN/);
+    expect(config.reason).toMatch(/production outside Vercel/);
+  });
+
+  it("ignores the dev OIDC override in Convex production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CONVEX_DEPLOYMENT", "prod:studi");
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("VERCEL_ENV", "");
+    vi.stubEnv("CODE_SPARK_PROVIDER", "vercel_sandbox");
+    vi.stubEnv("CODE_SPARK_ALLOW_DEV_VERCEL_OIDC", "true");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "local-short-lived-token");
+    vi.stubEnv("VERCEL_TOKEN", "");
+    vi.stubEnv("VERCEL_TEAM_ID", "");
+    vi.stubEnv("VERCEL_PROJECT_ID", "");
+
+    const config = getCodeSparkProviderConfig();
+
+    expect(config.provider).toBe("unavailable");
+    expect(config.reason).toMatch(/VERCEL_TOKEN/);
+    expect(config.reason).toMatch(/production outside Vercel/);
+  });
+
+  it("preserves Vercel OIDC auth in Convex dev deployments", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CONVEX_DEPLOYMENT", "dev:admired-shepherd-652");
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("VERCEL_ENV", "");
+    vi.stubEnv("CODE_SPARK_PROVIDER", "vercel_sandbox");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "convex-dev-oidc-token");
+    vi.stubEnv("VERCEL_TOKEN", "");
+    vi.stubEnv("VERCEL_TEAM_ID", "");
+    vi.stubEnv("VERCEL_PROJECT_ID", "");
+
+    const config = getCodeSparkProviderConfig();
+
+    expect(config.provider).toBe("vercel_sandbox");
+  });
+
+  it("preserves Vercel OIDC auth with the explicit Convex dev override", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CONVEX_DEPLOYMENT", "");
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("VERCEL_ENV", "");
+    vi.stubEnv("CODE_SPARK_PROVIDER", "vercel_sandbox");
+    vi.stubEnv("CODE_SPARK_ALLOW_DEV_VERCEL_OIDC", "true");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "convex-dev-oidc-token");
+    vi.stubEnv("VERCEL_TOKEN", "");
+    vi.stubEnv("VERCEL_TEAM_ID", "");
+    vi.stubEnv("VERCEL_PROJECT_ID", "");
+
+    const config = getCodeSparkProviderConfig();
+
+    expect(config.provider).toBe("vercel_sandbox");
+  });
+
+  it("allows explicit Vercel token auth in production outside Vercel", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CONVEX_DEPLOYMENT", "prod:studi");
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("VERCEL_ENV", "");
+    vi.stubEnv("CODE_SPARK_PROVIDER", "vercel_sandbox");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "");
+    vi.stubEnv("VERCEL_TOKEN", "token");
+    vi.stubEnv("VERCEL_TEAM_ID", "team");
+    vi.stubEnv("VERCEL_PROJECT_ID", "project");
+
+    const config = getCodeSparkProviderConfig();
+
+    expect(config.provider).toBe("vercel_sandbox");
+  });
+
+  it("preserves Vercel OIDC auth inside Vercel-managed runtimes", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CONVEX_DEPLOYMENT", "prod:studi");
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("CODE_SPARK_PROVIDER", "vercel_sandbox");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "managed-runtime-token");
+    vi.stubEnv("VERCEL_TOKEN", "");
+    vi.stubEnv("VERCEL_TEAM_ID", "");
+    vi.stubEnv("VERCEL_PROJECT_ID", "");
 
     const config = getCodeSparkProviderConfig();
 

@@ -16,8 +16,16 @@ import { renderPrompt } from "../../lib/prompts";
 import { sparkSkillById } from "../../lib/sparks/catalog";
 import { getSparkWorkerOutputRequirements } from "../../lib/sparks/worker-output-requirements";
 import {
+  codeSparkPythonCheckPath,
+  codeSparkPythonCheckSource,
+  codeSparkPythonRunCommand,
+  codeSparkPythonStarterPath,
+  codeSparkPythonStarterSource,
+  codeSparkPythonTestCommand,
   getSparkTypeLabel,
+  inferCodeSparkModeFromContext,
   normalizeCodeSparkDraft,
+  projectCodeSparkArtifactForPublic,
   normalizeSparkFlashCardDraft,
   normalizeCreateSparkInput,
   normalizeSparkQuizDraft,
@@ -62,6 +70,9 @@ const internalApi = internal as unknown as {
     insertRawUsageInternal: FunctionReference<"mutation", "internal">;
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
   };
+  codeSparks: {
+    persistGeneratedSessionInternal: FunctionReference<"mutation", "internal">;
+  };
 };
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -102,7 +113,9 @@ function readNumericCandidate(record: Record<string, unknown>, key: string) {
     : undefined;
 }
 
-function extractEstimatedCostUsd(providerMetadata: unknown): number | undefined {
+function extractEstimatedCostUsd(
+  providerMetadata: unknown,
+): number | undefined {
   if (!providerMetadata || typeof providerMetadata !== "object") {
     return undefined;
   }
@@ -147,11 +160,7 @@ function extractEstimatedCostUsd(providerMetadata: unknown): number | undefined 
 
 export type SparkWorkerModels = Pick<
   ModelConfig,
-  | "sparkScene"
-  | "sparkDesmos"
-  | "sparkQuiz"
-  | "sparkFlash"
-  | "providerOptions"
+  "sparkScene" | "sparkDesmos" | "sparkQuiz" | "sparkFlash" | "providerOptions"
 >;
 
 function toSparkWorkerModels(modelConfig: ModelConfig): SparkWorkerModels {
@@ -317,7 +326,6 @@ function isAbortError(error: unknown): boolean {
   return error.name === "AbortError" || /aborted/i.test(error.message);
 }
 
-
 function createTimeoutSignal(
   abortSignal?: AbortSignal,
   timeoutMs = sparkWorkerTimeoutMs,
@@ -473,9 +481,9 @@ function buildPrompt(params: {
 }): string {
   return renderPrompt("sparks/worker-build.md", {
     sparkType: params.sparkType,
-    outputRequirements: getSparkWorkerOutputRequirements(
-      params.sparkType,
-    ).join("\n"),
+    outputRequirements: getSparkWorkerOutputRequirements(params.sparkType).join(
+      "\n",
+    ),
     context: params.context,
     preferredTitleLine: params.title ? `Preferred title: ${params.title}` : "",
     preferredSummaryLine: params.summary
@@ -1123,6 +1131,7 @@ function buildCodeSpark(
   sparkType: "code" | "test",
 ): CreateSparkToolResultWithUsage {
   const language = inferCodeSparkLanguage(input.context);
+  const mode = inferCodeSparkModeFromContext(input.context, sparkType);
   const providerConfig = getCodeSparkProviderConfig();
   const title =
     input.title ??
@@ -1146,7 +1155,7 @@ function buildCodeSpark(
             "Created a provider-backed Python Code Spark starter artifact.",
           artifactId: createArtifactId(),
           payload: {
-            mode: sparkType === "test" ? "challenge" : "workspace",
+            mode,
             language,
             instructions:
               "Predict the output, run the file, then change answer() so the visible check passes.",
@@ -1160,33 +1169,30 @@ function buildCodeSpark(
             activePath: "main.py",
             files: [
               {
-                path: "main.py",
+                path: codeSparkPythonStarterPath,
                 language,
-                contents:
-                  "def answer():\n    # Try to make the visible check pass.\n    return None\n\nprint(answer())\n",
+                contents: codeSparkPythonStarterSource,
                 editable: true,
                 role: "starter",
               },
               {
-                path: "README.md",
+                path: codeSparkPythonCheckPath,
                 language,
-                contents:
-                  "Change answer() in main.py, then run the visible check.",
+                contents: codeSparkPythonCheckSource,
                 editable: false,
-                role: "readme",
+                role: "test",
               },
             ],
             tests: [
               {
                 id: "visible-answer",
                 label: "answer() returns a concrete value",
-                command: "python3 main.py",
+                command: codeSparkPythonTestCommand,
                 hidden: false,
               },
             ],
-            hiddenTestCount: 0,
-            runCommand: "python3 main.py",
-            testCommand: "python3 main.py",
+            runCommand: codeSparkPythonRunCommand,
+            testCommand: codeSparkPythonTestCommand,
           },
         }
       : {
@@ -1196,7 +1202,7 @@ function buildCodeSpark(
             "Created a provider-backed TypeScript Code Spark starter artifact.",
           artifactId: createArtifactId(),
           payload: {
-            mode: sparkType === "test" ? "challenge" : "workspace",
+            mode,
             language,
             instructions:
               "Predict what add() returns, run the visible check, then repair the function.",
@@ -1213,7 +1219,7 @@ function buildCodeSpark(
                 path: "src/add.ts",
                 language,
                 contents:
-                  "export function add(a: number, b: number): number {\n  // What should this return?\n  return 0;\n}\n",
+                  "export function add(a: number, b: number): number {\n  // What should this return?\n  return 0;\n}\n\nconsole.log(add(2, 3));\n",
                 editable: true,
                 role: "starter",
               },
@@ -1234,8 +1240,7 @@ function buildCodeSpark(
                 hidden: false,
               },
             ],
-            hiddenTestCount: 0,
-            runCommand: "node tests/add.check.ts",
+            runCommand: "node src/add.ts",
             testCommand: "node tests/add.check.ts",
           },
         };
@@ -1253,7 +1258,8 @@ function buildCodeSpark(
 
   return {
     status: "success",
-    workerSummary: draft.workerSummary ?? "Created Code Spark starter artifact.",
+    workerSummary:
+      draft.workerSummary ?? "Created Code Spark starter artifact.",
     warnings: [
       ...validation.warnings,
       ...(providerConfig.reason ? [providerConfig.reason] : []),
@@ -1327,6 +1333,55 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
         };
       }
 
+      if (
+        result.status === "success" &&
+        result.artifact.kind === "spark_code"
+      ) {
+        const artifactId = result.artifact.artifactId;
+        if (!ctx.userId || !artifactId) {
+          result = {
+            status: "failed",
+            workerSummary:
+              "Code Spark could not establish its server runtime session.",
+            warnings: result.warnings,
+            error: "Code Spark challenge persistence is unavailable.",
+          };
+        } else {
+          try {
+            await ctx.runMutation(
+              internalApi.codeSparks.persistGeneratedSessionInternal,
+              {
+                userId: ctx.userId,
+                threadId: ctx.threadId,
+                sparkId: artifactId,
+                title: result.artifact.title,
+                mode: result.artifact.payload.mode,
+                language: result.artifact.payload.language,
+                provider: result.artifact.payload.provider,
+                providerStatus: result.artifact.payload.providerStatus,
+                activePath: result.artifact.payload.activePath,
+                runCommand: result.artifact.payload.runCommand,
+                testCommand: result.artifact.payload.testCommand,
+                files: result.artifact.payload.files,
+                tests: result.artifact.payload.tests,
+              },
+            );
+            result = {
+              ...result,
+              artifact: projectCodeSparkArtifactForPublic(result.artifact),
+            };
+          } catch (error) {
+            result = {
+              status: "failed",
+              workerSummary:
+                "Code Spark could not establish its server runtime session.",
+              warnings: result.warnings,
+              error: toMessage(error),
+            };
+          }
+        }
+      }
+
       const durationMs = Date.now() - startedAt;
       const status = result.status === "success" ? "success" : "failed";
 
@@ -1359,12 +1414,12 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
           await ctx
             .runMutation(internalApi.billing.recordTextAiCostInternal, {
               userId: ctx.userId,
-              textAiCostUsd: extractEstimatedCostUsd(record.providerMetadata) ?? 0,
+              textAiCostUsd:
+                extractEstimatedCostUsd(record.providerMetadata) ?? 0,
             })
             .catch((error) => {
               console.error("Failed to store spark billing usage", error);
             });
-
         }
 
         await ctx

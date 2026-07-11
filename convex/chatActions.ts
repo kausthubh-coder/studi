@@ -2,9 +2,11 @@
 
 import { v } from "convex/values";
 import type { FunctionReference } from "convex/server";
+import type { ModelMessage } from "ai";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { api, components, internal } from "./_generated/api";
 import { activeModelProfile } from "../lib/model-config";
+import { sanitizeStudiModelMessages } from "../lib/agent-message-sanitizer";
 
 const queuedSendResultValidator = v.object({
   promptMessageId: v.string(),
@@ -27,6 +29,15 @@ type CleanupFailedAssistantTurnResult = {
   meaningfulContentFound: boolean;
   retryEligible: boolean;
 };
+
+export function prepareStudiStreamStep(options: {
+  messages: ModelMessage[];
+  [key: string]: unknown;
+}): { messages: ModelMessage[] } {
+  return {
+    messages: sanitizeStudiModelMessages(options.messages),
+  };
+}
 
 async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
@@ -192,6 +203,7 @@ export const generateAssistantReply = internalAction({
             promptMessageId: args.promptMessageId,
             tools,
             maxOutputTokens: 4000,
+            prepareStep: prepareStudiStreamStep,
           },
           {
             saveStreamDeltas: {

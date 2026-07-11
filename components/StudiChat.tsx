@@ -559,6 +559,7 @@ export default function StudiChat() {
                   type="button"
                   className={`mobile-panel-tab ${mobilePanelView === "chat" ? "mobile-panel-tab-active" : ""}`}
                   onClick={() => setMobilePanelView("chat")}
+                  aria-pressed={mobilePanelView === "chat"}
                 >
                   Chat
                 </button>
@@ -566,6 +567,7 @@ export default function StudiChat() {
                   type="button"
                   className={`mobile-panel-tab ${mobilePanelView === "spark" ? "mobile-panel-tab-active" : ""}`}
                   onClick={() => setMobilePanelView("spark")}
+                  aria-pressed={mobilePanelView === "spark"}
                 >
                   Spark
                 </button>

@@ -22,6 +22,12 @@ const internalApi = internal as unknown as {
     incrementFreeOnboardingUsageInternal: FunctionReference<"mutation", "internal">;
     recordTextAiCostInternal: FunctionReference<"mutation", "internal">;
   };
+  chat: {
+    continueDeleteThreadCodeSparksInternal: FunctionReference<
+      "mutation",
+      "internal"
+    >;
+  };
 };
 
 const threadSummaryValidator = v.object({
@@ -98,7 +104,9 @@ function hasMeaningfulContent(value: unknown): boolean {
     return record.text.trim().length > 0;
   }
   if (record.type === "tool-call") {
-    return Boolean(record.toolName || record.toolCallId);
+    // A tool call is only an intent to produce something. Until a tool result
+    // or visible assistant text exists, a failed turn is still retryable.
+    return false;
   }
   if (record.isError === true) {
     return true;
@@ -149,28 +157,6 @@ function hasMeaningfulAssistantOrToolContent(message: {
   }
 
   return false;
-}
-
-function hasOnlyEmptyTextContent(content: unknown): boolean {
-  if (typeof content === "string") {
-    return content.trim().length === 0;
-  }
-
-  if (!Array.isArray(content)) {
-    return false;
-  }
-
-  if (content.length === 0) {
-    return true;
-  }
-
-  return content.every((part) => {
-    if (part === null || typeof part !== "object") {
-      return false;
-    }
-    const record = part as Record<string, unknown>;
-    return typeof record.text === "string" && record.text.trim().length === 0;
-  });
 }
 
 export const listThreads = query({
@@ -614,7 +600,7 @@ async function cleanupFailedAssistantTurnState(
         message.message?.role === "assistant" &&
         (message.status === "pending" || message.status === "failed") &&
         !hasVisibleText(message) &&
-        hasOnlyEmptyTextContent(message.message.content)
+        !hasMeaningfulContent(message.message.content)
       );
     })
     .map((message) => message._id);
@@ -709,6 +695,94 @@ export const saveAssistantFailureMessageInternal = internalMutation({
   },
 });
 
+const codeSparkSessionsPerDeleteBatch = 4;
+const codeSparkRowsPerDeleteBatch = 64;
+
+async function deleteCodeSparkThreadBatch(
+  ctx: MutationCtx,
+  args: { userId: string; threadId: string },
+) {
+  const sessions = await ctx.db
+    .query("codeSparkSessions")
+    .withIndex("by_userId_and_threadId", (q) =>
+      q.eq("userId", args.userId).eq("threadId", args.threadId),
+    )
+    .take(codeSparkSessionsPerDeleteBatch);
+
+  for (const session of sessions) {
+    const [files, checks, runs] = await Promise.all([
+      ctx.db
+        .query("codeSparkFiles")
+        .withIndex("by_sessionId", (q) => q.eq("sessionId", session._id))
+        .take(codeSparkRowsPerDeleteBatch),
+      ctx.db
+        .query("codeSparkChecks")
+        .withIndex("by_sessionId", (q) => q.eq("sessionId", session._id))
+        .take(codeSparkRowsPerDeleteBatch),
+      ctx.db
+        .query("codeSparkRuns")
+        .withIndex("by_sessionId_and_createdAt", (q) =>
+          q.eq("sessionId", session._id),
+        )
+        .take(codeSparkRowsPerDeleteBatch),
+    ]);
+    for (const row of [...files, ...checks, ...runs]) {
+      await ctx.db.delete(row._id);
+    }
+
+    const [remainingFile, remainingCheck, remainingRun] = await Promise.all([
+      ctx.db
+        .query("codeSparkFiles")
+        .withIndex("by_sessionId", (q) => q.eq("sessionId", session._id))
+        .first(),
+      ctx.db
+        .query("codeSparkChecks")
+        .withIndex("by_sessionId", (q) => q.eq("sessionId", session._id))
+        .first(),
+      ctx.db
+        .query("codeSparkRuns")
+        .withIndex("by_sessionId_and_createdAt", (q) =>
+          q.eq("sessionId", session._id),
+        )
+        .first(),
+    ]);
+    if (!remainingFile && !remainingCheck && !remainingRun) {
+      await ctx.db.delete(session._id);
+    }
+  }
+
+  // Admission and operational-usage rows are deliberately user-global and
+  // survive thread deletion until their independent bounded-retention cleanup.
+  // Deleting them here would let a learner reset the active admission window.
+  const remainingSession = await ctx.db
+    .query("codeSparkSessions")
+    .withIndex("by_userId_and_threadId", (q) =>
+      q.eq("userId", args.userId).eq("threadId", args.threadId),
+    )
+    .first();
+
+  return Boolean(remainingSession);
+}
+
+export const continueDeleteThreadCodeSparksInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const hasMore = await deleteCodeSparkThreadBatch(ctx, args);
+    if (hasMore) {
+      await ctx.scheduler.runAfter(
+        0,
+        internalApi.chat.continueDeleteThreadCodeSparksInternal,
+        args,
+      );
+    }
+    return null;
+  },
+});
+
 export const deleteThreadRecordInternal = internalMutation({
   args: {
     userId: v.string(),
@@ -727,7 +801,15 @@ export const deleteThreadRecordInternal = internalMutation({
       return false;
     }
 
+    const hasMoreCodeSparkData = await deleteCodeSparkThreadBatch(ctx, args);
     await ctx.db.delete(thread._id);
+    if (hasMoreCodeSparkData) {
+      await ctx.scheduler.runAfter(
+        0,
+        internalApi.chat.continueDeleteThreadCodeSparksInternal,
+        args,
+      );
+    }
     return true;
   },
 });

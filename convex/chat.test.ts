@@ -503,6 +503,107 @@ describe("chat Convex auth and ownership", () => {
     );
   });
 
+  it("treats an assistant tool call without a result as an incomplete failed turn", async () => {
+    vi.useFakeTimers();
+    const t = testConvex();
+    const agentThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "New Thread",
+    });
+
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      title: "New Thread",
+      lastMessageAt: 1,
+    });
+
+    const sent = await t.withIdentity({ subject: "user_a" }).mutation(
+      api.chat.sendMessage,
+      {
+        threadId: agentThread._id,
+        prompt: "Create a Code Spark",
+        requestId: "request_tool_call_only",
+      },
+    );
+    const [promptMessage] = await t.query(
+      components.agent.messages.getMessagesByIds,
+      { messageIds: [sent.promptMessageId] },
+    );
+    if (!promptMessage) throw new Error("Prompt message was not saved");
+
+    const saved = await t.mutation(components.agent.messages.addMessages, {
+      threadId: agentThread._id,
+      userId: "user_a",
+      promptMessageId: sent.promptMessageId,
+      messages: [
+        {
+          message: {
+            role: "assistant" as const,
+            content: [
+              {
+                type: "tool-call" as const,
+                toolCallId: "spark_call_without_result",
+                toolName: "create_spark",
+                args: { kind: "code" },
+              },
+            ],
+          },
+          status: "failed" as const,
+        },
+      ],
+    });
+    const failedAssistantId = saved.messages[0]!._id;
+
+    await t.mutation(components.agent.streams.create, {
+      threadId: agentThread._id,
+      userId: "user_a",
+      order: promptMessage.order,
+      stepOrder: promptMessage.stepOrder,
+      format: "UIMessageChunk",
+    });
+
+    await expect(
+      t.mutation(internalTestApi.chat.cleanupFailedAssistantTurnInternal, {
+        userId: "user_a",
+        threadId: agentThread._id,
+        promptMessageId: sent.promptMessageId,
+      }),
+    ).resolves.toMatchObject({
+      deletedMessages: 1,
+      deletedStreams: 1,
+      meaningfulContentFound: false,
+      retryEligible: true,
+      visibleAssistantTextFound: false,
+      visibleToolContentFound: false,
+    });
+
+    const [deletedAssistant] = await t.query(
+      components.agent.messages.getMessagesByIds,
+      { messageIds: [failedAssistantId] },
+    );
+    expect(deletedAssistant).toBeNull();
+
+    await t.mutation(internal.chat.saveAssistantFailureMessageInternal, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      promptMessageId: sent.promptMessageId,
+    });
+    const listed = await t.query(
+      components.agent.messages.listMessagesByThreadId,
+      {
+        threadId: agentThread._id,
+        order: "asc",
+        excludeToolMessages: true,
+        paginationOpts: { cursor: null, numItems: 10 },
+      },
+    );
+    expect(
+      listed.page.find((message) => message.message?.role === "assistant")
+        ?.text,
+    ).toContain("I hit a snag while generating that reply.");
+  });
+
   it("preserves non-empty assistant text while cleaning failed empty state", async () => {
     vi.useFakeTimers();
     const t = testConvex();

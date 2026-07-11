@@ -27,8 +27,8 @@ export type SceneSparkFileName = "index.html" | "styles.css" | "script.js";
 
 export type SceneSparkFiles = Partial<Record<SceneSparkFileName, string>> &
   Record<string, string> & {
-  "index.html": string;
-};
+    "index.html": string;
+  };
 
 export type SceneSparkCapabilities = {
   usesCanvas: boolean;
@@ -112,9 +112,10 @@ export type DesmosGraphPayload = {
   hint?: string;
 };
 
-export type CodeSparkLanguage =
-  | "typescript"
-  | "python"
+export type CodeSparkLanguage = "typescript" | "python";
+
+export type StoredCodeSparkLanguage =
+  | CodeSparkLanguage
   | "c"
   | "rust"
   | "mixed";
@@ -128,6 +129,27 @@ export type CodeSparkProvider =
 
 export type CodeSparkMode = "workspace" | "challenge";
 
+export const codeSparkPythonStarterPath = "main.py";
+export const codeSparkPythonCheckPath = "tests/answer.check.py";
+export const codeSparkPythonRunCommand = "python3 main.py";
+export const codeSparkPythonTestCommand = "python3 tests/answer.check.py";
+export const codeSparkPythonStarterSource =
+  'def answer():\n    # Try to make the visible check pass.\n    return None\n\nif __name__ == "__main__":\n    print(answer())\n';
+export const codeSparkPythonCheckSource =
+  'from pathlib import Path\nimport sys\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\nfrom main import answer\n\nvalue = answer()\nif value is None:\n    raise AssertionError("Expected answer() to return a concrete value")\n\nprint("visible check passed")\n';
+
+export function inferCodeSparkModeFromContext(
+  context: string,
+  sparkType: "code" | "test",
+): CodeSparkMode {
+  if (sparkType === "test") return "challenge";
+  return /\b(challenge|exercise|repair|fix|bug|visible check|test|pass)\b/i.test(
+    context,
+  )
+    ? "challenge"
+    : "workspace";
+}
+
 export type CodeSparkFileRole =
   | "starter"
   | "solution"
@@ -136,9 +158,11 @@ export type CodeSparkFileRole =
   | "config"
   | "readme";
 
-export type CodeSparkFile = {
+export type CodeSparkFile<
+  TLanguage extends StoredCodeSparkLanguage = StoredCodeSparkLanguage,
+> = {
   path: string;
-  language: CodeSparkLanguage;
+  language: TLanguage;
   contents: string;
   editable: boolean;
   role: CodeSparkFileRole;
@@ -153,7 +177,13 @@ export type CodeSparkTest = {
 
 export type CodeSparkRunSummary = {
   kind: "run" | "test" | "preview" | "inspect";
-  status: "queued" | "running" | "passed" | "failed" | "timed_out" | "unavailable";
+  status:
+    | "queued"
+    | "running"
+    | "passed"
+    | "failed"
+    | "timed_out"
+    | "unavailable";
   provider: CodeSparkProvider;
   command?: string;
   stdout?: string;
@@ -164,14 +194,16 @@ export type CodeSparkRunSummary = {
   reason?: string;
 };
 
-export type CodeSparkPayload = {
+export type CodeSparkPayload<
+  TLanguage extends StoredCodeSparkLanguage = StoredCodeSparkLanguage,
+> = {
   mode: CodeSparkMode;
-  language: CodeSparkLanguage;
+  language: TLanguage;
   instructions: string;
   provider: CodeSparkProvider;
   providerStatus: "configured" | "unconfigured" | "unavailable" | "test_only";
   activePath: string;
-  files: CodeSparkFile[];
+  files: CodeSparkFile<TLanguage>[];
   tests: CodeSparkTest[];
   hiddenTestCount: number;
   runCommand: string;
@@ -240,7 +272,9 @@ export type SparkDesmosGraphArtifact = {
   payload: DesmosGraphPayload;
 };
 
-export type SparkCodeArtifact = {
+export type SparkCodeArtifact<
+  TLanguage extends StoredCodeSparkLanguage = StoredCodeSparkLanguage,
+> = {
   kind: "spark_code";
   version: typeof sparkSceneVersion;
   sparkType: "code" | "test";
@@ -248,8 +282,136 @@ export type SparkCodeArtifact = {
   artifactId?: string;
   title: string;
   summary?: string;
-  payload: CodeSparkPayload;
+  payload: CodeSparkPayload<TLanguage>;
 };
+
+export function isPrivateCodeSparkPath(
+  path: string,
+  mode: CodeSparkMode = "challenge",
+): boolean {
+  const rawSegments = path.trim().replace(/\\/g, "/").toLowerCase().split("/");
+  const segments: string[] = [];
+  let containsTraversal = false;
+
+  for (const segment of rawSegments) {
+    if (!segment || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      containsTraversal = true;
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+
+  if (containsTraversal) {
+    return true;
+  }
+
+  if (
+    segments.some((segment) =>
+      /(?:^|[._-])(?:hidden|private|solutions?)(?:[._-]|$)/.test(segment),
+    )
+  ) {
+    return true;
+  }
+
+  if (mode === "workspace") {
+    return false;
+  }
+
+  const directories = segments.slice(0, -1);
+  const filename = segments[segments.length - 1] ?? "";
+  return (
+    directories.some((segment) =>
+      /^(?:__)?(?:tests?|checks?)(?:__)?$/.test(segment),
+    ) || /(?:^|\.)(?:tests?|checks?|spec)(?:\.|$)/.test(filename)
+  );
+}
+
+export function isLearnerVisibleCodeSparkFile(
+  file: Pick<CodeSparkFile, "path" | "editable" | "role">,
+): boolean {
+  return (
+    file.editable &&
+    (file.role === "starter" ||
+      file.role === "config" ||
+      file.role === "readme") &&
+    !isPrivateCodeSparkPath(file.path)
+  );
+}
+
+export function deriveCodeSparkLearnerRunCommand(
+  language: string,
+  path: string,
+): string | undefined {
+  const normalizedPath = path.trim();
+  if (
+    !normalizedPath ||
+    isPrivateCodeSparkPath(normalizedPath) ||
+    !/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*\.[A-Za-z0-9]+$/.test(
+      normalizedPath,
+    )
+  ) {
+    return undefined;
+  }
+
+  if (
+    language === "typescript" &&
+    /\.(?:js|mjs|cjs|ts)$/.test(normalizedPath)
+  ) {
+    return `node ${normalizedPath}`;
+  }
+  if (language === "python" && normalizedPath.endsWith(".py")) {
+    return `python3 ${normalizedPath}`;
+  }
+  return undefined;
+}
+
+export function projectCodeSparkArtifactForPublic<
+  TLanguage extends StoredCodeSparkLanguage,
+>(artifact: SparkCodeArtifact<TLanguage>): SparkCodeArtifact<TLanguage> {
+  if (artifact.payload.mode === "workspace") {
+    return artifact;
+  }
+
+  /**
+   * Challenge projection is a UI-concealment boundary, not a cryptographic hidden-test boundary.
+   * Visible checks execute beside learner code in the
+   * same ephemeral sandbox; their implementation is merely withheld from the
+   * renderer. Empty compatibility fields keep the artifact structurally valid.
+   */
+  const publicFiles = artifact.payload.files.filter(
+    isLearnerVisibleCodeSparkFile,
+  );
+  if (publicFiles.length === 0) {
+    throw new Error(
+      "Challenge Code Spark requires an editable learner-visible file.",
+    );
+  }
+  const activePath = publicFiles.some(
+    (file) => file.path === artifact.payload.activePath,
+  )
+    ? artifact.payload.activePath
+    : publicFiles[0]!.path;
+  const publicPayload: CodeSparkPayload<TLanguage> = {
+    ...artifact.payload,
+    activePath,
+    files: publicFiles,
+    runCommand: "",
+    testCommand: "",
+  };
+  delete publicPayload.lastRun;
+  publicPayload.tests = artifact.payload.tests
+    .filter((test) => !test.hidden)
+    .map((test) => ({ ...test, command: "" }));
+
+  return {
+    ...artifact,
+    payload: publicPayload,
+  };
+}
 
 export type SparkArtifact =
   | SparkSceneArtifact
@@ -319,11 +481,11 @@ export type DesmosSparkDraft = {
 };
 
 export type CodeSparkDraft = {
-  payload: Partial<CodeSparkPayload> & {
+  payload: Partial<CodeSparkPayload<CodeSparkLanguage>> & {
     mode?: CodeSparkMode;
     language?: CodeSparkLanguage;
     instructions?: string;
-    files?: CodeSparkFile[];
+    files?: CodeSparkFile<CodeSparkLanguage>[];
     tests?: CodeSparkTest[];
   };
   artifactId?: string;
@@ -612,9 +774,7 @@ function normalizeSceneFiles(
   return files;
 }
 
-function normalizeSceneCapabilities(
-  input: unknown,
-): SceneSparkCapabilities {
+function normalizeSceneCapabilities(input: unknown): SceneSparkCapabilities {
   const candidate = isPlainObject(input) ? input : {};
   return {
     usesCanvas: candidate.usesCanvas === true,
@@ -643,7 +803,9 @@ function normalizeSceneControls(input: unknown): SceneSparkControl[] {
         return null;
       }
 
-      const type = allowedTypes.has(rawControl.type as SceneSparkControl["type"])
+      const type = allowedTypes.has(
+        rawControl.type as SceneSparkControl["type"],
+      )
         ? (rawControl.type as SceneSparkControl["type"])
         : "button";
       const id =
@@ -776,7 +938,7 @@ export function normalizeSparkSceneDraft(
       typeof draft.learningObjective === "string" &&
       draft.learningObjective.trim().length > 0
         ? clampText(draft.learningObjective, maxSceneObjectiveLength)
-        : summary ?? "Help the learner explore the concept interactively.";
+        : (summary ?? "Help the learner explore the concept interactively.");
 
     return {
       kind: "spark_scene",
@@ -1118,13 +1280,7 @@ export function normalizeSparkDesmosGraphDraft(
 }
 
 function normalizeCodeSparkLanguage(value: unknown): CodeSparkLanguage {
-  if (
-    value === "typescript" ||
-    value === "python" ||
-    value === "c" ||
-    value === "rust" ||
-    value === "mixed"
-  ) {
+  if (value === "typescript" || value === "python") {
     return value;
   }
   return "typescript";
@@ -1182,7 +1338,7 @@ function isSafeCodeSparkPath(path: string): boolean {
 function normalizeCodeSparkFiles(
   input: unknown,
   language: CodeSparkLanguage,
-): CodeSparkFile[] {
+): CodeSparkFile<CodeSparkLanguage>[] {
   const rawFiles = Array.isArray(input) ? input : [];
   const normalized = rawFiles
     .slice(0, maxCodeSparkFiles)
@@ -1194,7 +1350,9 @@ function normalizeCodeSparkFiles(
         return null;
       }
       const fallbackPath =
-        language === "python" ? `main_${index + 1}.py` : `src/file_${index + 1}.ts`;
+        language === "python"
+          ? `main_${index + 1}.py`
+          : `src/file_${index + 1}.ts`;
       const rawPath =
         typeof rawFile.path === "string" && rawFile.path.trim()
           ? rawFile.path
@@ -1215,9 +1373,9 @@ function normalizeCodeSparkFiles(
         contents,
         editable: rawFile.editable !== false,
         role: normalizeCodeSparkFileRole(rawFile.role),
-      } satisfies CodeSparkFile;
+      } satisfies CodeSparkFile<CodeSparkLanguage>;
     })
-    .filter((file): file is CodeSparkFile => file !== null);
+    .filter((file): file is CodeSparkFile<CodeSparkLanguage> => file !== null);
 
   if (normalized.length > 0) {
     return normalized;
@@ -1226,11 +1384,18 @@ function normalizeCodeSparkFiles(
   if (language === "python") {
     return [
       {
-        path: "main.py",
+        path: codeSparkPythonStarterPath,
         language: "python",
-        contents: "def answer():\n    return None\n\nprint(answer())\n",
+        contents: codeSparkPythonStarterSource,
         editable: true,
         role: "starter",
+      },
+      {
+        path: codeSparkPythonCheckPath,
+        language: "python",
+        contents: codeSparkPythonCheckSource,
+        editable: false,
+        role: "test",
       },
     ];
   }
@@ -1286,7 +1451,7 @@ function normalizeCodeSparkTests(input: unknown): CodeSparkTest[] {
 export function normalizeCodeSparkDraft(
   draft: CodeSparkDraft,
   sparkType: "code" | "test" = "code",
-): SparkCodeArtifact {
+): SparkCodeArtifact<CodeSparkLanguage> {
   const title = clampText(
     typeof draft.title === "string" && draft.title.trim().length > 0
       ? draft.title
@@ -1300,7 +1465,21 @@ export function normalizeCodeSparkDraft(
   const payload = isPlainObject(draft.payload) ? draft.payload : {};
   const language = normalizeCodeSparkLanguage(payload.language);
   const files = normalizeCodeSparkFiles(payload.files, language);
-  const tests = normalizeCodeSparkTests(payload.tests);
+  const normalizedTests = normalizeCodeSparkTests(payload.tests);
+  const tests =
+    normalizedTests.length > 0
+      ? normalizedTests
+      : language === "python" &&
+          files.some((file) => file.path === codeSparkPythonCheckPath)
+        ? [
+            {
+              id: "visible-answer",
+              label: "answer() returns a concrete value",
+              command: codeSparkPythonTestCommand,
+              hidden: false,
+            },
+          ]
+        : normalizedTests;
   const firstEditable = files.find((file) => file.editable) ?? files[0];
   const provider = normalizeCodeSparkProvider(payload.provider);
   return {
@@ -1339,13 +1518,13 @@ export function normalizeCodeSparkDraft(
         typeof payload.runCommand === "string" && payload.runCommand.trim()
           ? clampText(payload.runCommand, 180)
           : language === "python"
-            ? "python3 main.py"
-            : "node tests/main.check.ts",
+            ? codeSparkPythonRunCommand
+            : "node src/main.ts",
       testCommand:
         typeof payload.testCommand === "string" && payload.testCommand.trim()
           ? clampText(payload.testCommand, 180)
           : language === "python"
-            ? "python3 main.py"
+            ? codeSparkPythonTestCommand
             : "node tests/main.check.ts",
       lastRun: isPlainObject(payload.lastRun)
         ? (payload.lastRun as CodeSparkRunSummary)
@@ -1366,7 +1545,7 @@ export function validateCodeSparkPayload(
   const candidate = isPlainObject(payload) ? payload : {};
 
   if (candidate.language !== "typescript" && candidate.language !== "python") {
-    warnings.push("Only TypeScript and Python are enabled in the first pass.");
+    errors.push("Code Spark currently supports JS/TypeScript and Python only.");
   }
 
   if (!Array.isArray(candidate.files) || candidate.files.length === 0) {
@@ -1396,10 +1575,17 @@ export function validateCodeSparkPayload(
       typeof rawFile.contents !== "string" ||
       rawFile.contents.length > maxCodeSparkFileBytes
     ) {
-      errors.push(`File ${path || index + 1} is missing contents or is too large.`);
+      errors.push(
+        `File ${path || index + 1} is missing contents or is too large.`,
+      );
     }
     if (rawFile.role === "hidden_test") {
       errors.push("Code Spark v1 only supports visible check files.");
+    }
+    if (rawFile.language !== "typescript" && rawFile.language !== "python") {
+      errors.push(
+        `File ${path || index + 1} uses an unsupported executable language.`,
+      );
     }
   }
 
@@ -1417,7 +1603,9 @@ export function validateCodeSparkPayload(
     : []
   ).entries()) {
     if (isPlainObject(rawTest) && rawTest.hidden === true) {
-      errors.push(`Check ${index + 1} is hidden; Code Spark v1 only supports visible checks.`);
+      errors.push(
+        `Check ${index + 1} is hidden; Code Spark v1 only supports visible checks.`,
+      );
     }
   }
 
@@ -1431,15 +1619,21 @@ export function validateCodeSparkPayload(
 export function normalizeCreateSparkInput(
   input: CreateSparkToolInput,
 ): CreateSparkToolInput {
+  const sparkId = normalizeSparkType(input.sparkId);
+  const acceptsModelHeaderCopy = sparkId !== "code" && sparkId !== "test";
   return {
-    sparkId: normalizeSparkType(input.sparkId),
+    sparkId,
     context: clampText(input.context, 400),
     title:
-      typeof input.title === "string" && input.title.trim().length > 0
+      acceptsModelHeaderCopy &&
+      typeof input.title === "string" &&
+      input.title.trim().length > 0
         ? clampText(input.title, maxTitleLength)
         : undefined,
     summary:
-      typeof input.summary === "string" && input.summary.trim().length > 0
+      acceptsModelHeaderCopy &&
+      typeof input.summary === "string" &&
+      input.summary.trim().length > 0
         ? clampText(input.summary, maxSummaryLength)
         : undefined,
   };
@@ -1676,7 +1870,12 @@ function isCodeSparkPayload(value: unknown): value is CodeSparkPayload {
     typeof value.runCommand !== "string" ||
     typeof value.testCommand !== "string" ||
     typeof value.hiddenTestCount !== "number" ||
-    !isPlainObject(value.lab)
+    !isPlainObject(value.lab) ||
+    (value.language !== "typescript" &&
+      value.language !== "python" &&
+      value.language !== "c" &&
+      value.language !== "rust" &&
+      value.language !== "mixed")
   ) {
     return false;
   }
@@ -1687,7 +1886,11 @@ function isCodeSparkPayload(value: unknown): value is CodeSparkPayload {
       typeof file.path === "string" &&
       typeof file.contents === "string" &&
       typeof file.editable === "boolean" &&
-      typeof file.language === "string" &&
+      (file.language === "typescript" ||
+        file.language === "python" ||
+        file.language === "c" ||
+        file.language === "rust" ||
+        file.language === "mixed") &&
       typeof file.role === "string"
     );
   });

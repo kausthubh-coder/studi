@@ -11,6 +11,7 @@ Output requirements:
 - Prefer a tiny workspace with 1-3 files.
 - Use TypeScript or Python for the first pass.
 - Include concise learner instructions and at least one visible check when useful.
+- Keep Run and Test distinct: Run executes the learner entry file and shows its terminal output; Test executes the visible checks and shows learner-facing pass/fail feedback.
 - Use visible checks only in this pass. Do not create, summarize, or imply hidden/background tests.
 - Keep the Spark inline and expandable. Do not create a Lab IDE.
 
@@ -18,6 +19,7 @@ Teaching requirements:
 
 - Make the learner predict, run, observe, and repair.
 - Ask small guiding questions instead of giving the full answer first.
+- Do not put solution code or exact expected output in the artifact title, summary, or learner instructions.
 - Optimize for time-to-aha.
 
 Safety constraints:

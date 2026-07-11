@@ -13,19 +13,63 @@ function normalizeProvider(value: string | undefined): CodeSparkProvider {
 }
 
 function isProductionRuntime() {
+  if (isConvexDevDeployment()) return false;
   return (
     process.env.NODE_ENV === "production" ||
-    process.env.VERCEL_ENV === "production"
+    process.env.VERCEL_ENV === "production" ||
+    isConvexProdDeployment()
   );
 }
 
-function hasVercelSandboxAuth() {
+function isVercelManagedRuntime() {
+  return process.env.VERCEL === "1" || process.env.VERCEL === "true";
+}
+
+function allowsDevVercelOidc() {
+  if (isConvexProdDeployment()) return false;
+  const value = process.env.CODE_SPARK_ALLOW_DEV_VERCEL_OIDC?.trim().toLowerCase();
+  return value === "1" || value === "true";
+}
+
+function isConvexDevDeployment() {
+  return /^dev:/i.test(process.env.CONVEX_DEPLOYMENT?.trim() ?? "");
+}
+
+function isConvexProdDeployment() {
+  return /^prod:/i.test(process.env.CONVEX_DEPLOYMENT?.trim() ?? "");
+}
+
+function hasExplicitVercelSandboxAuth() {
   return Boolean(
-    process.env.VERCEL_OIDC_TOKEN ||
-      (process.env.VERCEL_TOKEN &&
-        process.env.VERCEL_TEAM_ID &&
-        process.env.VERCEL_PROJECT_ID),
+    process.env.VERCEL_TOKEN &&
+      process.env.VERCEL_TEAM_ID &&
+      process.env.VERCEL_PROJECT_ID,
   );
+}
+
+export function requiresExplicitVercelSandboxAuth() {
+  return (
+    isProductionRuntime() &&
+    !isVercelManagedRuntime() &&
+    !allowsDevVercelOidc()
+  );
+}
+
+function hasVercelOidcAuth() {
+  return Boolean(process.env.VERCEL_OIDC_TOKEN);
+}
+
+function vercelSandboxAuthUnavailableReason() {
+  if (requiresExplicitVercelSandboxAuth()) {
+    return "Vercel Sandbox production outside Vercel requires VERCEL_TOKEN with VERCEL_TEAM_ID and VERCEL_PROJECT_ID. Do not use short-lived local VERCEL_OIDC_TOKEN for Convex production runtime.";
+  }
+  return "Vercel Sandbox requires VERCEL_OIDC_TOKEN or VERCEL_TOKEN with VERCEL_TEAM_ID and VERCEL_PROJECT_ID.";
+}
+
+function hasVercelSandboxAuth() {
+  if (hasExplicitVercelSandboxAuth()) return true;
+  if (requiresExplicitVercelSandboxAuth()) return false;
+  return hasVercelOidcAuth();
 }
 
 export function getCodeSparkProviderConfig(): {
@@ -39,8 +83,7 @@ export function getCodeSparkProviderConfig(): {
       ? { provider: "vercel_sandbox" }
       : {
           provider: "unavailable",
-          reason:
-            "Vercel Sandbox requires VERCEL_OIDC_TOKEN or VERCEL_TOKEN with VERCEL_TEAM_ID and VERCEL_PROJECT_ID.",
+          reason: vercelSandboxAuthUnavailableReason(),
         };
   }
 

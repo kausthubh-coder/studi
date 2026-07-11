@@ -205,7 +205,6 @@ body::after {
   }
 }
 
-
 @media (max-width: 1023px) {
   .studi-thread-sidebar {
     position: fixed;
@@ -383,7 +382,7 @@ body::after {
   pointer-events: none;
 }
 
-.composer-footer>* {
+.composer-footer > * {
   pointer-events: auto;
   position: relative;
   z-index: 1;
@@ -800,7 +799,6 @@ body::after {
 }
 
 @keyframes blink {
-
   0%,
   100% {
     opacity: 1;
@@ -832,7 +830,6 @@ body::after {
 }
 
 @keyframes pulse-glow {
-
   0%,
   100% {
     opacity: 0.5;
@@ -854,7 +851,6 @@ body::after {
 }
 
 @keyframes bounce-dot {
-
   0%,
   80%,
   100% {
@@ -869,7 +865,6 @@ body::after {
 }
 
 @keyframes activity-pulse {
-
   0%,
   100% {
     transform: scale(1);
@@ -999,23 +994,23 @@ body::after {
 }
 
 /* Per-kind header tints */
-[data-spark-kind="spark_scene"]>.spark-card-header {
+[data-spark-kind="spark_scene"] > .spark-card-header {
   background: #e86b35;
 }
 
-[data-spark-kind="spark_quiz"]>.spark-card-header {
+[data-spark-kind="spark_quiz"] > .spark-card-header {
   background: #3a9e8a;
 }
 
-[data-spark-kind="spark_flash_card"]>.spark-card-header {
+[data-spark-kind="spark_flash_card"] > .spark-card-header {
   background: #d94f7a;
 }
 
-[data-spark-kind="spark_desmos_graph"]>.spark-card-header {
+[data-spark-kind="spark_desmos_graph"] > .spark-card-header {
   background: #9b6dd4;
 }
 
-[data-spark-kind="spark_code"]>.spark-card-header {
+[data-spark-kind="spark_code"] > .spark-card-header {
   background: #2f6f8f;
 }
 
@@ -1058,6 +1053,8 @@ body::after {
   flex-shrink: 0;
   margin-top: 0.1rem;
   display: flex;
+  min-height: 44px;
+  min-width: 44px;
   align-items: center;
   gap: 0.3rem;
   padding: 0.25rem 0.65rem;
@@ -1232,10 +1229,11 @@ body::after {
   box-shadow: 0 18px 42px rgba(28, 18, 8, 0.09);
 }
 
-.spark-card[data-spark-kind="spark_scene"]>.spark-card-header {
+.spark-card[data-spark-kind="spark_scene"] > .spark-card-header {
   gap: 0.75rem;
   padding: 0.78rem 0.95rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border) 78%);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--accent) 22%, var(--border) 78%);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated) 90%);
   color: var(--fg);
 }
@@ -1382,6 +1380,8 @@ body::after {
 
 .spark-panel-back {
   display: inline-flex;
+  min-height: 44px;
+  min-width: 44px;
   align-items: center;
   gap: 0.35rem;
   padding: 0.35rem 0.75rem;
@@ -1422,241 +1422,1317 @@ body::after {
   height: 100% !important;
 }
 
-/* ── Code/Test spark ──────────────────────────────────────── */
+/* ── Code Spark ────────────────────────────────────────────── */
+/*
+ * Design language: the Code Spark is a learning exercise on Studi's warm
+ * paper, not an IDE. Human surfaces (objective, criteria, controls) stay
+ * paper-and-ink with the app's bold border/offset-shadow vocabulary;
+ * machine surfaces (editor, console) are the only dark regions.
+ */
+
+.code-spark-inline,
+.code-spark-shell {
+  --code-spark-paper: #fdf8f2;
+  --code-spark-card: #ffffff;
+  --code-spark-ink: #1c1208;
+  --code-spark-muted: #6b5a47;
+  --code-spark-line: rgba(28, 18, 8, 0.14);
+  --code-spark-line-mid: rgba(28, 18, 8, 0.32);
+  --code-spark-teal: #17605a;
+  --code-spark-teal-soft: #e3f1ec;
+  --code-spark-amber: #8a5c10;
+  --code-spark-amber-soft: #f9eed7;
+  --code-spark-green: #1e7043;
+  --code-spark-green-soft: #e9f5ec;
+  --code-spark-red: #b03325;
+  --code-spark-red-soft: #fdeeea;
+  --code-spark-chrome: #12171d;
+  --code-spark-editor: #1e1e1e;
+  --code-spark-console: #14181d;
+  --code-spark-console-fg: #ded7cb;
+  --code-spark-console-dim: #939ca7;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  container-name: code-spark;
+  container-type: inline-size;
+  color: var(--code-spark-ink);
+}
+
+.code-spark-inline *,
+.code-spark-shell * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.code-spark-inline {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem 0.85rem 0.9rem;
+  background: var(--code-spark-paper);
+}
 
 .code-spark-shell {
   display: flex;
-  min-height: 360px;
-  flex-direction: column;
-  background: #fffaf3;
-  color: var(--fg);
-}
-
-.code-spark-shell[data-expanded="false"] {
-  min-height: 420px;
-  max-height: 560px;
-}
-
-.code-spark-shell[data-expanded="true"] {
-  flex: 1;
   min-height: 0;
+  flex-direction: column;
+  overflow: auto;
+  background: var(--code-spark-paper);
+}
+
+.code-spark-shell[data-layout="expanded"] {
+  width: 100%;
   height: 100%;
+  max-width: 100%;
+  flex: 1;
+}
+
+/* ── Shared rows ── */
+
+.code-spark-inline-head,
+.code-spark-toolbar,
+.code-spark-title-row,
+.code-spark-inline-meta,
+.code-spark-meta,
+.code-spark-actions,
+.code-spark-controls-row,
+.code-spark-checks-head,
+.code-spark-results-head {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+}
+
+.code-spark-inline-head,
+.code-spark-toolbar,
+.code-spark-title-row,
+.code-spark-inline-meta,
+.code-spark-meta,
+.code-spark-actions {
+  flex-wrap: wrap;
+}
+
+.code-spark-inline-head,
+.code-spark-toolbar,
+.code-spark-results-head,
+.code-spark-checks-head {
+  justify-content: space-between;
+}
+
+.code-spark-inline-head {
+  gap: 0.4rem 0.65rem;
 }
 
 .code-spark-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-  padding: 0.65rem 0.75rem;
-  background: #fff7e8;
+  flex-shrink: 0;
+  gap: 0.6rem 0.9rem;
+  border-bottom: 1.5px solid var(--code-spark-line);
+  padding: 0.7rem 0.9rem;
+  background: var(--code-spark-paper);
 }
 
+.code-spark-title-row {
+  width: auto;
+  flex: 1 1 16rem;
+  gap: 0.55rem;
+}
+
+/* Metadata reads as one quiet line of text, not a row of pills. */
+.code-spark-inline-meta,
 .code-spark-meta {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  width: auto;
+  flex: 1 1 auto;
+  gap: 0.3rem;
+  color: var(--code-spark-muted);
   font-family: var(--font-jakarta), system-ui, sans-serif;
   font-size: 0.72rem;
-  font-weight: 750;
+  font-weight: 600;
 }
 
+.code-spark-inline-meta span,
 .code-spark-meta span {
-  border: 1px solid color-mix(in srgb, #2f6f8f 24%, var(--border) 76%);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.code-spark-inline-meta span + span::before,
+.code-spark-meta span + span::before {
+  content: "·";
+  margin-right: 0.3rem;
+  color: var(--code-spark-line-mid);
+}
+
+/* Mode chip — the one loud identity element, in the app badge vocabulary. */
+.code-spark-mode-chip {
+  max-width: 100%;
+  border: 2px solid var(--code-spark-ink);
   border-radius: 999px;
-  background: #ffffff;
-  color: #244f66;
-  padding: 0.18rem 0.5rem;
-  text-transform: capitalize;
+  background: var(--code-spark-amber-soft);
+  color: var(--code-spark-ink);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  padding: 0.22rem 0.6rem;
+  box-shadow: 2px 2px 0 var(--code-spark-ink);
 }
 
-.code-spark-actions {
-  display: flex;
-  flex-shrink: 0;
+.code-spark-mode-chip[data-mode="workspace"] {
+  background: var(--code-spark-teal-soft);
+}
+
+/* ── Status words (dot + label, never color alone) ── */
+
+.code-spark-status-pill,
+.code-spark-results-status {
+  display: inline-flex;
+  max-width: 100%;
+  flex: 0 1 auto;
+  align-items: center;
   gap: 0.4rem;
+  color: var(--code-spark-muted);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
-.code-spark-actions button {
-  min-height: 44px;
-  min-width: 44px;
-  border: 1px solid #1c1208;
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--fg);
-  cursor: pointer;
+.code-spark-status-pill[data-tone="passed"] {
+  color: var(--code-spark-green);
+}
+
+.code-spark-status-pill[data-tone="failed"] {
+  color: var(--code-spark-red);
+}
+
+.code-spark-status-pill[data-tone="running"] {
+  color: var(--code-spark-teal);
+}
+
+.code-spark-status-pill[data-tone="unavailable"] {
+  color: var(--code-spark-amber);
+}
+
+/* Console status words sit on the dark console — lighter tones. */
+.code-spark-results-status {
+  color: var(--code-spark-console-dim);
+}
+
+.code-spark-results[data-tone="passed"] .code-spark-results-status {
+  color: #7ed6a2;
+}
+
+.code-spark-results[data-tone="failed"] .code-spark-results-status {
+  color: #ff9d8a;
+}
+
+.code-spark-results[data-tone="running"] .code-spark-results-status {
+  color: #7fd4c2;
+}
+
+.code-spark-results[data-tone="unavailable"] .code-spark-results-status {
+  color: #eec06d;
+}
+
+.code-spark-status-dot {
+  width: 0.48rem;
+  min-width: 0.48rem;
+  height: 0.48rem;
+  flex: 0 0 0.48rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.code-spark-status-pill[data-tone="running"] .code-spark-status-dot,
+.code-spark-results[data-tone="running"] .code-spark-status-dot {
+  animation: code-spark-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes code-spark-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 20%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 8%, transparent);
+  }
+}
+
+/* ── Prose: the objective is content, so it speaks in the body serif ── */
+
+.code-spark-inline-objective,
+.code-spark-instructions,
+.code-spark-provider-note,
+.code-spark-mode-note,
+.code-spark-empty-checks {
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--code-spark-ink);
   font-family: var(--font-jakarta), system-ui, sans-serif;
   font-size: 0.78rem;
-  font-weight: 800;
-  padding: 0.45rem 0.75rem;
-  transition:
-    background 120ms ease,
-    transform 120ms ease;
+  line-height: 1.5;
 }
 
-.code-spark-actions button:hover:not(:disabled) {
-  background: #edf7f5;
-  transform: translateY(-1px);
+.code-spark-inline-objective,
+.code-spark-instructions {
+  font-family: var(--font-source-serif-4), Georgia, serif;
+  font-size: 0.95rem;
+  line-height: 1.6;
 }
 
-.code-spark-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+.code-spark-inline-objective {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 
-.code-spark-body {
-  display: grid;
-  min-height: 0;
-  flex: 1;
-  grid-template-columns: 168px minmax(0, 1fr) minmax(220px, 0.62fr);
+.code-spark-mode-note {
+  color: var(--code-spark-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
-.code-spark-files {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 0.25rem;
-  overflow: auto;
-  border-right: 1px solid var(--border);
-  background: #f8efe2;
-  padding: 0.55rem;
+.code-spark-provider-note,
+.code-spark-empty-checks {
+  color: var(--code-spark-muted);
+  font-size: 0.72rem;
 }
 
-.code-spark-files button {
-  display: flex;
-  min-height: 44px;
+/* ── Editor block: dark machine chrome, tabs live in it ── */
+
+.code-spark-editor-region,
+.code-spark-editor-pane,
+.code-spark-editor {
   width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--fg-muted);
-  cursor: pointer;
-  font-family: var(--font-jakarta), system-ui, sans-serif;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.45rem 0.5rem;
-  text-align: left;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
-.code-spark-files button span {
+.code-spark-editor-region,
+.code-spark-editor-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+.code-spark-editor-pane {
+  flex: 1;
+  overflow: hidden;
+  border: 2px solid var(--code-spark-ink);
+  border-radius: 12px;
+  background: var(--code-spark-chrome);
+}
+
+.code-spark-inline .code-spark-editor-pane {
+  min-height: 200px;
+  box-shadow: 3px 3px 0 var(--code-spark-ink);
+}
+
+.code-spark-inline .code-spark-editor {
+  height: 180px;
+  flex: 0 0 180px;
+}
+
+.code-spark-filetabs {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.4rem 0.5rem 0;
+  background: var(--code-spark-chrome);
+}
+
+.code-spark-filetab {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: min(15rem, 75%);
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: #9aa5b1;
+  cursor: pointer;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.42rem 0.62rem;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.code-spark-filetab:hover {
+  color: #e6e0d4;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.code-spark-filetab.active,
+.code-spark-filetab[aria-pressed="true"] {
+  border-color: #2c3641;
+  background: var(--code-spark-editor);
+  color: #f0eadf;
+}
+
+.code-spark-filetab-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.code-spark-files button small {
-  color: var(--fg-faint);
-  font-size: 0.65rem;
+.code-spark-file-state,
+.code-spark-active-tag {
+  flex-shrink: 0;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.code-spark-files button.active,
-.code-spark-files button:hover {
-  border-color: color-mix(in srgb, #2f6f8f 28%, var(--border) 72%);
-  background: #ffffff;
-  color: var(--fg);
+/* Tags sit on dark chrome: keep both legible and distinct from each other. */
+.code-spark-file-state {
+  color: #8fa0ad;
+}
+
+.code-spark-file-state[data-state="edited"] {
+  color: #e0b568;
+}
+
+.code-spark-active-tag {
+  color: #8fa0ad;
+}
+
+.code-spark-editor-head {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.4rem 0.75rem;
+  background: var(--code-spark-chrome);
+}
+
+/* With a tab strip the head would repeat the active tab's path — drop it and
+   let the tabs carry the file identity (read/edited tags included). */
+.code-spark-filetabs + .code-spark-editor-head {
+  display: none;
+}
+
+.code-spark-active-path {
+  overflow: hidden;
+  color: #cfc8bb;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .code-spark-editor {
+  flex: 1;
+  overflow: hidden;
+  background: var(--code-spark-editor);
+}
+
+.code-spark-editor > div,
+.code-spark-editor .monaco-editor,
+.code-spark-editor .overflow-guard {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* ── Controls: the app's ink-border, offset-shadow button system ── */
+
+.code-spark-controls-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.code-spark-actions {
+  width: auto;
+  flex: 0 1 auto;
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+.code-spark-actions .code-spark-btn,
+.code-spark-checks .code-spark-btn-check {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--code-spark-ink);
+  border-radius: 10px;
+  background: var(--code-spark-card);
+  color: var(--code-spark-ink);
+  cursor: pointer;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.9rem;
+  box-shadow: 2px 2px 0 var(--code-spark-ink);
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+
+.code-spark-actions .code-spark-btn:hover:not(:disabled),
+.code-spark-checks .code-spark-btn-check:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--code-spark-ink);
+}
+
+.code-spark-actions .code-spark-btn:active:not(:disabled),
+.code-spark-checks .code-spark-btn-check:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--code-spark-ink);
+}
+
+.code-spark-actions .code-spark-btn-primary {
+  background: var(--code-spark-ink);
+  color: #fff8f0;
+  box-shadow: 2px 2px 0 var(--accent3);
+}
+
+.code-spark-actions .code-spark-btn-primary:hover:not(:disabled) {
+  background: #33261a;
+  box-shadow: 3px 3px 0 var(--accent3);
+}
+
+.code-spark-actions .code-spark-btn-primary:active:not(:disabled) {
+  box-shadow: 1px 1px 0 var(--accent3);
+}
+
+.code-spark-actions .code-spark-btn:disabled,
+.code-spark-checks .code-spark-btn-check:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+  box-shadow: none;
+}
+
+.code-spark-control-group {
+  display: flex;
+  max-width: 100%;
+  flex: 0 1 24rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.code-spark-control-status {
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--code-spark-muted);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.code-spark-inline .code-spark-control-status {
+  text-align: left;
+}
+
+.code-spark-control-status[data-state="saving"],
+.code-spark-control-status[data-state="running"] {
+  color: var(--code-spark-teal);
+  font-weight: 700;
+}
+
+.code-spark-control-status[data-state="dirty"] {
+  color: var(--code-spark-amber);
+  font-weight: 700;
+}
+
+/* ── Expanded workspace: context rail + editor ── */
+
+.code-spark-workspace {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   min-height: 0;
-  background: #111820;
+  flex: 1;
+  grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+  gap: 1rem;
+  overflow: hidden;
+  padding: 0.9rem;
 }
 
-.code-spark-editor pre {
-  height: 100%;
-  margin: 0;
-  overflow: auto;
-  background: #111820;
-  color: #f5efe7;
-  font-family: "SF Mono", ui-monospace, Menlo, monospace;
-  font-size: 0.78rem;
-  line-height: 1.55;
-  padding: 0.85rem;
-  white-space: pre-wrap;
-}
-
-.code-spark-output {
+.code-spark-context {
   display: flex;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  border-left: 1px solid var(--border);
-  background: #ffffff;
+  gap: 1rem;
+  overflow: auto;
+  /* Room so button offset shadows aren't clipped by the scroll region. */
+  padding: 2px 4px 4px 2px;
 }
 
-.code-spark-output-head {
+/* Rail sections are quiet paper regions, not nested cards. */
+.code-spark-guidance,
+.code-spark-checks {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.code-spark-guidance {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.code-spark-section-label {
+  margin: 0;
+  color: var(--code-spark-ink);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.code-spark-checks {
+  display: grid;
+  gap: 0.5rem;
+  overflow: visible;
+}
+
+.code-spark-inline .code-spark-checks {
+  overflow: visible;
+}
+
+.code-spark-checks-head {
+  gap: 0.5rem;
+}
+
+.code-spark-check-count {
+  max-width: 100%;
+  color: var(--code-spark-muted);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.code-spark-checks ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.code-spark-checks li {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1.5px solid var(--code-spark-line-mid);
+  border-radius: 10px;
+  background: var(--code-spark-card);
+  padding: 0.55rem 0.65rem;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+/* Row state follows its result — border + tint, with the worded badge inside. */
+.code-spark-checks li:has(.code-spark-check-result[data-tone="passed"]) {
+  border-color: var(--code-spark-green);
+  background: var(--code-spark-green-soft);
+}
+
+.code-spark-checks li:has(.code-spark-check-result[data-tone="failed"]) {
+  border-color: var(--code-spark-red);
+  background: var(--code-spark-red-soft);
+}
+
+.code-spark-check-text {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.code-spark-checks strong,
+.code-spark-checks code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.code-spark-checks strong {
+  color: var(--code-spark-ink);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.code-spark-checks code {
+  color: var(--code-spark-muted);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.68rem;
+}
+
+.code-spark-checks .code-spark-btn-check {
+  min-height: 44px;
+  font-size: 0.72rem;
+  padding: 0.4rem 0.7rem;
+}
+
+.code-spark-context .code-spark-checks li {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.code-spark-context .code-spark-checks .code-spark-btn-check {
+  width: 100%;
+}
+
+.code-spark-check-result {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.32rem;
+  margin-top: 0.12rem;
+  color: var(--code-spark-muted);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.code-spark-check-result[data-tone="passed"] {
+  color: var(--code-spark-green);
+}
+
+.code-spark-check-result[data-tone="failed"] {
+  color: var(--code-spark-red);
+}
+
+.code-spark-check-result[data-tone="running"] {
+  color: var(--code-spark-teal);
+}
+
+.code-spark-check-result[data-tone="unavailable"] {
+  color: var(--code-spark-amber);
+}
+
+/* ── Console: dark terminal, the run's honest voice ── */
+
+.code-spark-results {
   display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 2px solid var(--code-spark-ink);
+  border-radius: 12px;
+  background: var(--code-spark-console);
+}
+
+.code-spark-results-head {
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.45rem 0.75rem;
+}
+
+.code-spark-results-caption {
+  max-width: 100%;
+  color: var(--code-spark-console-dim);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.code-spark-results pre {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  color: var(--code-spark-console-fg);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  padding: 0.6rem 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.code-spark-inline .code-spark-results pre {
+  max-height: 132px;
+}
+
+.code-spark-shell[data-layout="expanded"] > .code-spark-results {
+  width: auto;
+  max-width: calc(100% - 1.8rem);
+  min-height: 128px;
+  flex: 0 0 clamp(128px, 24%, 240px);
+  margin: 0 0.9rem 0.9rem;
+}
+
+.code-spark-shell[data-layout="expanded"] > .code-spark-results pre {
+  flex: 1;
+}
+
+/* ── Alerts ── */
+
+.code-spark-run-alert,
+.code-spark-error {
+  width: 100%;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.code-spark-run-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border: 1.5px solid
+    color-mix(in srgb, var(--code-spark-amber) 45%, transparent);
+  border-radius: 10px;
+  background: var(--code-spark-amber-soft);
+  color: var(--code-spark-amber);
+  padding: 0.55rem 0.7rem;
+}
+
+.code-spark-run-alert .code-spark-status-dot {
+  margin-top: 0.3rem;
+}
+
+.code-spark-run-alert[data-kind="provider"] {
+  border-color: var(--code-spark-line-mid);
+  background: var(--code-spark-card);
+  color: var(--code-spark-muted);
+}
+
+.code-spark-run-alert[data-kind="code"] {
+  border-color: color-mix(in srgb, var(--code-spark-red) 45%, transparent);
+  background: var(--code-spark-red-soft);
+  color: var(--code-spark-red);
+}
+
+.code-spark-shell[data-layout="expanded"] > .code-spark-run-alert,
+.code-spark-shell[data-layout="expanded"] > .code-spark-error {
+  width: auto;
+  max-width: calc(100% - 1.8rem);
+  flex-shrink: 0;
+  margin: 0 0.9rem 0.9rem;
+}
+
+.code-spark-error {
+  border: 1.5px solid color-mix(in srgb, var(--code-spark-red) 40%, transparent);
+  border-radius: 10px;
+  background: var(--code-spark-red-soft);
+  color: var(--code-spark-red);
+  padding: 0.55rem 0.75rem;
+}
+
+/* ── Narrow container: stack the workbench ── */
+
+@container code-spark (max-width: 720px) {
+  .code-spark-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    align-items: stretch;
+    flex-direction: column;
+    background: var(--code-spark-paper);
+  }
+
+  .code-spark-title-row,
+  .code-spark-control-group {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  .code-spark-control-group {
+    align-items: stretch;
+  }
+
+  .code-spark-control-status {
+    text-align: left;
+  }
+
+  .code-spark-controls-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .code-spark-actions {
+    width: 100%;
+  }
+
+  .code-spark-actions .code-spark-btn {
+    flex: 1 1 7rem;
+  }
+
+  .code-spark-workspace {
+    flex: 0 0 auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(280px, auto);
+    overflow: visible;
+    padding: 0.8rem;
+  }
+
+  .code-spark-context {
+    min-height: auto;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .code-spark-editor-region .code-spark-editor-pane {
+    min-height: 280px;
+  }
+
+  .code-spark-checks li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .code-spark-checks .code-spark-btn-check {
+    width: 100%;
+  }
+
+  .code-spark-shell[data-layout="expanded"] > .code-spark-results {
+    width: auto;
+    max-width: calc(100% - 1.6rem);
+    min-height: 180px;
+    flex: 0 0 auto;
+    margin: 0 0.8rem 0.8rem;
+  }
+
+  .code-spark-shell[data-layout="expanded"] > .code-spark-run-alert,
+  .code-spark-shell[data-layout="expanded"] > .code-spark-error {
+    max-width: calc(100% - 1.6rem);
+    margin: 0 0.8rem 0.8rem;
+  }
+}
+
+@container code-spark (max-width: 460px) {
+  .code-spark-inline {
+    padding-inline: 0.65rem;
+  }
+
+  .code-spark-inline-head,
+  .code-spark-checks-head,
+  .code-spark-results-head {
+    align-items: flex-start;
+  }
+
+  .code-spark-status-pill {
+    margin-left: auto;
+  }
+
+  .code-spark-check-count,
+  .code-spark-results-caption {
+    text-align: left;
+  }
+
+  .code-spark-filetab {
+    max-width: calc(100% - 0.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spark-panel {
+    animation: none;
+  }
+
+  .spark-card-expand,
+  .spark-panel-back,
+  .mobile-panel-tab {
+    transition: none;
+  }
+
+  .spark-card-expand:hover,
+  .spark-panel-back:hover {
+    transform: none;
+  }
+
+  .code-spark-status-pill .code-spark-status-dot,
+  .code-spark-results .code-spark-status-dot {
+    animation: none;
+  }
+
+  .code-spark-actions .code-spark-btn,
+  .code-spark-checks .code-spark-btn-check,
+  .code-spark-filetab,
+  .code-spark-checks li {
+    transition: none;
+  }
+
+  .code-spark-actions .code-spark-btn:hover:not(:disabled),
+  .code-spark-checks .code-spark-btn-check:hover:not(:disabled),
+  .code-spark-actions .code-spark-btn:active:not(:disabled),
+  .code-spark-checks .code-spark-btn-check:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ── Code Spark task / editor / feedback hierarchy ── */
+
+.code-spark-inline {
+  gap: 0.75rem;
+  padding: 0.8rem;
+}
+
+.code-spark-guidance-callout {
+  display: grid;
+  gap: 0.18rem;
+  border-radius: 6px;
+  background: var(--code-spark-amber-soft);
+  color: var(--code-spark-ink);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  padding: 0.62rem 0.72rem;
+}
+
+.code-spark-guidance-callout[data-mode="workspace"] {
+  background: var(--code-spark-teal-soft);
+}
+
+.code-spark-guidance-callout strong {
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.code-spark-guidance-callout span {
+  color: #574735;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.code-spark-guidance-callout small {
+  color: var(--code-spark-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.code-spark-guidance-callout[data-mode="workspace"] span {
+  color: #244f4a;
+}
+
+.code-spark-editor-pane:not(:has(.code-spark-filetabs)) .code-spark-editor {
+  border-radius: 10px;
+}
+
+.code-spark-inline .code-spark-actions {
+  width: 100%;
+}
+
+.code-spark-inline .code-spark-actions .code-spark-btn {
+  flex: 1 1 8rem;
+}
+
+.code-spark-control-status[data-state="ready"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.code-spark-live-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.code-spark-controls-row:has(.code-spark-control-status[data-state="ready"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.code-spark-feedback-grid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
+.code-spark-inline-feedback {
+  scroll-margin-bottom: 10rem;
+}
+
+.code-spark-terminal,
+.code-spark-test-results {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 2px solid var(--code-spark-ink);
+  border-radius: 10px;
+}
+
+.code-spark-terminal {
+  display: flex;
+  min-height: 148px;
+  flex-direction: column;
+  background: var(--code-spark-console);
+}
+
+.code-spark-terminal-head,
+.code-spark-test-results-head {
+  display: flex;
+  width: 100%;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  border-bottom: 1px solid var(--border-faint);
-  padding: 0.6rem 0.7rem;
   font-family: var(--font-jakarta), system-ui, sans-serif;
-  font-size: 0.75rem;
 }
 
-.code-spark-output-head span {
-  color: var(--fg-muted);
+.code-spark-terminal-head {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--code-spark-console-fg);
+  padding: 0.5rem 0.65rem;
+}
+
+.code-spark-terminal-label,
+.code-spark-test-results-label {
   font-size: 0.7rem;
+  font-weight: 800;
 }
 
-.code-spark-output pre {
+.code-spark-terminal-status,
+.code-spark-test-results-status {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.66rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.code-spark-terminal-status {
+  color: var(--code-spark-console-dim);
+}
+
+.code-spark-terminal[data-tone="passed"] .code-spark-terminal-status {
+  color: #7ed6a2;
+}
+
+.code-spark-terminal[data-tone="failed"] .code-spark-terminal-status {
+  color: #ff9d8a;
+}
+
+.code-spark-terminal[data-tone="running"] .code-spark-terminal-status {
+  color: #7fd4c2;
+}
+
+.code-spark-terminal pre {
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   flex: 1;
   margin: 0;
   overflow: auto;
-  color: var(--fg);
+  color: var(--code-spark-console-fg);
   font-family: "SF Mono", ui-monospace, Menlo, monospace;
-  font-size: 0.74rem;
-  line-height: 1.5;
-  padding: 0.75rem;
+  font-size: 0.7rem;
+  line-height: 1.55;
+  padding: 0.62rem 0.68rem;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.code-spark-error {
-  border-top: 1px solid #f1c5bc;
-  background: #fff0ee;
-  color: #8b352f;
+.code-spark-test-results {
+  display: flex;
+  min-height: 148px;
+  flex-direction: column;
+  background: var(--code-spark-card);
+}
+
+.code-spark-test-results-head {
+  border-bottom: 1.5px solid var(--code-spark-line-mid);
+  background: var(--code-spark-amber-soft);
+  padding: 0.5rem 0.65rem;
+}
+
+.code-spark-test-results[data-tone="passed"] .code-spark-test-results-head {
+  background: var(--code-spark-green-soft);
+}
+
+.code-spark-test-results[data-tone="failed"] .code-spark-test-results-head {
+  background: var(--code-spark-red-soft);
+}
+
+.code-spark-test-results-status {
+  color: var(--code-spark-muted);
+}
+
+.code-spark-test-results[data-tone="passed"]
+  .code-spark-test-results-status {
+  color: var(--code-spark-green);
+}
+
+.code-spark-test-results[data-tone="failed"]
+  .code-spark-test-results-status {
+  color: var(--code-spark-red);
+}
+
+.code-spark-test-results > .code-spark-checks {
+  flex: 1;
+  gap: 0;
+}
+
+.code-spark-test-results .code-spark-checks-head {
+  padding: 0.48rem 0.65rem 0.32rem;
+}
+
+.code-spark-test-results .code-spark-checks ul {
+  gap: 0;
+  border-top: 1px solid var(--code-spark-line);
+}
+
+.code-spark-test-results .code-spark-checks li {
+  border: 0;
+  border-bottom: 1px solid var(--code-spark-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.5rem 0.65rem;
+}
+
+.code-spark-test-results
+  .code-spark-checks
+  li:has(.code-spark-check-result[data-tone="passed"]) {
+  background: var(--code-spark-green-soft);
+}
+
+.code-spark-test-results
+  .code-spark-checks
+  li:has(.code-spark-check-result[data-tone="failed"]) {
+  background: var(--code-spark-red-soft);
+}
+
+.code-spark-test-results .code-spark-checks strong {
+  font-size: 0.74rem;
+}
+
+.code-spark-test-summary {
+  margin: 0;
+  color: var(--code-spark-muted);
   font-family: var(--font-jakarta), system-ui, sans-serif;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.55rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1.45;
+  padding: 0.5rem 0.65rem;
 }
 
-@media (max-width: 760px) {
-  .code-spark-toolbar {
-    align-items: stretch;
-    flex-direction: column;
+.code-spark-toolbar {
+  justify-content: flex-end;
+  background: var(--code-spark-paper);
+}
+
+.code-spark-toolbar .code-spark-control-group {
+  flex: 1 1 auto;
+  align-items: flex-end;
+}
+
+.code-spark-toolbar .code-spark-actions {
+  justify-content: flex-end;
+}
+
+.code-spark-shell[data-layout="expanded"] {
+  background: var(--code-spark-paper);
+}
+
+.code-spark-shell[data-layout="expanded"] > .code-spark-feedback-grid {
+  width: auto;
+  max-width: calc(100% - 1.8rem);
+  min-height: 180px;
+  flex: 0 0 clamp(180px, 28%, 260px);
+  grid-template-columns: minmax(0, 1.35fr) minmax(250px, 0.65fr);
+  margin: 0 0.9rem 0.9rem;
+}
+
+.code-spark-shell[data-layout="expanded"] .code-spark-terminal,
+.code-spark-shell[data-layout="expanded"] .code-spark-test-results {
+  height: 100%;
+  min-height: 180px;
+}
+
+@container code-spark (max-width: 560px) {
+  .code-spark-feedback-grid,
+  .code-spark-shell[data-layout="expanded"] > .code-spark-feedback-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .code-spark-actions button {
-    flex: 1;
+  .code-spark-shell[data-layout="expanded"] > .code-spark-feedback-grid {
+    max-width: calc(100% - 1.6rem);
+    min-height: auto;
+    flex: 0 0 auto;
+    margin: 0 0.8rem 0.8rem;
   }
 
-  .code-spark-body {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(220px, 1fr) minmax(180px, 0.7fr);
+  .code-spark-shell[data-layout="expanded"] .code-spark-terminal,
+  .code-spark-shell[data-layout="expanded"] .code-spark-test-results {
+    height: auto;
   }
+}
 
-  .code-spark-files {
-    flex-direction: row;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+@container code-spark (max-width: 460px) {
+  .code-spark-feedback-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
+}
 
-  .code-spark-files button {
-    width: min(220px, 70vw);
-    flex-shrink: 0;
-  }
-
-  .code-spark-output {
-    border-left: none;
-    border-top: 1px solid var(--border);
+@media (prefers-reduced-motion: reduce) {
+  .code-spark-terminal .code-spark-status-dot,
+  .code-spark-test-results .code-spark-status-dot {
+    animation: none;
   }
 }
 
@@ -1734,9 +2810,11 @@ body::after {
 /* ── Quiz results panel ── */
 .quiz-results {
   border: 1px solid color-mix(in srgb, var(--accent2) 28%, var(--border) 72%);
-  background: linear-gradient(135deg,
-      color-mix(in srgb, var(--accent2-dim) 70%, #fff 30%) 0%,
-      color-mix(in srgb, var(--card-teal) 60%, #fff 40%) 100%);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent2-dim) 70%, #fff 30%) 0%,
+    color-mix(in srgb, var(--card-teal) 60%, #fff 40%) 100%
+  );
   border-radius: var(--radius-md);
   padding: 0.85rem 0.95rem;
   text-align: center;
@@ -2075,9 +3153,11 @@ body::after {
 
 .flash-card-face-back {
   transform: rotateY(180deg);
-  background: linear-gradient(160deg,
-      color-mix(in srgb, var(--accent5-dim) 30%, #fff 70%) 0%,
-      color-mix(in srgb, var(--card-pink) 40%, #fff 60%) 100%);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--accent5-dim) 30%, #fff 70%) 0%,
+    color-mix(in srgb, var(--card-pink) 40%, #fff 60%) 100%
+  );
   border-color: color-mix(in srgb, var(--accent5) 25%, var(--border) 75%);
 }
 
@@ -2129,7 +3209,6 @@ body::after {
 }
 
 @keyframes flash-hint-pulse {
-
   0%,
   100% {
     opacity: 0.6;
@@ -2449,7 +3528,6 @@ body::after {
 
 /* ── Landing page ─────────────────────────────────────────── */
 @keyframes float-drift {
-
   0%,
   100% {
     transform: translateY(0) rotate(0deg);
@@ -2683,6 +3761,7 @@ body::after {
 
 .mobile-panel-tab {
   flex: 1;
+  min-height: 44px;
   padding: 0.6rem 0;
   border: none;
   border-bottom: 2px solid transparent;
@@ -2695,7 +3774,10 @@ body::after {
   text-align: center;
   text-transform: uppercase;
   cursor: pointer;
-  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+  transition:
+    color 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease;
 }
 
 .mobile-panel-tab:hover {
@@ -2753,12 +3835,16 @@ body::after {
   min-height: 100vh;
   padding: 1.25rem;
   background:
-    radial-gradient(1200px 450px at -5% -10%,
+    radial-gradient(
+      1200px 450px at -5% -10%,
       color-mix(in srgb, var(--accent2) 8%, transparent),
-      transparent 65%),
-    radial-gradient(1100px 500px at 105% 0%,
+      transparent 65%
+    ),
+    radial-gradient(
+      1100px 500px at 105% 0%,
       color-mix(in srgb, var(--accent) 8%, transparent),
-      transparent 70%),
+      transparent 70%
+    ),
     var(--bg);
 }
 
@@ -3041,12 +4127,14 @@ body::after {
   width: 64px;
   height: 64px;
   border-radius: 999px;
-  background: radial-gradient(circle at 30% 26%,
-      #72d0bb 0%,
-      #3a9e8a 36%,
-      rgba(42, 130, 112, 0.7) 62%,
-      rgba(58, 158, 138, 0.18) 82%,
-      transparent 100%);
+  background: radial-gradient(
+    circle at 30% 26%,
+    #72d0bb 0%,
+    #3a9e8a 36%,
+    rgba(42, 130, 112, 0.7) 62%,
+    rgba(58, 158, 138, 0.18) 82%,
+    transparent 100%
+  );
   box-shadow:
     0 0 0 2px rgba(58, 158, 138, 0.1),
     0 0 22px rgba(58, 158, 138, 0.32),
@@ -3069,11 +4157,13 @@ body::after {
 
 /* Muted: grey orb */
 .voice-composer-orb[data-muted="true"] .voice-composer-orb-core {
-  background: radial-gradient(circle at 30% 26%,
-      #ccc5bc 0%,
-      #a09890 40%,
-      rgba(160, 152, 144, 0.5) 70%,
-      transparent 100%);
+  background: radial-gradient(
+    circle at 30% 26%,
+    #ccc5bc 0%,
+    #a09890 40%,
+    rgba(160, 152, 144, 0.5) 70%,
+    transparent 100%
+  );
   box-shadow:
     0 0 12px rgba(160, 152, 144, 0.22),
     0 0 32px rgba(160, 152, 144, 0.08);
@@ -3081,11 +4171,13 @@ body::after {
 
 /* Connecting: amber orb */
 .voice-composer-orb[data-state="connecting"] .voice-composer-orb-core {
-  background: radial-gradient(circle at 30% 26%,
-      #f5ca6a 0%,
-      #e8a030 38%,
-      rgba(232, 160, 48, 0.5) 68%,
-      transparent 100%);
+  background: radial-gradient(
+    circle at 30% 26%,
+    #f5ca6a 0%,
+    #e8a030 38%,
+    rgba(232, 160, 48, 0.5) 68%,
+    transparent 100%
+  );
   box-shadow:
     0 0 18px rgba(232, 160, 48, 0.35),
     0 0 52px rgba(232, 160, 48, 0.14);
@@ -3093,11 +4185,13 @@ body::after {
 
 /* Error: coral orb */
 .voice-composer-orb[data-state="error"] .voice-composer-orb-core {
-  background: radial-gradient(circle at 30% 26%,
-      #f58a72 0%,
-      #e05a3a 38%,
-      rgba(224, 90, 58, 0.5) 68%,
-      transparent 100%);
+  background: radial-gradient(
+    circle at 30% 26%,
+    #f58a72 0%,
+    #e05a3a 38%,
+    rgba(224, 90, 58, 0.5) 68%,
+    transparent 100%
+  );
   box-shadow:
     0 0 18px rgba(224, 90, 58, 0.35),
     0 0 52px rgba(224, 90, 58, 0.14);
