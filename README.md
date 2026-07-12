@@ -1,6 +1,6 @@
 # Studi
 
-Studi is an agentic tutor built with Next.js, Convex, Clerk, and OpenRouter.
+Studi is an agentic tutor built with Next.js, Convex, Clerk, FreeModel, and OpenRouter.
 
 ## What You Have Built
 
@@ -44,21 +44,28 @@ Key backend modules:
 - Next.js 16 + React 19 + TypeScript
 - Convex + `@convex-dev/agent`
 - Clerk authentication & billing
-- OpenRouter (text + spark generation)
+- FreeModel's Anthropic-compatible endpoint (primary text + Spark generation)
+- OpenRouter (automatic text + Spark fallback)
 
 ## Prerequisites
 
 - Bun (required package manager)
 - Convex project configured
 - Clerk app configured
-- OpenRouter key
+- A FreeModel key and/or an OpenRouter key
 
 ## Environment Variables
 
-Set frontend vars in `.env.local` and backend secrets in Convex env settings.
+Set frontend vars in `.env.local`, model/backend secrets in Convex env settings,
+and deployment credentials in the matching Vercel environment.
 
 ```bash
-# Core model access
+# Primary model access
+FREEMODEL_API_KEY=...
+# Optional override; defaults to https://api-cc.freemodel.dev/v1
+FREEMODEL_ANTHROPIC_BASE_URL=...
+
+# Fallback model access
 OPENROUTER_API_KEY=...
 
 # Sparks (required for desmos_graph rendering)
@@ -68,7 +75,17 @@ NEXT_PUBLIC_DESMOS_API_KEY=...
 CLERK_SECRET_KEY=...
 ```
 
-Model routing is configured in `lib/model-config.ts`.
+Model routing is configured in `lib/model-config.ts`. When both providers are
+configured, Studi tries FreeModel first and retries provider failures through
+OpenRouter. If only one key is configured, Studi uses that provider directly.
+
+Vercel builds run `bunx convex deploy --cmd 'bun run build'` from
+`vercel.json`. Give Vercel two separate `CONVEX_DEPLOY_KEY` values: a production
+deploy key scoped only to Production and either a project preview key or a key
+for a dedicated preview deployment scoped only to Preview. Do not expose the
+production key to Preview or Development builds. Generate project preview keys
+in the Convex dashboard; the Convex CLI can create an expiring dedicated preview
+deployment and a deploy key for one-off release verification.
 
 ## Local Development
 

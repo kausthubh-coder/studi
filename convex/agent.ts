@@ -1,20 +1,26 @@
 "use node";
 
 import { Agent, type UsageHandler } from "@convex-dev/agent";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { stepCountIs } from "ai";
 import type { FunctionReference } from "convex/server";
 import {
   activeModelProfile,
+  getConfiguredChatModelAttempts,
   getModelConfig,
   getStudiAgentName,
   type ModelProfile,
+  type TextModelAttemptRole,
+  type TextModelEndpoint,
 } from "../lib/model-config";
 import { sanitizeStudiModelMessages } from "../lib/agent-message-sanitizer";
 import { renderPrompt } from "../lib/prompts";
 import { sparkCatalogPromptBlock } from "../lib/sparks/catalog";
 import { components, internal } from "./_generated/api";
 import { createSparkToolForProfile } from "./sparks/tools";
+import {
+  createTextLanguageModel,
+  describeTextModelEndpoint,
+} from "./textModelProvider";
 
 const internalApi = internal as unknown as {
   billing: {
@@ -115,22 +121,6 @@ const usageHandler: UsageHandler = async (ctx, args) => {
   }
 };
 
-type OpenRouterProvider = ReturnType<typeof createOpenRouter>;
-
-let openrouter: OpenRouterProvider | null = null;
-
-function getOpenRouter() {
-  const openRouterApiKey = process.env.OPENROUTER_API_KEY;
-  if (!openRouterApiKey) {
-    throw new Error(
-      "OPENROUTER_API_KEY is missing. Set it in .env.local and Convex env vars.",
-    );
-  }
-
-  openrouter ??= createOpenRouter({ apiKey: openRouterApiKey });
-  return openrouter;
-}
-
 const studiAgentInstructions = renderPrompt("agents/studi.md", {
   sparkCatalogPromptBlock: sparkCatalogPromptBlock(),
 });
@@ -141,12 +131,21 @@ export function buildStudiToolset(profile: ModelProfile) {
   };
 }
 
-function createStudiAgent(profile: ModelProfile): Agent {
-  const modelConfig = getModelConfig(profile);
+export type StudiAgentAttempt = {
+  endpoint: TextModelEndpoint;
+  role: TextModelAttemptRole;
+  agent: Agent;
+};
+
+function createStudiAgent(
+  profile: ModelProfile,
+  endpoint: TextModelEndpoint,
+  role: TextModelAttemptRole,
+): Agent {
   return new Agent(components.agent, {
-    name: getStudiAgentName(profile),
-    languageModel: getOpenRouter().chat(modelConfig.studiAgent),
-    providerOptions: modelConfig.providerOptions,
+    name: getStudiAgentName(profile, role),
+    languageModel: createTextLanguageModel(endpoint),
+    providerOptions: endpoint.providerOptions,
     stopWhen: stepCountIs(6),
     tools: buildStudiToolset(profile),
     instructions: studiAgentInstructions,
@@ -156,11 +155,42 @@ function createStudiAgent(profile: ModelProfile): Agent {
   });
 }
 
-const studiAgentsByProfile: Partial<Record<ModelProfile, Agent>> = {};
+const studiAgentsByKey: Partial<Record<string, Agent>> = {};
 
-export function getStudiAgent(profile: ModelProfile = activeModelProfile): Agent {
-  studiAgentsByProfile[profile] ??= createStudiAgent(profile);
-  return studiAgentsByProfile[profile];
+function getStudiAgentForEndpoint(
+  profile: ModelProfile,
+  endpoint: TextModelEndpoint,
+  role: TextModelAttemptRole,
+): Agent {
+  const cacheKey = `${profile}:${role}:${describeTextModelEndpoint(endpoint)}`;
+  studiAgentsByKey[cacheKey] ??= createStudiAgent(profile, endpoint, role);
+  return studiAgentsByKey[cacheKey];
+}
+
+export function getStudiAgentAttempts(
+  profile: ModelProfile = activeModelProfile,
+): StudiAgentAttempt[] {
+  const modelConfig = getModelConfig(profile);
+  const attempts = getConfiguredChatModelAttempts(modelConfig.studiAgent);
+  return attempts.map(({ endpoint, role }) => {
+    return {
+      endpoint,
+      role,
+      agent: getStudiAgentForEndpoint(profile, endpoint, role),
+    };
+  });
+}
+
+export function getStudiAgent(
+  profile: ModelProfile = activeModelProfile,
+): Agent {
+  const [firstAttempt] = getStudiAgentAttempts(profile);
+  if (!firstAttempt) {
+    throw new Error(
+      "No configured Studi text model provider. Set FREEMODEL_API_KEY or OPENROUTER_API_KEY.",
+    );
+  }
+  return firstAttempt.agent;
 }
 
 export function getPlaygroundAgents(): Agent[] {

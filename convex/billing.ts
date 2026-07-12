@@ -20,6 +20,7 @@ type BillingUsageRecord = {
 
 type BillingCaps = {
   freePromptLimit: number;
+  textPromptLimit: number;
   freeTextAiCostUsdLimit: number;
   textAiCostUsdLimit: number;
   totalEstimatedCostUsdLimit: number;
@@ -44,6 +45,7 @@ const billingStatusValidator = v.union(
 
 const billingCapsValidator = v.object({
   freePromptLimit: v.number(),
+  textPromptLimit: v.number(),
   freeTextAiCostUsdLimit: v.number(),
   textAiCostUsdLimit: v.number(),
   totalEstimatedCostUsdLimit: v.number(),
@@ -68,6 +70,7 @@ const viewerBillingStateValidator = v.object({
     lifetimeFreeTextAiCostUsd: v.number(),
   }),
   remaining: v.object({
+    textPromptCount: v.number(),
     textAiCostUsd: v.number(),
     totalEstimatedCostUsd: v.number(),
     lifetimeFreePromptCount: v.number(),
@@ -96,18 +99,21 @@ const codeSparkRunEntitlementValidator = v.object({
 const PLAN_CAPS: Record<BillingPlanKey, BillingCaps> = {
   free_onboarding: {
     freePromptLimit: 3,
+    textPromptLimit: 3,
     freeTextAiCostUsdLimit: 0.15,
     textAiCostUsdLimit: 0.15,
     totalEstimatedCostUsdLimit: 0.15,
   },
   intro: {
     freePromptLimit: 0,
+    textPromptLimit: 150,
     freeTextAiCostUsdLimit: 0,
     textAiCostUsdLimit: 1.5,
     totalEstimatedCostUsdLimit: 2,
   },
   pro: {
     freePromptLimit: 0,
+    textPromptLimit: 450,
     freeTextAiCostUsdLimit: 0,
     textAiCostUsdLimit: 4.5,
     totalEstimatedCostUsdLimit: 6,
@@ -142,7 +148,10 @@ function roundUsd(value: number) {
   return Number(value.toFixed(8));
 }
 
-function assertNonNegativeFiniteNumber(name: string, value: number | undefined) {
+function assertNonNegativeFiniteNumber(
+  name: string,
+  value: number | undefined,
+) {
   if (value === undefined) return;
   if (!Number.isFinite(value) || value < 0) {
     throw new ConvexError({
@@ -339,7 +348,9 @@ function maybeString(value: unknown): string | undefined {
     : undefined;
 }
 
-function extractPlanHintFromIdentity(identity: unknown): BillingPlanKey | undefined {
+function extractPlanHintFromIdentity(
+  identity: unknown,
+): BillingPlanKey | undefined {
   if (!identity || typeof identity !== "object") return undefined;
 
   const stack: unknown[] = [identity];
@@ -355,7 +366,9 @@ function extractPlanHintFromIdentity(identity: unknown): BillingPlanKey | undefi
     if (typeof node !== "object" || seen.has(node)) continue;
     seen.add(node);
 
-    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(
+      node as Record<string, unknown>,
+    )) {
       if (
         key === "pla" ||
         key === "plan" ||
@@ -381,10 +394,7 @@ function extractPlanHintFromIdentity(identity: unknown): BillingPlanKey | undefi
 }
 
 function throwBillingError(args: {
-  code:
-    | "BILLING_REQUIRED"
-    | "PLAN_REQUIRED"
-    | "USAGE_BUDGET_EXHAUSTED";
+  code: "BILLING_REQUIRED" | "PLAN_REQUIRED" | "USAGE_BUDGET_EXHAUSTED";
   surface: "chat" | "attachments";
   planKey: BillingPlanKey;
   message: string;
@@ -442,11 +452,11 @@ async function resolvePlanState(args: {
   const planKey =
     args.planHint && hintedPlanKey !== "free_onboarding"
       ? hintedPlanKey
-      : profile?.planKey ?? "free_onboarding";
+      : (profile?.planKey ?? "free_onboarding");
   const status =
     planKey === "free_onboarding"
       ? "onboarding"
-      : profile?.status ?? "active";
+      : (profile?.status ?? "active");
 
   return {
     planKey,
@@ -454,7 +464,9 @@ async function resolvePlanState(args: {
   };
 }
 
-function getUpgradeTarget(planKey: BillingPlanKey): "intro" | "pro" | undefined {
+function getUpgradeTarget(
+  planKey: BillingPlanKey,
+): "intro" | "pro" | undefined {
   if (planKey === "free_onboarding") return "intro";
   if (planKey === "intro") return "pro";
   return undefined;
@@ -478,7 +490,10 @@ function buildViewerBillingState(args: {
     args.onboarding.lifetimeFreePromptCount >= caps.freePromptLimit ||
     args.onboarding.lifetimeFreeTextAiCostUsd >= caps.freeTextAiCostUsdLimit;
   const paidChatLocked =
-    args.usage.textAiCostUsd >= caps.textAiCostUsdLimit || totalBudgetExceeded;
+    args.usage.textAiCostUsd >= caps.textAiCostUsdLimit ||
+    totalBudgetExceeded ||
+    (args.planKey !== "free_onboarding" &&
+      args.usage.textPromptCount >= caps.textPromptLimit);
   const chatLocked =
     args.planKey === "free_onboarding" ? freeChatLocked : paidChatLocked;
 
@@ -508,6 +523,12 @@ function buildViewerBillingState(args: {
       lifetimeFreeTextAiCostUsd: args.onboarding.lifetimeFreeTextAiCostUsd,
     },
     remaining: {
+      textPromptCount: clampRemainingCount(
+        caps.textPromptLimit,
+        args.planKey === "free_onboarding"
+          ? args.onboarding.lifetimeFreePromptCount
+          : args.usage.textPromptCount,
+      ),
       textAiCostUsd: clampRemaining(
         caps.textAiCostUsdLimit,
         args.usage.textAiCostUsd,
@@ -613,10 +634,7 @@ async function patchUsageDelta(
   });
 }
 
-async function ensureOnboardingRow(
-  ctx: any,
-  userId: string,
-) {
+async function ensureOnboardingRow(ctx: any, userId: string) {
   const existing = await getBillingOnboardingDoc(ctx, userId);
   if (existing) return existing;
 
@@ -893,7 +911,10 @@ export const assertCanSendMessageInternal = internalMutation({
       planHint: args.planHint,
     });
 
-    if (state.planKey === "free_onboarding" && (args.attachmentCount ?? 0) > 0) {
+    if (
+      state.planKey === "free_onboarding" &&
+      (args.attachmentCount ?? 0) > 0
+    ) {
       throwBillingError({
         code: "PLAN_REQUIRED",
         surface: "attachments",

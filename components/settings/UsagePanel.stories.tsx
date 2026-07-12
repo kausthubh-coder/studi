@@ -21,6 +21,7 @@ const freshPreviewBilling = {
     lifetimeFreeTextAiCostUsd: 0,
   },
   remaining: {
+    textPromptCount: 3,
     textAiCostUsd: 0.15,
     totalEstimatedCostUsd: 0.15,
     lifetimeFreePromptCount: 3,
@@ -38,6 +39,7 @@ const nearPreviewLimitBilling = {
     lifetimeFreeTextAiCostUsd: 0.12,
   },
   remaining: {
+    textPromptCount: 1,
     textAiCostUsd: 0.03,
     totalEstimatedCostUsd: 0.03,
     lifetimeFreePromptCount: 1,
@@ -56,6 +58,7 @@ const proNearMonthlyCapBilling = {
   },
   remaining: {
     ...proBilling.remaining,
+    textPromptCount: 126,
     textAiCostUsd: 1.6,
     totalEstimatedCostUsd: 2.25,
   },

@@ -9,9 +9,13 @@ import { modules } from "./test.setup";
 
 const internalBillingApi = internal as unknown as {
   billing: {
+    assertCanSendMessageInternal: FunctionReference<"mutation", "internal">;
     assertCanUseCodeSparkRunInternal: FunctionReference<"mutation", "internal">;
     devResetTestBillingUsageInternal: FunctionReference<"mutation", "internal">;
-    incrementFreeOnboardingUsageInternal: FunctionReference<"mutation", "internal">;
+    incrementFreeOnboardingUsageInternal: FunctionReference<
+      "mutation",
+      "internal"
+    >;
     recordTextAiCostInternal: FunctionReference<"mutation", "internal">;
     syncBillingProfileInternal: FunctionReference<"mutation", "internal">;
   };
@@ -32,11 +36,14 @@ async function seedBillingUsage(
   t: ReturnType<typeof testConvex>,
   userId: string,
 ) {
-  await t.mutation(internalBillingApi.billing.incrementFreeOnboardingUsageInternal, {
-    userId,
-    promptCount: 3,
-    textAiCostUsd: 0.12,
-  });
+  await t.mutation(
+    internalBillingApi.billing.incrementFreeOnboardingUsageInternal,
+    {
+      userId,
+      promptCount: 3,
+      textAiCostUsd: 0.12,
+    },
+  );
   await t.mutation(internalBillingApi.billing.recordTextAiCostInternal, {
     userId,
     textPromptCount: 3,
@@ -45,6 +52,39 @@ async function seedBillingUsage(
 }
 
 describe("dev test billing reset", () => {
+  it("caps paid chat by prompt count when provider cost metadata is unavailable", async () => {
+    const t = testConvex();
+    const userId = "paid_prompt_guard_user";
+
+    await t.mutation(internalBillingApi.billing.syncBillingProfileInternal, {
+      userId,
+      planKey: "intro",
+      status: "active",
+    });
+    await t.mutation(internalBillingApi.billing.recordTextAiCostInternal, {
+      userId,
+      textPromptCount: 150,
+      textAiCostUsd: 0,
+    });
+
+    await expect(
+      t.mutation(internalBillingApi.billing.assertCanSendMessageInternal, {
+        userId,
+      }),
+    ).rejects.toThrow("You've reached this month's Intro usage limit.");
+
+    await expect(
+      t
+        .withIdentity({ subject: userId })
+        .query(api.billing.getViewerBillingState, {}),
+    ).resolves.toMatchObject({
+      caps: { textPromptLimit: 150 },
+      usage: { textPromptCount: 150 },
+      remaining: { textPromptCount: 0 },
+      lockedSurfaces: { chat: true },
+    });
+  });
+
   it("returns a bounded monthly Code Spark entitlement", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-10T12:00:00.000Z"));
@@ -94,12 +134,15 @@ describe("dev test billing reset", () => {
 
       for (const testCase of cases) {
         const t = testConvex();
-        await t.mutation(internalBillingApi.billing.syncBillingProfileInternal, {
-          userId: `user_${testCase.status}_${testCase.allowed}`,
-          planKey: "intro",
-          status: testCase.status,
-          currentPeriodEnd: testCase.currentPeriodEnd,
-        });
+        await t.mutation(
+          internalBillingApi.billing.syncBillingProfileInternal,
+          {
+            userId: `user_${testCase.status}_${testCase.allowed}`,
+            planKey: "intro",
+            status: testCase.status,
+            currentPeriodEnd: testCase.currentPeriodEnd,
+          },
+        );
 
         const request = t.mutation(
           internalBillingApi.billing.assertCanUseCodeSparkRunInternal,
@@ -245,7 +288,7 @@ describe("dev test billing reset", () => {
         lifetimeFreePromptCount: 3,
         textPromptCount: 3,
       },
-      });
+    });
   });
 
   it("rejects a reset when the allowlisted email does not match the requested Clerk user id", async () => {
@@ -288,7 +331,9 @@ describe("dev test billing reset", () => {
         email: "learner@example.com",
         deployment: "dev:test-deployment",
       }),
-    ).rejects.toThrow("Billing reset is limited to +clerk_test email addresses.");
+    ).rejects.toThrow(
+      "Billing reset is limited to +clerk_test email addresses.",
+    );
 
     await expect(
       t.mutation(internalBillingApi.billing.devResetTestBillingUsageInternal, {
@@ -311,11 +356,14 @@ describe("dev test billing reset", () => {
     ).rejects.toThrow("textPromptCount must be a nonnegative finite number.");
 
     await expect(
-      t.mutation(internalBillingApi.billing.incrementFreeOnboardingUsageInternal, {
-        userId: "user_target",
-        promptCount: 0,
-        textAiCostUsd: -0.01,
-      }),
+      t.mutation(
+        internalBillingApi.billing.incrementFreeOnboardingUsageInternal,
+        {
+          userId: "user_target",
+          promptCount: 0,
+          textAiCostUsd: -0.01,
+        },
+      ),
     ).rejects.toThrow("textAiCostUsd must be a nonnegative finite number.");
   });
 });

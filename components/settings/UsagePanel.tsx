@@ -316,6 +316,15 @@ function UsageTab({
           This month&apos;s usage
         </h3>
         <div className="grid gap-4 sm:grid-cols-2">
+          {billing.planKey !== "free_onboarding" && (
+            <UsageMeter
+              label="Prompt volume"
+              used={billing.usage.textPromptCount}
+              limit={billing.caps.textPromptLimit}
+              detail={`${formatInteger(billing.remaining.textPromptCount)} of ${formatInteger(billing.caps.textPromptLimit)} prompts remaining this month`}
+              icon="📝"
+            />
+          )}
           <UsageMeter
             label="Text"
             used={billing.usage.textAiCostUsd}

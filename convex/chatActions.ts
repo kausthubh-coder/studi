@@ -7,6 +7,13 @@ import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { api, components, internal } from "./_generated/api";
 import { activeModelProfile } from "../lib/model-config";
 import { sanitizeStudiModelMessages } from "../lib/agent-message-sanitizer";
+import {
+  getSafeModelFailureMetadata,
+  isCrossProviderFallbackEligible,
+  isRetriableModelFailure,
+  shouldPublishModelAttemptStream,
+  type SafeModelFailureMetadata,
+} from "../lib/model-provider-guardrails";
 
 const queuedSendResultValidator = v.object({
   promptMessageId: v.string(),
@@ -15,14 +22,15 @@ const queuedSendResultValidator = v.object({
 
 const internalApi = internal as unknown as {
   chat: {
-    cleanupFailedAssistantTurnInternal: FunctionReference<"mutation", "internal">;
+    cleanupFailedAssistantTurnInternal: FunctionReference<
+      "mutation",
+      "internal"
+    >;
   };
   telemetry: {
     insertTelemetryEventInternal: FunctionReference<"mutation", "internal">;
   };
 };
-
-const maxAssistantGenerationAttempts = 2;
 
 type CleanupFailedAssistantTurnResult = {
   promptFound: boolean;
@@ -45,15 +53,6 @@ async function requireAuthenticatedUserId(ctx: ActionCtx): Promise<string> {
     throw new Error("Unauthorized");
   }
   return identity.subject;
-}
-
-function isRetriableAssistantGenerationError(error: unknown): boolean {
-  if (error instanceof Error && error.name === "AbortError") {
-    return false;
-  }
-
-  const message = error instanceof Error ? error.message : String(error);
-  return !/(?:unauthorized|thread not found)/i.test(message);
 }
 
 export const createThread = action({
@@ -182,36 +181,56 @@ export const generateAssistantReply = internalAction({
       threadId: args.threadId,
     });
 
-    const { buildStudiToolset, getStudiAgent } = await import("./agent");
-    const activeAgent = getStudiAgent();
+    const { buildStudiToolset, getStudiAgentAttempts } =
+      await import("./agent");
+    const agentAttempts = getStudiAgentAttempts(activeModelProfile);
+    if (agentAttempts.length === 0) {
+      throw new Error(
+        "No configured Studi text model provider. Set FREEMODEL_API_KEY or OPENROUTER_API_KEY.",
+      );
+    }
     const tools = buildStudiToolset(activeModelProfile);
-    const { thread } = await activeAgent.continueThread(ctx, {
-      threadId: args.threadId,
-      userId: args.userId,
-    });
 
     let lastError: unknown;
     let lastErrorRetriable = false;
+    let lastFailureMetadata: SafeModelFailureMetadata = { kind: "other" };
     let attempts = 0;
     let cleanupResult: CleanupFailedAssistantTurnResult | null = null;
+    let lastAttempt = agentAttempts[0];
 
-    for (let attempt = 1; attempt <= maxAssistantGenerationAttempts; attempt += 1) {
-      attempts = attempt;
+    for (let index = 0; index < agentAttempts.length; index += 1) {
+      const agentAttempt = agentAttempts[index];
+      lastAttempt = agentAttempt;
+      attempts = index + 1;
       try {
-        await thread.streamText(
+        const { thread } = await agentAttempt.agent.continueThread(ctx, {
+          threadId: args.threadId,
+          userId: args.userId,
+        });
+
+        const publishStreamDeltas = shouldPublishModelAttemptStream(
+          agentAttempt.endpoint.provider,
+          agentAttempts[index + 1]?.endpoint.provider,
+        );
+        const result = await thread.streamText(
           {
             promptMessageId: args.promptMessageId,
             tools,
             maxOutputTokens: 4000,
             prepareStep: prepareStudiStreamStep,
           },
-          {
-            saveStreamDeltas: {
-              chunking: "line",
-              throttleMs: 120,
-            },
-          },
+          publishStreamDeltas
+            ? {
+                saveStreamDeltas: {
+                  chunking: "line",
+                  throttleMs: 120,
+                },
+              }
+            : undefined,
         );
+        if (!publishStreamDeltas) {
+          await result.text;
+        }
 
         await ctx.runMutation(internal.chat.touchThread, {
           userId: args.userId,
@@ -230,20 +249,27 @@ export const generateAssistantReply = internalAction({
             status: "success",
             durationMs,
             metadata: {
-              attempts: attempt,
+              attempts,
+              model: agentAttempt.endpoint.model,
               modelProfile: activeModelProfile,
+              provider: agentAttempt.endpoint.provider,
+              fallbackUsed: index > 0,
             },
           },
         );
         return null;
       } catch (error) {
         lastError = error;
-        lastErrorRetriable = isRetriableAssistantGenerationError(error);
+        lastFailureMetadata = getSafeModelFailureMetadata(error);
+        const nextAttempt = agentAttempts[index + 1];
+        const changesProvider =
+          nextAttempt !== undefined &&
+          nextAttempt.endpoint.provider !== agentAttempt.endpoint.provider;
+        lastErrorRetriable = changesProvider
+          ? isCrossProviderFallbackEligible(error)
+          : isRetriableModelFailure(error);
 
-        if (
-          lastErrorRetriable &&
-          attempt < maxAssistantGenerationAttempts
-        ) {
+        if (lastErrorRetriable && index < agentAttempts.length - 1) {
           try {
             cleanupResult = (await ctx.runMutation(
               internalApi.chat.cleanupFailedAssistantTurnInternal,
@@ -309,14 +335,17 @@ export const generateAssistantReply = internalAction({
         name: "generate_assistant_reply",
         status: "failed",
         durationMs,
-        errorCategory: "runtime_error",
+        errorCategory: lastFailureMetadata.kind,
         retriable: lastErrorRetriable,
         metadata: {
           attempts,
+          model: lastAttempt.endpoint.model,
           meaningfulContentFound:
             cleanupResult?.meaningfulContentFound ?? false,
-          error: lastError instanceof Error ? lastError.message : String(lastError),
+          failure: lastFailureMetadata,
           modelProfile: activeModelProfile,
+          provider: lastAttempt.endpoint.provider,
+          fallbackUsed: attempts > 1,
         },
       })
       .catch((telemetryError) => {
@@ -327,7 +356,9 @@ export const generateAssistantReply = internalAction({
       });
 
     if (lastError) {
-      throw lastError;
+      throw new Error(
+        "Assistant generation failed after model provider attempts.",
+      );
     }
 
     throw new Error("Assistant generation failed");

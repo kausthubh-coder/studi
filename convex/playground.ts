@@ -5,6 +5,7 @@ import { components } from "./_generated/api";
 import { action } from "./_generated/server";
 import { getPlaygroundAgents } from "./agent";
 import { internal } from "./_generated/api";
+import { hasConfiguredTextModelProvider } from "../lib/model-config";
 
 const internalApi = internal as unknown as {
   telemetry: {
@@ -26,7 +27,7 @@ export const {
   generateText,
   fetchPromptContext,
 } = definePlaygroundAPI(components.agent, {
-  agents: process.env.OPENROUTER_API_KEY ? getPlaygroundAgents() : [],
+  agents: hasConfiguredTextModelProvider() ? getPlaygroundAgents() : [],
 });
 
 export const getThreadObservabilitySummary = action({

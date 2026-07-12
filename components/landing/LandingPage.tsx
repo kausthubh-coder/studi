@@ -4,41 +4,126 @@
 
 import Link from "next/link";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  motion,
+  AnimatePresence,
+  MotionConfig,
+  useReducedMotion,
+} from "framer-motion";
 import { useId, useState } from "react";
+import { Send } from "lucide-react";
 import { SparksShowcase } from "./SparksShowcase";
 import { WaitlistForm } from "./WaitlistForm";
 
+const INK = "#1c1208";
+
 const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0 },
+  // Keep critical content visible in the server render. Motion is progressive
+  // enhancement; a delayed or blocked client hydration must not blank the page.
+  hidden: { opacity: 1, y: 24 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, ease: [0.21, 0.66, 0.32, 1] as const },
+  },
 };
 
+const stagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.1 } },
+};
 const viewportOpts = { once: true, margin: "-80px" };
 
-// FAQ accordion item
+function scrollToWaitlist() {
+  const section = document.getElementById("get-early-access");
+  const reduceMotion = window.matchMedia?.(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  section?.scrollIntoView({
+    behavior: reduceMotion ? "auto" : "smooth",
+    block: "center",
+  });
+  setTimeout(
+    () => {
+      const input = section?.querySelector<HTMLInputElement>(
+        "input[type='email']",
+      );
+      input?.focus({ preventScroll: true });
+    },
+    reduceMotion ? 0 : 600,
+  );
+}
+
+function Wordmark({ size = "md" }: { size?: "md" | "lg" }) {
+  const iconSize = size === "lg" ? 38 : 30;
+  return (
+    <span className="flex items-center gap-2">
+      <Send
+        aria-hidden
+        size={iconSize}
+        strokeWidth={1.9}
+        className="-rotate-6 text-accent"
+      />
+      <span
+        className={`font-brand tracking-tight text-fg ${size === "lg" ? "text-3xl" : "text-2xl"}`}
+      >
+        studi
+      </span>
+    </span>
+  );
+}
+
+function StickyNote({
+  children,
+  className = "",
+  color = "var(--accent3)",
+  rotate = 3,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  color?: string;
+  rotate?: number;
+}) {
+  return (
+    <div
+      className={`border-2 border-fg rounded-lg px-3 py-1.5 shadow-[3px_3px_0px_var(--fg)] font-bold text-xs text-fg ${className}`}
+      style={{ backgroundColor: color, transform: `rotate(${rotate}deg)` }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   const buttonId = useId();
   const panelId = useId();
 
   return (
-    <div className="border-2 border-[#1c1208] rounded-2xl overflow-hidden bg-white">
+    <div className="border-2 border-fg rounded-2xl overflow-hidden bg-white shadow-[4px_4px_0px_var(--fg)]">
       <button
         id={buttonId}
         type="button"
         aria-controls={panelId}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-6 py-5 text-left font-bold font-ui text-base md:text-lg text-[#1c1208] hover:bg-[#fdf8f2] transition-colors"
+        className="w-full flex items-center justify-between gap-4 px-5 md:px-6 py-4 md:py-5 text-left font-bold font-ui text-base md:text-lg text-fg hover:bg-bg transition-colors"
       >
         <span>{q}</span>
         <span
-          aria-hidden="true"
-          className="shrink-0 ml-4 w-7 h-7 flex items-center justify-center rounded-full border-2 border-[#1c1208] bg-white text-[#1c1208] font-bold text-lg transition-transform"
-          style={{ transform: open ? "rotate(45deg)" : "rotate(0deg)" }}
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border-2 border-fg bg-accent3 transition-transform duration-200 ${
+            open ? "rotate-45" : "rotate-0"
+          }`}
+          aria-hidden
         >
-          +
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <path
+              d="M7 1v12M1 7h12"
+              stroke={INK}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+          </svg>
         </span>
       </button>
       <AnimatePresence initial={false}>
@@ -53,7 +138,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
             transition={{ duration: 0.25, ease: "easeOut" }}
             className="overflow-hidden"
           >
-            <p className="px-6 pb-5 font-body text-[#6b5a47] leading-relaxed border-t-2 border-dashed border-gray-200 pt-4">
+            <p className="px-5 md:px-6 pb-5 pt-4 font-body text-fg-muted leading-relaxed border-t-2 border-dashed border-border-warm">
               {a}
             </p>
           </motion.div>
@@ -63,756 +148,803 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   );
 }
 
-export function LandingPage() {
+/* ── Animated drop-test Spark: bowling ball vs marble, always landing together ── */
+function DropTestSpark() {
+  const DROP = 144;
+  const reduceMotion = useReducedMotion();
+  const fall = (delay: number) => ({
+    y: [0, DROP, DROP],
+    transition: {
+      duration: 3.2,
+      times: [0.28, 0.62, 1],
+      ease: ["easeIn", "linear", "linear"] as ("easeIn" | "linear")[],
+      repeat: Infinity,
+      repeatDelay: 0,
+      delay,
+    },
+  });
+
   return (
-    <div className="min-h-screen bg-[#fdf8f2] text-[#1c1208] selection:bg-[#e05a3a]/20 font-ui overflow-hidden">
-      {/* Dot grid background */}
+    <div className="relative h-full min-h-[310px] rounded-xl border-2 border-fg bg-white overflow-hidden">
+      {/* Faint grid */}
       <div
-        className="fixed inset-0 pointer-events-none opacity-[0.03] z-0"
+        className="absolute inset-0 opacity-[0.06]"
         style={{
-          backgroundImage: "radial-gradient(#1c1208 1.5px, transparent 1.5px)",
-          backgroundSize: "32px 32px",
+          backgroundImage: `linear-gradient(${INK} 1px, transparent 1px), linear-gradient(90deg, ${INK} 1px, transparent 1px)`,
+          backgroundSize: "24px 24px",
         }}
+        aria-hidden
       />
 
-      {/* ── NAV ── */}
-      <header className="fixed top-0 inset-x-0 z-50 p-3 md:p-4 pt-4 md:pt-5 pointer-events-none">
-        <div className="max-w-7xl mx-auto flex justify-between items-center pointer-events-auto bg-[#fff8f0]/92 backdrop-blur-md px-4 md:px-6 py-2 md:py-2.5 rounded-full border-2 border-[#1c1208] shadow-[4px_4px_0px_#1c1208]">
-          <span className="font-brand text-xl md:text-2xl tracking-tight flex items-center gap-1">
-            studi
-            <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-[#e05a3a] inline-block mb-1" />
+      {/* Drop zone */}
+      <div className="absolute inset-x-0 top-8 bottom-20">
+        {/* Bowling ball */}
+        <motion.div
+          animate={reduceMotion ? { y: DROP } : fall(0)}
+          className="absolute left-[28%] -translate-x-1/2"
+        >
+          <div className="w-12 h-12 rounded-full bg-fg border-2 border-fg relative shadow-[2px_2px_0px_rgba(28,18,8,0.25)]">
+            <span className="absolute top-2.5 left-3 w-1.5 h-1.5 rounded-full bg-white/70" />
+            <span className="absolute top-2.5 left-5.5 w-1.5 h-1.5 rounded-full bg-white/70" />
+            <span className="absolute top-5 left-4 w-1.5 h-1.5 rounded-full bg-white/70" />
+          </div>
+          <p className="mt-1.5 text-center font-mono text-[10px] font-bold text-fg-muted">
+            7.2 kg
+          </p>
+        </motion.div>
+
+        {/* Marble */}
+        <motion.div
+          animate={reduceMotion ? { y: DROP } : fall(0)}
+          className="absolute left-[68%] -translate-x-1/2"
+        >
+          <div className="w-5 h-5 mx-auto mt-7 rounded-full bg-accent border-2 border-fg" />
+          <p className="mt-1.5 text-center font-mono text-[10px] font-bold text-fg-muted">
+            0.01 kg
+          </p>
+        </motion.div>
+      </div>
+
+      {/* Ground */}
+      <div className="absolute inset-x-3 bottom-[4.6rem] border-b-[3px] border-fg" />
+      <div
+        data-testid="drop-test-footer"
+        className="absolute inset-x-0 bottom-0 min-h-[4.6rem] flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-1.5 border-t border-border-warm bg-bg-elevated px-3 py-2"
+      >
+        <span className="font-mono text-[10px] font-bold text-fg-muted">
+          gravity = 9.8 m/s²
+        </span>
+        <span className="inline-flex items-center rounded-full border-2 border-fg bg-accent2-dim px-2.5 py-0.5 font-ui text-[10px] font-bold text-fg">
+          they land together. every time.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Hero demo: minimal chat beside the Spark it produced ── */
+function HeroChatDemo() {
+  return (
+    <div className="relative">
+      {/* Offset backdrop */}
+      <div className="absolute inset-0 translate-x-2 translate-y-2 sm:translate-x-3 sm:translate-y-3 bg-accent2 rounded-[1.5rem] md:rounded-[2rem] border-2 border-fg" />
+
+      <div className="relative bg-white rounded-[1.5rem] md:rounded-[2rem] border-[3px] border-fg overflow-hidden">
+        {/* Window bar */}
+        <div className="flex items-center gap-2 px-4 md:px-5 h-11 border-b-[3px] border-fg bg-bg-elevated">
+          <span className="w-3 h-3 rounded-full bg-accent border-2 border-fg" />
+          <span className="w-3 h-3 rounded-full bg-accent3 border-2 border-fg" />
+          <span className="w-3 h-3 rounded-full bg-accent2 border-2 border-fg" />
+          <span className="ml-3 font-mono text-[11px] md:text-xs font-bold text-fg-muted truncate">
+            studi — do heavier things fall faster?
           </span>
-
-          <SignedOut>
-            <div className="flex items-center gap-2">
-              <a
-                href="/chat"
-                className="hidden sm:block font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-white hover:bg-[#f5ede0] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
-              >
-                Sign in
-              </a>
-              <button
-                type="button"
-                onClick={() => {
-                  const section = document.getElementById("get-early-access");
-                  section?.scrollIntoView({ behavior: "smooth", block: "center" });
-                  setTimeout(() => {
-                    const input = section?.querySelector<HTMLInputElement>("input[type='email']");
-                    input?.focus();
-                  }, 600);
-                }}
-                className="font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none"
-              >
-                Get Early Access
-              </button>
-            </div>
-          </SignedOut>
-
-          <SignedIn>
-            <Link href="/chat" className="font-bold text-sm px-4 py-1.5 rounded-full border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-colors shadow-[2px_2px_0px_#1c1208] active:translate-y-0.5 active:shadow-none">
-              Open chat
-            </Link>
-          </SignedIn>
         </div>
-      </header>
 
-      <main className="relative z-10 pt-24 md:pt-28">
+        <div className="grid md:grid-cols-[1fr_0.92fr]">
+          {/* Chat side — short and quiet */}
+          <div className="p-4 md:p-6 flex flex-col justify-center gap-4 text-left border-b-[3px] md:border-b-0 md:border-r-[3px] border-fg">
+            <div className="max-w-[92%]">
+              <p className="font-bold text-[11px] uppercase tracking-wider text-fg-faint mb-1">
+                You
+              </p>
+              <p className="font-body text-sm md:text-[15px] leading-relaxed text-fg">
+                Heavy things fall faster, right? A bowling ball obviously beats
+                a marble.
+              </p>
+            </div>
 
-        {/* ── HERO ── */}
-        <section className="px-4 md:px-6 max-w-7xl mx-auto py-12 md:py-20">
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={{ visible: { transition: { staggerChildren: 0.12 } } }}
-            className="flex flex-col lg:flex-row lg:items-center lg:gap-12 xl:gap-16 gap-10 w-full"
-          >
-            {/* Left: text + form */}
-            <div className="flex flex-col items-center lg:items-start text-center lg:text-left lg:w-[46%]">
-              {/* Eyebrow */}
-              <motion.div variants={fadeUp} className="mb-5 inline-flex items-center gap-2 bg-[#e05a3a]/10 border-2 border-[#e05a3a]/30 rounded-full px-4 py-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#e05a3a] animate-pulse" />
-                <span className="font-bold text-sm text-[#e05a3a] uppercase tracking-wider">Now in early access</span>
+            <div className="max-w-[95%] rounded-xl border-2 border-fg bg-accent-dim px-4 py-3 shadow-[3px_3px_0px_var(--fg)]">
+              <p className="font-bold text-[11px] uppercase tracking-wider text-fg mb-1">
+                Studi
+              </p>
+              <p className="font-body text-sm md:text-[15px] leading-relaxed text-fg">
+                Even Aristotle thought so. Try this first: tape the marble{" "}
+                <em>to</em> the ball. Does the pair fall faster or slower than
+                the ball alone?
+              </p>
+            </div>
+
+            <div className="max-w-[92%]">
+              <p className="font-bold text-[11px] uppercase tracking-wider text-fg-faint mb-1">
+                You
+              </p>
+              <p className="font-body text-sm md:text-[15px] leading-relaxed text-fg">
+                Slower, it drags… no wait, heavier, so faster??{" "}
+                <strong className="font-bold">It can't be both.</strong>
+              </p>
+            </div>
+
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border-2 border-fg bg-accent2 px-3.5 py-1.5 shadow-[2px_2px_0px_var(--fg)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              <span className="font-ui text-xs font-bold text-fg">
+                Exactly. Watch — dropping both →
+              </span>
+            </div>
+          </div>
+
+          {/* Spark side */}
+          <div className="p-4 md:p-6 bg-bg-elevated flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <span className="inline-flex items-center gap-2 font-bold text-xs">
+                <span className="w-2 h-2 rounded-full bg-accent2" />
+                Drop-test Spark
+              </span>
+              <span className="font-mono text-[10px] font-bold text-fg-muted">
+                generated just now
+              </span>
+            </div>
+            <div className="flex-1">
+              <DropTestSpark />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky note */}
+      <StickyNote
+        className="absolute -top-4 -right-2 md:-right-5 hidden sm:block"
+        rotate={4}
+      >
+        no answers were handed out 🤌
+      </StickyNote>
+    </div>
+  );
+}
+
+export function LandingPage() {
+  return (
+    <MotionConfig reducedMotion="user">
+      <div
+        className="studi-landing min-h-screen bg-bg text-fg selection:bg-accent/20 font-ui overflow-x-clip"
+        style={{ "--fg-faint": "#806f5d" } as React.CSSProperties}
+      >
+        {/* Dot grid background */}
+        <div
+          className="fixed inset-0 pointer-events-none opacity-[0.035] z-0"
+          style={{
+            backgroundImage: `radial-gradient(${INK} 1.5px, transparent 1.5px)`,
+            backgroundSize: "32px 32px",
+          }}
+          aria-hidden
+        />
+
+        {/* ── NAV ── */}
+        <header className="fixed top-0 inset-x-0 z-50 px-3 pt-3 md:px-4 md:pt-4">
+          <div className="max-w-6xl mx-auto flex items-center justify-between bg-bg-elevated/95 backdrop-blur-md pl-3 pr-2 md:pl-5 md:pr-3 py-2 rounded-2xl border-2 border-fg shadow-[4px_4px_0px_var(--fg)]">
+            <Link
+              href="/"
+              aria-label="Studi home"
+              className="inline-flex min-h-11 items-center"
+            >
+              <Wordmark />
+            </Link>
+
+            <SignedOut>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <a
+                  href="/chat"
+                  className="inline-flex min-h-11 items-center justify-center font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl border-2 border-fg bg-white hover:bg-bg-alt transition-colors shadow-[2px_2px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none"
+                >
+                  Sign in
+                </a>
+                <button
+                  type="button"
+                  onClick={scrollToWaitlist}
+                  className="min-h-11 font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl border-2 border-fg bg-accent text-fg hover:bg-accent-hover transition-colors shadow-[2px_2px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none"
+                >
+                  Get Early Access
+                </button>
+              </div>
+            </SignedOut>
+
+            <SignedIn>
+              <Link
+                href="/chat"
+                className="inline-flex min-h-11 items-center justify-center font-bold text-sm px-4 py-2 rounded-xl border-2 border-fg bg-accent text-fg hover:bg-accent-hover transition-colors shadow-[2px_2px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none"
+              >
+                Open chat
+              </Link>
+            </SignedIn>
+          </div>
+        </header>
+
+        <main className="relative z-10 pt-28 md:pt-36">
+          {/* ── HERO ── */}
+          <section className="px-4 md:px-6 max-w-6xl mx-auto">
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={stagger}
+              className="flex flex-col items-center text-center"
+            >
+              <motion.div
+                variants={fadeUp}
+                className="mb-6 inline-flex items-center gap-2 rounded-full border-2 border-fg bg-white px-4 py-1.5 shadow-[3px_3px_0px_var(--fg)]"
+              >
+                <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                <span className="font-bold text-xs uppercase tracking-[0.15em]">
+                  Now in early access
+                </span>
               </motion.div>
 
               <motion.h1
                 variants={fadeUp}
-                className="font-brand text-5xl sm:text-6xl lg:text-5xl xl:text-6xl leading-tight lg:leading-[1.05] tracking-tight text-[#1c1208] mb-6 drop-shadow-sm"
+                className="font-brand text-[2.9rem] leading-[1.04] sm:text-6xl md:text-7xl tracking-tight max-w-4xl mb-6"
               >
-                The AI tutor that makes you feel like you figured it out{" "}
-                <span className="relative inline-block">
-                  yourself.
-                  <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 300 12" fill="none" aria-hidden>
-                    <path d="M2 9 Q75 2 150 7 T298 4" stroke="#e05a3a" strokeWidth="3" strokeLinecap="round" fill="none" />
-                  </svg>
+                Learn it like you{" "}
+                <span className="relative inline-block whitespace-nowrap">
+                  <span className="relative z-10">invented it.</span>
+                  <span
+                    className="absolute inset-x-0 bottom-1 md:bottom-2 h-[0.4em] bg-accent3/70 -rotate-1 rounded-sm"
+                    aria-hidden
+                  />
                 </span>
               </motion.h1>
 
-              <motion.p variants={fadeUp} className="text-lg md:text-xl text-[#6b5a47] font-body max-w-2xl mx-auto lg:mx-0 mb-8 leading-relaxed">
-                Studi asks questions and builds interactive tools mid-conversation, guiding you to discover answers rather than just receive them.
+              <motion.p
+                variants={fadeUp}
+                className="font-body text-lg md:text-xl text-fg-muted leading-relaxed max-w-2xl mb-9"
+              >
+                Studi is a one-on-one tutor that refuses to hand you the answer.
+                It asks the exact question that makes a concept click — and when
+                words aren't enough, it builds something interactive you can
+                poke at. The idea ends up feeling like{" "}
+                <em className="text-fg font-semibold not-italic">yours</em>,
+                because it is.
               </motion.p>
 
-              {/* Waitlist form */}
-              <motion.div variants={fadeUp} id="get-early-access" className="w-full max-w-lg mx-auto lg:mx-0 mb-4">
+              <motion.div
+                variants={fadeUp}
+                id="get-early-access"
+                className="w-full max-w-xl mb-4"
+              >
                 <SignedOut>
-                  <WaitlistForm variant="coral" />
+                  <WaitlistForm />
                 </SignedOut>
                 <SignedIn>
-                  <Link
-                    href="/chat"
-                    className="inline-block w-full max-w-sm font-bold px-8 py-4 rounded-xl border-2 border-[#1c1208] bg-[#e05a3a] text-white hover:bg-[#f06a48] transition-all shadow-[4px_4px_0px_#1c1208] text-lg text-center"
-                  >
-                    Enter Studi →
-                  </Link>
+                  <div>
+                    <Link
+                      href="/chat"
+                      className="inline-block font-bold px-10 py-4 rounded-2xl border-2 border-fg bg-accent text-fg hover:bg-accent-hover transition-colors text-lg shadow-[5px_5px_0px_var(--fg)] active:translate-y-1 active:shadow-[2px_2px_0px_var(--fg)]"
+                    >
+                      Continue learning →
+                    </Link>
+                    <p className="mt-4 text-sm font-bold text-fg-muted">
+                      Pick up where you left off.
+                    </p>
+                  </div>
                 </SignedIn>
               </motion.div>
 
-              {/* Waitlist counter */}
-              <motion.p variants={fadeUp} className="text-sm font-bold text-[#9b8c7e] font-ui">
-                Join <span className="text-[#1c1208]">340+</span> students on the waitlist
-              </motion.p>
-            </div>
-
-            {/* Right: Hero demo chat mockup */}
-            <motion.div variants={fadeUp} className="relative lg:w-[54%] w-full max-w-2xl mx-auto lg:mx-0">
-              <div className="absolute inset-0 bg-[#3a9e8a] rounded-[2rem] md:rounded-[2.5rem] transform -rotate-1 hidden sm:block" />
-              <div className="relative bg-[#fff8f0] rounded-[1.5rem] md:rounded-[2.5rem] border-4 border-[#1c1208] shadow-[8px_8px_0px_#1c1208] md:shadow-[12px_12px_0px_#1c1208] overflow-hidden flex flex-col">
-                {/* Window bar */}
-                <div className="h-10 md:h-12 border-b-4 border-[#1c1208] bg-white flex items-center px-4 md:px-6 gap-2 shrink-0">
-                  <div className="w-3 h-3 rounded-full bg-[#ff5f56] border-2 border-[#1c1208]" />
-                  <div className="w-3 h-3 rounded-full bg-[#ffbd2e] border-2 border-[#1c1208]" />
-                  <div className="w-3 h-3 rounded-full bg-[#27c93f] border-2 border-[#1c1208]" />
-                  <div className="ml-4 font-mono text-xs font-bold text-[#6b5a47]">Studi — Recursion Session</div>
-                </div>
-
-                <div className="p-4 md:p-6 flex flex-col gap-4 text-left">
-                  {/* Student message */}
-                  <div className="flex gap-3 items-start">
-                    <div className="bg-[#e4d5c7] shrink-0 px-3 py-2 rounded-xl rounded-tl-sm font-bold border-2 border-[#1c1208] text-sm">You</div>
-                    <div className="bg-white p-3 md:p-4 rounded-xl rounded-tl-none border-2 border-[#1c1208] shadow-[2px_2px_0px_#1c1208] font-bold text-sm md:text-base">
-                      I don't understand why recursion doesn't just loop forever.
-                    </div>
-                  </div>
-
-                  {/* Studi Socratic response */}
-                  <div className="flex gap-3 items-start self-end max-w-[95%]">
-                    <div className="flex-1 bg-[#e05a3a] text-white p-3 md:p-4 rounded-xl rounded-tr-sm border-2 border-[#1c1208] shadow-[2px_2px_0px_#1c1208] text-sm md:text-base leading-relaxed order-first">
-                      Good question — let me ask you something first.<br /><br />
-                      Look at this function:
-                      <div className="mt-3 bg-[#1c1208] text-[#fdf8f2] p-3 rounded-xl border-2 border-[#1c1208] font-mono text-xs md:text-sm">
-                        <p className="text-[#3a9e8a]">def <span className="text-[#e8a030]">factorial</span>(n):</p>
-                        <p className="pl-4">if n == 1: <span className="text-gray-400"># the base case</span></p>
-                        <p className="pl-8 text-[#e8a030]">return 1</p>
-                        <p className="pl-4">return n * factorial(n - 1)</p>
-                      </div>
-                      <div className="mt-3 bg-[#c44d2e]/30 border-2 border-white/30 rounded-xl p-3 font-bold text-sm md:text-base">
-                        What do you think would happen if we removed the <code className="bg-white/20 px-1 rounded">if n == 1</code> line entirely? Take a guess →
-                      </div>
-                    </div>
-                    <div className="bg-[#1c1208] text-white shrink-0 px-3 py-2 rounded-xl rounded-tr-sm border-2 border-[#1c1208] font-bold text-sm">Studi</div>
-                  </div>
-
-                  {/* Student realises */}
-                  <div className="flex gap-3 items-start">
-                    <div className="bg-[#e4d5c7] shrink-0 px-3 py-2 rounded-xl rounded-tl-sm font-bold border-2 border-[#1c1208] text-sm">You</div>
-                    <div className="bg-white p-3 md:p-4 rounded-xl rounded-tl-none border-2 border-[#1c1208] shadow-[2px_2px_0px_#1c1208] text-sm md:text-base">
-                      <span className="font-bold">Oh — it would call itself forever. The base case is what makes it stop.</span> It's the condition that breaks the loop!
-                    </div>
-                  </div>
-
-                  {/* Studi confirms + sparks */}
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    transition={{ delay: 1.2, duration: 0.5 }}
-                    className="flex gap-3 items-start self-end max-w-[95%] overflow-hidden"
-                  >
-                    <div className="flex-1 bg-[#3a9e8a] text-white p-3 md:p-4 rounded-xl rounded-tr-sm border-2 border-[#1c1208] shadow-[2px_2px_0px_#1c1208] text-sm md:text-base order-first">
-                      <span className="font-bold">Exactly right.</span> You just discovered it yourself. Now let's make sure it sticks —
-                      <div className="mt-2 inline-flex items-center gap-2 bg-white/20 border border-white/30 rounded-lg px-3 py-1.5 text-xs font-bold">
-                        <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-white" />
-                        Generating call-stack Spark...
-                      </div>
-                    </div>
-                    <div className="bg-[#1c1208] text-white shrink-0 px-3 py-2 rounded-xl rounded-tr-sm border-2 border-[#1c1208] font-bold text-sm">Studi</div>
-                  </motion.div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        </section>
-
-        {/* ── MARQUEE ── */}
-        <div className="border-y-4 border-[#1c1208] bg-[#e05a3a] py-3 overflow-hidden relative">
-          <div
-            className="flex gap-0 whitespace-nowrap"
-            style={{ animation: "marquee 28s linear infinite" }}
-          >
-            {[...Array(3)].map((_, i) => (
-              <span key={i} className="flex items-center gap-0 shrink-0">
-                {[
-                  "Interactive Scenes",
-                  "Desmos Graphs",
-                  "Adaptive Quizzes",
-                  "Flashcard Sets",
-                  "Socratic Practice",
-                ].map((item) => (
-                  <span key={item} className="flex items-center gap-6 px-6">
-                    <span className="font-bold text-white text-sm md:text-base uppercase tracking-wider">{item}</span>
-                    <span className="text-white/50 font-bold text-lg">·</span>
-                  </span>
-                ))}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="px-4 md:px-6 max-w-7xl mx-auto space-y-28 md:space-y-36 py-20 md:py-28">
-
-          {/* ── PROBLEM ── */}
-          <section>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={viewportOpts}
-              variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-              className="max-w-4xl mx-auto"
-            >
-              <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-7xl text-[#1c1208] leading-tight md:leading-[1.08] tracking-tight mb-8 text-center">
-                Stuck studying alone at 2am —{" "}
-                <span className="text-[#e05a3a]">and still not getting it?</span>
-              </motion.h2>
-
-              <motion.p variants={fadeUp} className="font-body text-lg md:text-2xl text-[#6b5a47] leading-relaxed text-center max-w-3xl mx-auto mb-14">
-                You've read the chapter. Watched the lecture. Asked ChatGPT. You got a perfect-sounding answer. And still don't really get it.<br /><br />
-                Because understanding doesn't come from being told. It comes from figuring it out. No tutor was ever built around that — <strong className="text-[#1c1208]">until now.</strong>
-              </motion.p>
-
-              {/* Two-column visual contrast */}
-              <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6 max-w-4xl mx-auto">
-                {/* ChatGPT side */}
-                <div className="bg-gray-100 rounded-2xl border-2 border-gray-300 p-5 relative">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 rounded-full bg-gray-300 border-2 border-gray-400 flex items-center justify-center font-bold text-gray-600 text-xs">AI</div>
-                    <span className="font-bold text-gray-500 text-sm">ChatGPT</span>
-                  </div>
-                  <p className="text-gray-600 text-sm leading-relaxed font-body">
-                    Recursion is a programming technique where a function calls itself. It consists of a base case, which terminates the recursion, and a recursive case, which continues it. Each call creates a new stack frame...
-                  </p>
-                  <p className="text-gray-500 text-sm mt-3 font-body">
-                    The time complexity of recursive algorithms can be analyzed using the Master theorem...
-                  </p>
-                  <p className="text-gray-400 text-sm mt-3 font-body italic">Hope that helps! Let me know if you have more questions.</p>
-                  {/* Sticky note */}
-                  <div className="absolute -top-3 -right-3 bg-[#e8a030] border-2 border-[#1c1208] rounded-lg px-3 py-1.5 rotate-3 shadow-[2px_2px_0px_#1c1208]">
-                    <p className="font-bold text-xs text-[#1c1208]">...okay but why?</p>
-                  </div>
-                </div>
-
-                {/* Studi side */}
-                <div className="bg-white rounded-2xl border-2 border-[#3a9e8a] shadow-[4px_4px_0px_#3a9e8a] p-5 relative">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 rounded-full bg-[#3a9e8a] border-2 border-[#1c1208] flex items-center justify-center font-bold text-white text-xs">S</div>
-                    <span className="font-bold text-[#1c1208] text-sm">Studi</span>
-                  </div>
-                  <p className="text-[#1c1208] text-sm font-body font-medium leading-relaxed">
-                    Before I explain — what do you think would happen if we removed the base case entirely?
-                  </p>
-                  <div className="mt-3 bg-[#fdf8f2] border-2 border-[#3a9e8a] rounded-xl p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="animate-pulse w-2 h-2 rounded-full bg-[#e05a3a]" />
-                      <span className="font-bold text-xs text-[#3a9e8a]">Call Stack Spark</span>
-                    </div>
-                    <div className="font-mono text-xs text-gray-500">factorial(3) → factorial(2) → factorial(1) ...</div>
-                  </div>
-                  <p className="text-[#6b5a47] text-xs mt-3 font-body italic">You just figured out the base case yourself. It sticks now.</p>
-                </div>
-              </motion.div>
-            </motion.div>
-          </section>
-
-          {/* ── HOW STUDI TEACHES ── */}
-          <section>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={viewportOpts}
-              variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-              className="max-w-5xl mx-auto"
-            >
-              <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-6xl text-center mb-4 leading-tight">
-                How Studi teaches
-              </motion.h2>
-              <motion.p variants={fadeUp} className="text-center font-body text-lg md:text-xl text-[#6b5a47] mb-14 max-w-2xl mx-auto">
-                Every session is a guided discovery. Studi asks before it tells, builds tools when words aren't enough, and gives you the problem to prove it.
-              </motion.p>
-
-              <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[
-                  {
-                    step: "01",
-                    color: "#e05a3a",
-                    title: "You ask.",
-                    body: "\"I don't understand why recursion doesn't just loop forever.\"",
-                    tag: "Any question, any subject",
-                  },
-                  {
-                    step: "02",
-                    color: "#3a9e8a",
-                    title: "Studi asks back.",
-                    body: "\"What do you think happens when n = 1? Walk me through it.\" + a call-stack Spark to visualise your thinking.",
-                    tag: "Socratic method + Sparks",
-                  },
-                  {
-                    step: "03",
-                    color: "#e8a030",
-                    title: "You own it.",
-                    body: "You work it out. The answer feels like your idea. Because it is — you discovered it.",
-                    tag: "Intuition that sticks",
-                  },
-                ].map(({ step, color, title, body, tag }) => (
-                  <div
-                    key={step}
-                    className="bg-white rounded-3xl border-4 border-[#1c1208] shadow-[6px_6px_0px_#1c1208] p-6 flex flex-col gap-4"
-                  >
-                    <div
-                      className="w-12 h-12 rounded-xl border-4 border-[#1c1208] flex items-center justify-center font-brand text-xl font-bold text-white"
-                      style={{ backgroundColor: color }}
-                    >
-                      {step}
-                    </div>
-                    <h3 className="font-brand text-2xl md:text-3xl text-[#1c1208]">{title}</h3>
-                    <p className="font-body text-[#6b5a47] leading-relaxed flex-1">{body}</p>
-                    <div
-                      className="inline-block self-start px-3 py-1 rounded-full border-2 border-[#1c1208] font-bold text-xs uppercase tracking-wider text-white"
-                      style={{ backgroundColor: color }}
-                    >
-                      {tag}
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
-            </motion.div>
-          </section>
-
-          {/* ── SPARKS ── */}
-          <section>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={viewportOpts}
-              variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-              className="max-w-5xl mx-auto"
-            >
-              <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-7xl text-center mb-4 leading-tight">
-                Some concepts need to be{" "}
-                <span className="text-[#3a9e8a]">seen.</span>{" "}
-                Or{" "}
-                <span className="text-[#e8a030]">touched.</span>{" "}
-                Or{" "}
-                <span className="text-[#e05a3a]">broken.</span>
-              </motion.h2>
-              <motion.p variants={fadeUp} className="text-center font-body text-lg md:text-xl text-[#6b5a47] mb-12 max-w-3xl mx-auto leading-relaxed">
-                Studi generates the right interactive tool for the right moment — a graph you can manipulate, a simulation you can break, a challenge you have to pass. Not an attachment. Not a link. Built for your exact question, inside the conversation.
-              </motion.p>
-
-              <motion.div variants={fadeUp}>
-                <SparksShowcase />
-              </motion.div>
-
-              <motion.p variants={fadeUp} className="text-center text-sm text-[#9b8c7e] font-ui mt-2">
-                Every Spark is generated on the fly and tailored to exactly what you're stuck on.
-              </motion.p>
-            </motion.div>
-          </section>
-
-          {/* ── PRACTICE ── */}
-          <section>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={viewportOpts}
-              variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-              className="flex flex-col lg:flex-row-reverse gap-12 md:gap-16 items-center max-w-6xl mx-auto"
-            >
-              <div className="lg:w-1/2 text-left">
-                <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-6xl mb-6 leading-tight">
-                  Tell it what you want to learn. It keeps the next step clear.
-                </motion.h2>
-                <motion.p variants={fadeUp} className="text-lg md:text-xl font-body leading-relaxed text-[#6b5a47]">
-                  Going into an exam? Learning Python from scratch? Trying to finally understand linear algebra?<br /><br />
-                  Tell Studi where you are stuck. It asks the next useful question, generates a Spark when visuals help, and keeps the session focused on understanding.
+              <SignedOut>
+                <motion.p
+                  variants={fadeUp}
+                  className="font-bold text-sm text-fg-faint mb-16 md:mb-20"
+                >
+                  Join <span className="text-fg">340+</span> students on the
+                  waitlist
                 </motion.p>
-              </div>
+              </SignedOut>
+              <SignedIn>
+                <div className="mb-12 md:mb-16" />
+              </SignedIn>
 
-              <motion.div variants={fadeUp} className="lg:w-1/2 w-full px-4 md:px-0">
-                <div className="bg-white rounded-2xl md:rounded-3xl border-4 border-[#1c1208] shadow-[8px_8px_0px_#1c1208] p-6 md:p-8 max-w-md mx-auto hover:-rotate-1 transition-transform duration-300 -rotate-2">
-                  <div className="font-brand text-xl md:text-2xl font-bold mb-6 border-b-2 border-dashed border-gray-300 pb-4">
-                    Understand Calculus for Physics
-                  </div>
-                  <div className="space-y-5">
-                    <div className="flex gap-4 items-start opacity-50">
-                      <div className="w-8 h-8 rounded-full bg-[#1c1208] text-white flex items-center justify-center font-bold text-sm shrink-0 border-2 border-[#1c1208]">✓</div>
-                      <div>
-                        <h3 className="font-bold text-base line-through">Limits and Infinity</h3>
-                        <p className="text-xs text-gray-400">Completed yesterday</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-4 items-start">
-                      <div className="w-8 h-8 rounded-full bg-[#e8a030] text-[#1c1208] flex items-center justify-center font-bold text-lg shrink-0 border-2 border-[#1c1208]" />
-                      <div>
-                        <div className="inline-block px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-[#e8a030]/20 text-[#e8a030] border border-[#e8a030] uppercase mb-1">In Progress</div>
-                        <h3 className="font-bold text-xl">The Derivative</h3>
-                        <p className="text-sm text-gray-600 font-medium">Visualising rates of change</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-4 items-start opacity-50">
-                      <div className="w-8 h-8 rounded-full bg-white text-[#1c1208] flex items-center justify-center font-bold text-sm shrink-0 border-2 border-gray-300" />
-                      <div>
-                        <h3 className="font-bold text-base">Integrals</h3>
-                        <p className="text-xs text-gray-400">Locked — complete The Derivative first</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <motion.div variants={fadeUp} className="w-full max-w-4xl">
+                <HeroChatDemo />
               </motion.div>
             </motion.div>
           </section>
 
-          {/* ── SPARKS ── */}
-          <section>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={viewportOpts}
-              variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-              className="max-w-6xl mx-auto"
+          {/* ── MARQUEE ── */}
+          <div
+            className="mt-16 md:mt-20 border-y-[3px] border-fg bg-accent py-3 overflow-hidden"
+            aria-hidden
+          >
+            <div
+              className="landing-marquee flex whitespace-nowrap"
+              style={{ animation: "marquee 30s linear infinite" }}
             >
-              <div className="flex flex-col lg:flex-row gap-10 md:gap-16 items-center">
-                <div className="lg:w-5/12 text-left">
-                  <motion.div variants={fadeUp} className="inline-block mb-4 px-3 py-1 rounded-full border-2 border-[#e05a3a] bg-[#e05a3a]/10 font-bold text-xs uppercase tracking-wider text-[#e05a3a]">
-                    Sparks
-                  </motion.div>
-                  <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-6xl mb-6 leading-tight">
-                    Where ideas become interactive.
-                  </motion.h2>
-                  <motion.p variants={fadeUp} className="text-lg md:text-xl font-body leading-relaxed text-[#6b5a47] mb-6">
-                    When an explanation needs motion, code, a graph, or a quick check, Studi creates a Spark right inside the conversation.
-                  </motion.p>
-                  <motion.p variants={fadeUp} className="text-lg md:text-xl font-body leading-relaxed text-[#6b5a47] font-bold border-l-4 border-[#e05a3a] pl-5 mb-8">
-                    Not a generic worksheet. A small interactive artifact built for the exact thing you are trying to understand.
-                  </motion.p>
-                  <motion.ul variants={fadeUp} className="space-y-2">
-                    {[
-                      "Interactive scenes and graphs",
-                      "Quizzes and flash cards",
-                      "Built for the concept you are learning",
-                      "Built from your current question",
-                      "Safe iframe rendering inside chat",
-                    ].map((item) => (
-                      <li key={item} className="flex items-center gap-3 font-ui font-bold text-[#1c1208] text-sm md:text-base">
-                        <span className="w-5 h-5 rounded-full bg-[#e05a3a] border-2 border-[#1c1208] flex items-center justify-center text-white text-xs shrink-0">✓</span>
+              {[...Array(3)].map((_, i) => (
+                <span key={i} className="flex items-center shrink-0">
+                  {[
+                    "Ask anything",
+                    "One question at a time",
+                    "Sparks when words fail",
+                    "No copy-paste answers",
+                    "Built for the aha moment",
+                  ].map((item) => (
+                    <span key={item} className="flex items-center gap-6 px-6">
+                      <span className="font-bold text-fg text-sm md:text-base uppercase tracking-wider">
                         {item}
-                      </li>
-                    ))}
-                  </motion.ul>
-                </div>
-
-                {/* Spark mockup */}
-                <motion.div variants={fadeUp} className="lg:w-7/12 w-full">
-                  <div className="w-full aspect-[4/3] md:aspect-video bg-white rounded-2xl md:rounded-3xl border-4 border-[#1c1208] shadow-[8px_8px_0px_#e05a3a] md:shadow-[12px_12px_0px_#e05a3a] overflow-hidden flex flex-col">
-                    <div className="flex items-center justify-between bg-[#fff4e7] border-b-4 border-[#1c1208] px-4 py-3 shrink-0">
-                      <div className="flex items-center gap-2 font-bold text-[#1c1208] text-xs md:text-sm">
-                        <div className="w-2.5 h-2.5 rounded-full bg-[#3a9e8a]" />
-                        <span>Function Spark</span>
-                      </div>
-                      <span className="font-mono text-xs text-[#9b6dd4]">desmos_graph</span>
-                    </div>
-
-                    <div className="grid grid-cols-[0.9fr_1.25fr] flex-1 min-h-0">
-                      <div className="bg-[#fffaf3] border-r-4 border-[#1c1208] p-4 flex flex-col justify-between">
-                        <div>
-                          <p className="font-brand text-2xl text-[#1c1208] leading-tight">
-                            Why does slope stay constant?
-                          </p>
-                          <p className="mt-3 text-sm text-[#6b5a47] leading-relaxed">
-                            Drag the point and watch the rise/run ratio. What
-                            changes, and what refuses to change?
-                          </p>
-                        </div>
-                        <div className="rounded-xl border-2 border-[#3a9e8a] bg-[#3a9e8a]/10 p-3 text-xs text-[#1f6d60] font-bold">
-                          Try moving from x = 1 to x = 4. Predict the y value
-                          before revealing it.
-                        </div>
-                      </div>
-
-                      <div className="relative bg-[#f7efe4] p-4">
-                        <div className="absolute inset-4 rounded-xl border-2 border-[#d8c8b6] bg-white">
-                          <div className="absolute left-1/2 top-4 bottom-4 w-px bg-[#d8c8b6]" />
-                          <div className="absolute top-1/2 left-4 right-4 h-px bg-[#d8c8b6]" />
-                          <svg viewBox="0 0 320 220" className="absolute inset-0 h-full w-full">
-                            <path d="M28 178 L292 48" stroke="#9b6dd4" strokeWidth="5" strokeLinecap="round" />
-                            <circle cx="96" cy="144" r="9" fill="#e05a3a" stroke="#1c1208" strokeWidth="4" />
-                            <circle cx="214" cy="86" r="9" fill="#3a9e8a" stroke="#1c1208" strokeWidth="4" />
-                            <path d="M96 144 H214 V86" fill="none" stroke="#e8a030" strokeWidth="3" strokeDasharray="8 7" />
-                          </svg>
-                          <div className="absolute bottom-4 left-4 rounded-full bg-[#1c1208] px-3 py-1 text-xs font-bold text-white">
-                            rise 2 / run 4
-                          </div>
-                          <div className="absolute right-4 top-4 rounded-full bg-[#fff4e7] border-2 border-[#1c1208] px-3 py-1 text-xs font-bold text-[#1c1208]">
-                            slope = 1/2
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-            </motion.div>
-          </section>
-
-          {/* ── SOCIAL PROOF ── */}
-          <section>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={viewportOpts}
-              variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-              className="max-w-5xl mx-auto text-center"
-            >
-              <motion.div variants={fadeUp} className="inline-flex items-center gap-3 mb-12 bg-white border-2 border-[#1c1208] rounded-full px-6 py-3 shadow-[4px_4px_0px_#1c1208]">
-                <div className="flex -space-x-2">
-                  {["#e05a3a", "#3a9e8a", "#e8a030"].map((c, i) => (
-                    <div key={i} className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: c }}>
-                      {["P", "M", "D"][i]}
-                    </div>
+                      </span>
+                      <span className="text-fg/50 font-bold text-lg">✳</span>
+                    </span>
                   ))}
-                </div>
-                <p className="font-bold text-[#1c1208] text-sm md:text-base">
-                  Join <span className="text-[#e05a3a]">340+</span> students on the waitlist
-                </p>
-              </motion.div>
+                </span>
+              ))}
+            </div>
+          </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[
-                  {
-                    quote: "Studi helped me finally understand Big O notation. I'd been staring at it for weeks — it asked me one question and suddenly it clicked.",
-                    name: "Priya K.",
-                    role: "CS sophomore",
-                    color: "#e05a3a",
-                  },
-                  {
-                    quote: "I've never felt like I actually got recursion until Studi made me walk through it myself. It doesn't give you the answer. It makes you find it.",
-                    name: "Marcus T.",
-                    role: "Self-taught developer",
-                    color: "#3a9e8a",
-                  },
-                  {
-                    quote: "The interactive Spark made the idea click immediately. I could move the pieces around instead of rereading another paragraph.",
-                    name: "Daniela R.",
-                    role: "Pre-med taking data science",
-                    color: "#e8a030",
-                  },
-                ].map(({ quote, name, role, color }) => (
-                  <motion.div
-                    key={name}
-                    variants={fadeUp}
-                    className="bg-white rounded-3xl border-4 border-[#1c1208] shadow-[6px_6px_0px_#1c1208] p-6 text-left flex flex-col gap-4"
-                  >
-                    <div className="flex gap-1">
-                      {[...Array(5)].map((_, i) => (
-                        <span key={i} className="text-[#e8a030] text-lg">★</span>
+          <div className="px-4 md:px-6 max-w-6xl mx-auto space-y-20 md:space-y-28 py-16 md:py-20">
+            {/* ── THE PROBLEM ── */}
+            <section>
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={viewportOpts}
+                variants={stagger}
+                className="max-w-4xl mx-auto"
+              >
+                <motion.h2
+                  variants={fadeUp}
+                  className="font-brand text-4xl sm:text-5xl md:text-6xl leading-[1.08] tracking-tight text-center mb-6"
+                >
+                  You've been given a thousand answers.
+                  <br />
+                  <span className="text-accent">How many did you keep?</span>
+                </motion.h2>
+                <motion.p
+                  variants={fadeUp}
+                  className="font-body text-lg md:text-xl text-fg-muted leading-relaxed text-center max-w-2xl mx-auto mb-14"
+                >
+                  Lectures, textbooks, AI chatbots — they all do the same thing:
+                  explain <em>at</em> you. It feels productive. Then the exam
+                  comes, the page is blank, and the perfect explanation you read
+                  is gone. Understanding was never in the explanation. It's in
+                  the struggle just before it.
+                </motion.p>
+
+                <motion.div
+                  variants={fadeUp}
+                  className="grid grid-cols-1 md:grid-cols-2 gap-6"
+                >
+                  {/* Being told */}
+                  <div className="relative rounded-2xl border-2 border-fg bg-bg-alt p-6 shadow-[4px_4px_0px_var(--fg)]">
+                    <p className="font-bold text-xs uppercase tracking-[0.18em] text-fg-faint mb-5">
+                      How school told you
+                    </p>
+                    <div className="rounded-xl border-2 border-fg/25 bg-white/70 px-3.5 py-2.5 mb-3 font-body text-sm leading-relaxed text-fg-muted">
+                      "A negative times a negative is a positive.{" "}
+                      <strong className="font-bold">
+                        Just remember the rule.
+                      </strong>
+                      "
+                    </div>
+                    <div className="space-y-2.5 mb-6">
+                      {[86, 68, 74].map((w, i) => (
+                        <div
+                          key={i}
+                          className="h-3 rounded-full bg-fg/15"
+                          style={{ width: `${w}%` }}
+                        />
                       ))}
                     </div>
-                    <p className="font-body text-[#1c1208] leading-relaxed flex-1 text-sm md:text-base">
-                      "{quote}"
+                    <p className="font-body text-sm text-fg-muted italic leading-relaxed">
+                      You memorized it in sixth grade. You've used it a thousand
+                      times. You still couldn't say why it's true.
                     </p>
-                    <div className="flex items-center gap-3 pt-3 border-t-2 border-dashed border-gray-200">
-                      <div
-                        className="w-9 h-9 rounded-full border-2 border-[#1c1208] flex items-center justify-center text-white font-bold text-sm shrink-0"
+                    <StickyNote className="absolute -top-3 -right-3" rotate={4}>
+                      …okay but <em>why</em>?
+                    </StickyNote>
+                  </div>
+
+                  {/* Figuring it out */}
+                  <div className="relative rounded-2xl border-2 border-fg bg-white p-6 shadow-[4px_4px_0px_var(--accent2)]">
+                    <p className="font-bold text-xs uppercase tracking-[0.18em] text-fg-muted mb-5">
+                      How Studi asks you
+                    </p>
+                    <div className="space-y-3 mb-5">
+                      <div className="rounded-xl border-2 border-fg bg-accent-dim px-3.5 py-2.5 font-body text-sm leading-relaxed">
+                        You have three $5 debts — that's 3 × (−5) on your
+                        balance. Now I <em>take away</em> all three: −3 × (−5).
+                        Are you richer or poorer?
+                      </div>
+                      <div className="rounded-xl border-2 border-fg bg-accent2-dim px-3.5 py-2.5">
+                        <p className="font-bold text-[11px] uppercase tracking-wider text-fg mb-1">
+                          Your answer
+                        </p>
+                        <p className="font-body text-sm">
+                          "Richer. $15 richer… wait.{" "}
+                          <strong>
+                            Removing a negative IS a positive. That's the whole
+                            rule.
+                          </strong>
+                          "
+                        </p>
+                      </div>
+                    </div>
+                    <p className="font-body text-sm text-fg-muted italic leading-relaxed">
+                      Twelve years of "just remember it," undone by one question
+                      you answered yourself.
+                    </p>
+                    <StickyNote
+                      className="absolute -top-3 -right-3"
+                      color="var(--accent2)"
+                      rotate={-3}
+                    >
+                      <span className="text-fg">sticks for good ✓</span>
+                    </StickyNote>
+                  </div>
+                </motion.div>
+              </motion.div>
+            </section>
+
+            {/* ── HOW IT WORKS ── */}
+            <section>
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={viewportOpts}
+                variants={stagger}
+              >
+                <motion.p
+                  variants={fadeUp}
+                  className="text-center font-bold text-xs uppercase tracking-[0.2em] text-fg-muted mb-4"
+                >
+                  How it works
+                </motion.p>
+                <motion.h2
+                  variants={fadeUp}
+                  className="font-brand text-4xl sm:text-5xl md:text-6xl leading-[1.08] tracking-tight text-center mb-6"
+                >
+                  A conversation, not a lecture.
+                </motion.h2>
+                <motion.p
+                  variants={fadeUp}
+                  className="font-body text-lg md:text-xl text-fg-muted text-center max-w-2xl mx-auto mb-14"
+                >
+                  No courses to enroll in, no playlists to binge. You show up
+                  confused, and Studi works the confusion with you until it
+                  clicks.
+                </motion.p>
+
+                <div className="max-w-3xl mx-auto space-y-5">
+                  {[
+                    {
+                      step: "01",
+                      color: "var(--accent)",
+                      title: "You bring the confusion.",
+                      body: '"Why doesn\'t recursion loop forever?" "What even is a derivative?" Any subject, any level, half-formed questions welcome.',
+                    },
+                    {
+                      step: "02",
+                      color: "var(--accent2)",
+                      title: "Studi asks back — one sharp question at a time.",
+                      body: "Not a quiz, not a lecture. Each question is chosen so the next thought in your head is the concept itself. When you need to see it instead of read it, Studi builds a Spark on the spot.",
+                    },
+                    {
+                      step: "03",
+                      color: "var(--accent3)",
+                      title: "It clicks — and it stays.",
+                      body: "The aha moment lands, and because you got there yourself, there's nothing to memorize. Studi then hands you a problem to prove you own it.",
+                    },
+                  ].map(({ step, color, title, body }) => (
+                    <motion.div
+                      key={step}
+                      variants={fadeUp}
+                      className="flex gap-4 md:gap-6 items-start bg-white rounded-2xl border-2 border-fg p-5 md:p-6 shadow-[4px_4px_0px_var(--fg)]"
+                    >
+                      <span
+                        className="shrink-0 grid place-items-center w-12 h-12 rounded-xl border-2 border-fg font-brand text-lg text-fg shadow-[2px_2px_0px_var(--fg)]"
                         style={{ backgroundColor: color }}
                       >
-                        {name[0]}
-                      </div>
+                        {step}
+                      </span>
                       <div>
-                        <p className="font-bold text-[#1c1208] text-sm">{name}</p>
-                        <p className="text-xs text-[#9b8c7e]">{role}</p>
+                        <h3 className="font-brand text-xl md:text-2xl mb-1.5">
+                          {title}
+                        </h3>
+                        <p className="font-body text-fg-muted leading-relaxed text-[15px] md:text-base">
+                          {body}
+                        </p>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          </section>
-
-          {/* ── CHATGPT CONTRAST ── */}
-          <section>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={viewportOpts}
-              variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-              className="max-w-5xl mx-auto"
-            >
-              <motion.h2 variants={fadeUp} className="font-brand text-5xl sm:text-6xl md:text-8xl text-center mb-6 leading-tight tracking-tight">
-                ChatGPT answers.<br />
-                <span className="text-[#e05a3a]">Studi asks.</span>
-              </motion.h2>
-              <motion.p variants={fadeUp} className="text-center font-body text-lg md:text-xl text-[#6b5a47] mb-12 max-w-2xl mx-auto">
-                The direction of information is completely different. ChatGPT flows answers at you. Studi draws them out of you.
-              </motion.p>
-
-              <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-                {/* ChatGPT */}
-                <div className="bg-gray-100 rounded-3xl border-4 border-gray-300 p-6 md:p-8 relative">
-                  <p className="font-bold text-gray-400 text-xs uppercase tracking-widest mb-6">ChatGPT</p>
-                  <div className="space-y-3 mb-6">
-                    {[
-                      "Here is a detailed explanation of recursion...",
-                      "The base case terminates the recursion while...",
-                      "Time complexity can be analyzed using the Master theorem...",
-                      "I hope this comprehensive answer helps clarify the concept!",
-                    ].map((line, i) => (
-                      <div key={i} className="h-3 rounded-full bg-gray-300" style={{ width: `${[90, 75, 85, 60][i]}%` }} />
-                    ))}
-                  </div>
-                  <div className="bg-[#e8a030] border-2 border-[#1c1208] rounded-xl px-4 py-2 inline-block rotate-2 shadow-[2px_2px_0px_#1c1208]">
-                    <p className="font-bold text-[#1c1208] text-sm">...okay but why does it work?</p>
-                  </div>
-                  <div className="mt-6 flex items-start gap-3">
-                    <span className="text-2xl">😶</span>
-                    <p className="font-body text-gray-500 text-sm italic">You copy-paste the answer. Move on. Forget it by tomorrow.</p>
-                  </div>
-                </div>
-
-                {/* Studi */}
-                <div className="bg-white rounded-3xl border-4 border-[#e05a3a] shadow-[8px_8px_0px_#e05a3a] p-6 md:p-8 relative">
-                  <p className="font-bold text-[#e05a3a] text-xs uppercase tracking-widest mb-6">Studi</p>
-                  <div className="space-y-3 mb-4">
-                    <div className="bg-[#e05a3a]/10 border-2 border-[#e05a3a]/30 rounded-xl p-3 font-body text-sm text-[#1c1208]">
-                      Before I explain — what do you think the function does when n equals 1?
-                    </div>
-                    <div className="bg-[#fdf8f2] border-2 border-[#3a9e8a] rounded-xl p-3">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="w-2 h-2 rounded-full bg-[#e05a3a] animate-pulse" />
-                        <span className="font-bold text-xs text-[#3a9e8a]">Spark: Call Stack Visualiser</span>
-                      </div>
-                      <div className="font-mono text-xs text-gray-400">factorial(3) → factorial(2) → factorial(1) → 1</div>
-                    </div>
-                    <div className="bg-[#3a9e8a]/10 border-2 border-[#3a9e8a]/30 rounded-xl p-3 font-bold text-xs text-[#3a9e8a] flex items-center gap-2">
-                      <span>✓</span> Spark check: base case identified correctly.
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">🧠</span>
-                    <p className="font-body text-[#6b5a47] text-sm italic">You discovered it yourself. It feels like your idea. It sticks.</p>
-                  </div>
+                    </motion.div>
+                  ))}
                 </div>
               </motion.div>
+            </section>
 
-              <motion.p variants={fadeUp} className="font-brand text-2xl md:text-4xl text-center text-[#1c1208] max-w-3xl mx-auto">
-                There's a difference between being told something and <span className="text-[#e05a3a]">understanding it.</span> Studi is built for the second one.
-              </motion.p>
-            </motion.div>
-          </section>
+            {/* ── SPARKS ── */}
+            <section>
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={viewportOpts}
+                variants={stagger}
+              >
+                <motion.p
+                  variants={fadeUp}
+                  className="text-center font-bold text-xs uppercase tracking-[0.2em] text-fg-muted mb-4"
+                >
+                  Sparks
+                </motion.p>
+                <motion.h2
+                  variants={fadeUp}
+                  className="font-brand text-4xl sm:text-5xl md:text-6xl leading-[1.08] tracking-tight text-center mb-6 max-w-3xl mx-auto"
+                >
+                  When words aren't enough,{" "}
+                  <span className="relative inline-block whitespace-nowrap">
+                    <span className="relative z-10">Studi builds.</span>
+                    <span
+                      className="absolute inset-x-0 bottom-1 h-[0.35em] bg-accent2/50 rotate-1 rounded-sm"
+                      aria-hidden
+                    />
+                  </span>
+                </motion.h2>
+                <motion.p
+                  variants={fadeUp}
+                  className="font-body text-lg md:text-xl text-fg-muted text-center max-w-2xl mx-auto mb-12"
+                >
+                  Some ideas refuse to fit in a paragraph. So mid-conversation,
+                  Studi generates a Spark — a small interactive thing made for
+                  your exact question. Drag it, break it, play with it until the
+                  idea gives in.
+                </motion.p>
 
-          {/* ── FAQ ── */}
-          <section>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={viewportOpts}
-              variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-              className="max-w-3xl mx-auto"
-            >
-              <motion.h2 variants={fadeUp} className="font-brand text-4xl sm:text-5xl md:text-6xl text-center mb-12 leading-tight">
-                Common questions
-              </motion.h2>
-              <motion.div variants={fadeUp} className="space-y-3">
-                <FaqItem
-                  q="Is it free?"
-                  a="Studi is free for students during early access. We'll introduce a paid plan later with fair student pricing — we'll always offer a meaningful free tier."
-                />
-                <FaqItem
-                  q="How is this different from ChatGPT?"
-                  a="ChatGPT gives you answers. Studi asks you questions and guides you to figure it out yourself — so you actually understand it, not just copy it. It also generates interactive tools mid-conversation."
-                />
-                <FaqItem
-                  q="What subjects does it cover?"
-                  a="Studi works across any subject — CS, math, physics, biology, history, languages. If you can ask a question about it, Studi can teach it."
-                />
-                <FaqItem
-                  q="What is a Spark?"
-                  a="A Spark is an interactive tool Studi generates mid-conversation — a live graph, a visual simulation, a quiz, or a flashcard set. Built for your exact question, in real time, inside the chat."
-                />
+                <motion.div variants={fadeUp}>
+                  <SparksShowcase />
+                </motion.div>
+
+                <motion.p
+                  variants={fadeUp}
+                  className="text-center font-bold text-sm text-fg-faint mt-6"
+                >
+                  Not templates. Every Spark is generated live, for the thing
+                  you're stuck on right now.
+                </motion.p>
               </motion.div>
-            </motion.div>
-          </section>
+            </section>
 
-          {/* ── FINAL CTA ── */}
-          <section id="final-cta" className="py-12 md:py-20 flex flex-col items-center justify-center text-center">
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={viewportOpts}
-              variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-              className="max-w-3xl mx-auto w-full"
-            >
-              <motion.h2 variants={fadeUp} className="font-brand text-5xl sm:text-6xl md:text-8xl mb-5 tracking-tight leading-tight">
-                Stop being told.<br />
-                <span className="text-[#e05a3a]">Start figuring it out.</span>
-              </motion.h2>
-              <motion.p variants={fadeUp} className="text-lg md:text-2xl font-body text-[#6b5a47] mb-8 max-w-xl mx-auto">
-                Join the waitlist. Be first when Studi launches.
-              </motion.p>
+            {/* ── PRODUCT PROOF ── */}
+            <section>
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={viewportOpts}
+                variants={stagger}
+              >
+                <motion.p
+                  variants={fadeUp}
+                  className="text-center font-bold text-xs uppercase tracking-[0.2em] text-fg-muted mb-4"
+                >
+                  Built for active learning
+                </motion.p>
+                <motion.h2
+                  variants={fadeUp}
+                  className="font-brand text-4xl sm:text-5xl md:text-6xl leading-[1.08] tracking-tight text-center mb-5"
+                >
+                  What makes Studi feel different.
+                </motion.h2>
+                <motion.p
+                  variants={fadeUp}
+                  className="mx-auto mb-10 max-w-2xl text-center font-body text-lg text-fg-muted"
+                >
+                  No anonymous quotes or borrowed claims—just the product
+                  behaviors you can see in every session.
+                </motion.p>
 
-              {/* Feature checklist */}
-              <motion.ul variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-10 text-left max-w-lg mx-auto">
-                {[
-                  "Socratic tutoring that leads you to the answer",
-                  "Sparks — interactive tools in the moment",
-                  "Adaptive quizzes and flashcards",
-                  "Works for any subject",
-                ].map((item) => (
-                  <li key={item} className="flex items-start gap-2 text-sm font-ui text-[#1c1208]">
-                    <span className="w-5 h-5 rounded-full bg-[#3a9e8a] border-2 border-[#1c1208] text-white flex items-center justify-center text-xs shrink-0 mt-0.5">✓</span>
-                    {item}
-                  </li>
-                ))}
-              </motion.ul>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+                  {[
+                    {
+                      title: "One sharp question",
+                      body: "Studi finds the next question that moves your thinking forward instead of unloading a finished explanation.",
+                      color: "var(--accent)",
+                      rotate: "-1deg",
+                    },
+                    {
+                      title: "A Spark when words stall",
+                      body: "When reading is not enough, Studi builds a visual or interactive model for the exact idea in front of you.",
+                      color: "var(--accent2)",
+                      rotate: "1deg",
+                    },
+                    {
+                      title: "A check that proves it stuck",
+                      body: "After the aha moment, Studi gives you a fresh problem so you can prove the idea is yours—not borrowed.",
+                      color: "var(--accent3)",
+                      rotate: "-1deg",
+                    },
+                  ].map(({ title, body, color, rotate }, index) => (
+                    <motion.article
+                      key={title}
+                      variants={fadeUp}
+                      className="bg-white rounded-2xl border-2 border-fg shadow-[5px_5px_0px_var(--fg)] p-6"
+                      style={{ rotate }}
+                    >
+                      <span
+                        className="mb-4 grid h-10 w-10 place-items-center rounded-xl border-2 border-fg text-sm font-bold text-fg shadow-[2px_2px_0px_var(--fg)]"
+                        style={{ backgroundColor: color }}
+                      >
+                        {index + 1}
+                      </span>
+                      <h3 className="mb-2 font-brand text-2xl">{title}</h3>
+                      <p className="font-body text-[15px] leading-relaxed text-fg-muted">
+                        {body}
+                      </p>
+                    </motion.article>
+                  ))}
+                </div>
 
-              <motion.div variants={fadeUp} className="w-full max-w-md mx-auto relative group">
-                <div className="absolute inset-0 bg-[#3a9e8a] rounded-3xl transform -rotate-2 transition-transform group-hover:-rotate-3" />
-                <div className="relative bg-white rounded-3xl border-4 border-[#1c1208] shadow-[6px_6px_0px_#1c1208] p-6 md:p-8">
+                <motion.p
+                  variants={fadeUp}
+                  className="mt-8 text-center text-sm font-bold text-fg-muted"
+                >
+                  <span className="text-fg">340+</span> learners have joined
+                  early access.
+                </motion.p>
+              </motion.div>
+            </section>
+
+            {/* ── FAQ ── */}
+            <section>
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={viewportOpts}
+                variants={stagger}
+                className="max-w-2xl mx-auto"
+              >
+                <motion.h2
+                  variants={fadeUp}
+                  className="font-brand text-4xl sm:text-5xl md:text-6xl leading-tight tracking-tight text-center mb-12"
+                >
+                  Common questions
+                </motion.h2>
+                <motion.div variants={fadeUp} className="space-y-4">
+                  <FaqItem
+                    q="Is it free?"
+                    a="Studi is free for students during early access. We'll introduce a paid plan later with fair student pricing — and there will always be a meaningful free tier."
+                  />
+                  <FaqItem
+                    q="How is this different from ChatGPT?"
+                    a="ChatGPT is built to answer. Studi is built to teach — it asks you questions, one at a time, until you work the concept out yourself, and it generates interactive Sparks when seeing beats reading. You leave understanding it, not just holding a good answer."
+                  />
+                  <FaqItem
+                    q="Won't it be annoying if it never just tells me?"
+                    a="Studi isn't dogmatic. If you're missing a fact, it gives you the fact. It only holds back when you're one good question away from getting there yourself — that's the part worth protecting."
+                  />
+                  <FaqItem
+                    q="What subjects does it cover?"
+                    a="Anything you can ask a question about — CS, math, physics, biology, history, languages. If a human tutor could teach it over a table, Studi can teach it in chat."
+                  />
+                  <FaqItem
+                    q="What is a Spark?"
+                    a="A Spark is a small interactive artifact Studi generates mid-conversation when words aren't enough — something you can see, drag, and experiment with. It's built live for your exact question, right inside the chat."
+                  />
+                </motion.div>
+              </motion.div>
+            </section>
+
+            {/* ── FINAL CTA ── */}
+            <section id="final-cta">
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={viewportOpts}
+                variants={stagger}
+                className="relative max-w-3xl mx-auto"
+              >
+                <div
+                  className="absolute inset-0 translate-x-3 translate-y-3 bg-accent2 rounded-[2rem] border-2 border-fg"
+                  aria-hidden
+                />
+                <div className="relative bg-white rounded-[2rem] border-[3px] border-fg px-6 py-14 md:px-12 md:py-16 text-center">
                   <SignedOut>
-                    <WaitlistForm variant="teal" />
+                    <motion.h2
+                      variants={fadeUp}
+                      className="font-brand text-4xl sm:text-6xl md:text-7xl leading-[1.03] tracking-tight mb-5"
+                    >
+                      Stop being told.
+                      <br />
+                      <span className="text-accent">
+                        Start figuring it out.
+                      </span>
+                    </motion.h2>
+                    <motion.p
+                      variants={fadeUp}
+                      className="font-body text-lg md:text-xl text-fg-muted mb-9 max-w-md mx-auto"
+                    >
+                      Join the waitlist and be first in when Studi opens its
+                      doors.
+                    </motion.p>
                   </SignedOut>
                   <SignedIn>
-                    <div className="text-center">
-                      <h3 className="font-bold text-xl mb-4 text-[#3a9e8a]">You're already in!</h3>
-                      <Link href="/chat" className="inline-block w-full font-bold px-6 py-4 rounded-xl border-2 border-[#1c1208] bg-[#3a9e8a] text-white shadow-[4px_4px_0px_#1c1208] text-lg hover:bg-[#2c7a6a] hover:-translate-y-1 transition-all">
-                        Go to Dashboard
-                      </Link>
-                    </div>
+                    <motion.h2
+                      variants={fadeUp}
+                      className="font-brand text-4xl sm:text-6xl md:text-7xl leading-[1.03] tracking-tight mb-5"
+                    >
+                      Your next aha is waiting.
+                    </motion.h2>
+                    <motion.p
+                      variants={fadeUp}
+                      className="font-body text-lg md:text-xl text-fg-muted mb-9 max-w-md mx-auto"
+                    >
+                      Open Studi and keep working from the thought you left
+                      unfinished.
+                    </motion.p>
                   </SignedIn>
+
+                  <motion.div
+                    variants={fadeUp}
+                    className="w-full max-w-lg mx-auto"
+                  >
+                    <SignedOut>
+                      <WaitlistForm />
+                    </SignedOut>
+                    <SignedIn>
+                      <Link
+                        href="/chat"
+                        className="inline-block font-bold px-10 py-4 rounded-2xl border-2 border-fg bg-accent text-fg hover:bg-accent-hover transition-colors text-lg shadow-[5px_5px_0px_var(--fg)] active:translate-y-1 active:shadow-[2px_2px_0px_var(--fg)]"
+                      >
+                        Continue learning →
+                      </Link>
+                    </SignedIn>
+                  </motion.div>
+
+                  <SignedOut>
+                    <StickyNote
+                      className="absolute -top-4 right-6 hidden md:block"
+                      rotate={3}
+                    >
+                      free for students ✏️
+                    </StickyNote>
+                  </SignedOut>
                 </div>
               </motion.div>
-            </motion.div>
-          </section>
-
-        </div>
-      </main>
-
-      <footer className="border-t-4 border-[#1c1208] bg-white py-8 md:py-12 px-6 relative z-10">
-        <div className="max-w-7xl mx-auto flex flex-col items-center text-center gap-2 md:gap-3">
-          <div className="font-brand text-3xl md:text-4xl flex items-center gap-1">
-            studi
-            <span className="w-2.5 h-2.5 rounded-full bg-[#e05a3a] inline-block mb-1" />
+            </section>
           </div>
-          <p className="font-bold text-gray-400 uppercase tracking-widest text-xs">
-            © 2026 Studi · The tutor that makes you feel like you figured it out yourself.
-          </p>
-        </div>
-      </footer>
-    </div>
+        </main>
+
+        {/* ── FOOTER ── */}
+        <footer className="relative z-10 border-t-[3px] border-fg bg-bg-elevated py-10 px-6">
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-5">
+            <Wordmark />
+            <nav className="flex items-center gap-6 font-bold text-sm text-fg-muted">
+              <Link href="/pricing" className="hover:text-fg transition-colors">
+                Pricing
+              </Link>
+              <SignedOut>
+                <Link
+                  href="/waitlist"
+                  className="hover:text-fg transition-colors"
+                >
+                  Waitlist
+                </Link>
+                <Link href="/chat" className="hover:text-fg transition-colors">
+                  Sign in
+                </Link>
+              </SignedOut>
+              <SignedIn>
+                <Link href="/chat" className="hover:text-fg transition-colors">
+                  Open chat
+                </Link>
+              </SignedIn>
+            </nav>
+            <p className="font-bold text-xs text-fg-faint uppercase tracking-widest text-center md:text-right">
+              © 2026 Studi · Learn it like you invented it.
+            </p>
+          </div>
+        </footer>
+      </div>
+    </MotionConfig>
   );
 }

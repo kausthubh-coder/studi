@@ -32,13 +32,12 @@ export const SignedOutDesktop: Story = {
     await expect(
       canvas.getByRole("heading", {
         level: 1,
-        name: /the ai tutor that makes you feel like you figured it out yourself/i,
+        name: /learn it like you invented it/i,
       }),
     ).toBeInTheDocument();
-    await expect(canvas.getByRole("link", { name: "Sign in" })).toHaveAttribute(
-      "href",
-      "/chat",
-    );
+    for (const signInLink of canvas.getAllByRole("link", { name: "Sign in" })) {
+      await expect(signInLink).toHaveAttribute("href", "/chat");
+    }
     await expect(
       canvas.getAllByRole("textbox", { name: "Email address" }),
     ).toHaveLength(2);
@@ -55,10 +54,12 @@ export const SignedInLearner: Story = {
     },
   },
   play: async ({ canvas }) => {
-    for (const linkName of ["Open chat", "Enter Studi →", "Go to Dashboard"]) {
-      await expect(
-        canvas.getByRole("link", { name: linkName }),
-      ).toHaveAttribute("href", "/chat");
+    for (const linkName of ["Open chat", "Continue learning →"]) {
+      const links = canvas.getAllByRole("link", { name: linkName });
+      await expect(links.length).toBeGreaterThan(0);
+      for (const link of links) {
+        await expect(link).toHaveAttribute("href", "/chat");
+      }
     }
 
     await expect(
@@ -74,7 +75,7 @@ export const MobileSignedOut: Story = {
   play: async ({ canvas }) => {
     const heading = canvas.getByRole("heading", {
       level: 1,
-      name: /the ai tutor that makes you feel like you figured it out yourself/i,
+      name: /learn it like you invented it/i,
     });
 
     await waitFor(() => expect(heading).toBeVisible());
@@ -145,7 +146,9 @@ export const FaqAccordion: Story = {
     await userEvent.click(sparkQuestion);
     await expect(sparkQuestion).toHaveAttribute("aria-expanded", "true");
     await expect(
-      canvas.getByText(/an interactive tool Studi generates mid-conversation/i),
+      canvas.getByText(
+        /a small interactive artifact Studi generates mid-conversation/i,
+      ),
     ).toBeInTheDocument();
 
     await userEvent.click(freeQuestion);
@@ -180,7 +183,11 @@ export const WaitlistSignupSuccess: Story = {
       await canvas.findByRole("dialog", { name: "You're on the list!" }),
     ).toBeInTheDocument();
     await waitFor(() =>
-      expect(canvas.getByText(/opens its doors/i)).toBeVisible(),
+      expect(
+        canvas.getByText(
+          "We'll let you know the moment Studi opens its doors.",
+        ),
+      ).toBeVisible(),
     );
 
     await userEvent.click(canvas.getByRole("button", { name: "Close" }));

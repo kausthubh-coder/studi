@@ -1,16 +1,18 @@
 "use node";
 
 import { createTool } from "@convex-dev/agent";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import type { FunctionReference } from "convex/server";
 import { z } from "zod";
 import {
   getActiveModelConfig,
+  getConfiguredModelEndpointAttempts,
   getModelConfig,
   type ModelConfig,
   type ModelProfile,
-  type OpenRouterProviderOptions,
+  type TextModelEndpoint,
+  type TextModelProvider,
+  type TextModelRoute,
 } from "../../lib/model-config";
 import { renderPrompt } from "../../lib/prompts";
 import { sparkSkillById } from "../../lib/sparks/catalog";
@@ -40,6 +42,14 @@ import {
   type SparkType,
 } from "../../lib/sparks/contracts";
 import { getCodeSparkProviderConfig } from "../../lib/code-sparks/config";
+import {
+  classifyModelFailure,
+  getPublicSparkFailureMessage,
+  getSafeModelFailureMetadata,
+  isCrossProviderFallbackKind,
+  type ModelFailureKind,
+  type SafeModelFailureMetadata,
+} from "../../lib/model-provider-guardrails";
 import { internal } from "../_generated/api";
 import {
   createSparkInputSchema,
@@ -61,6 +71,7 @@ import {
   validateSceneHtml,
   validateSceneV2Payload,
 } from "./validators";
+import { createTextLanguageModel } from "../textModelProvider";
 
 const internalApi = internal as unknown as {
   billing: {
@@ -75,14 +86,6 @@ const internalApi = internal as unknown as {
   };
 };
 
-const openRouterApiKey = process.env.OPENROUTER_API_KEY;
-
-if (!openRouterApiKey) {
-  throw new Error(
-    "OPENROUTER_API_KEY is missing. Set it in .env.local and Convex env vars.",
-  );
-}
-
 type UsageSnapshot = {
   totalTokens?: number;
   inputTokens?: number;
@@ -96,14 +99,17 @@ type UsageSnapshot = {
 
 type SparkWorkerUsageRecord = {
   sparkId: SparkType;
+  provider: TextModelProvider;
   model: string;
   attempt: "initial" | "repair";
+  usedFallback: boolean;
   usage?: UsageSnapshot;
   providerMetadata?: unknown;
 };
 
 type CreateSparkToolResultWithUsage = CreateSparkToolResult & {
   workerUsage?: SparkWorkerUsageRecord[];
+  failureMetadata?: SafeModelFailureMetadata;
 };
 
 function readNumericCandidate(record: Record<string, unknown>, key: string) {
@@ -160,7 +166,7 @@ function extractEstimatedCostUsd(
 
 export type SparkWorkerModels = Pick<
   ModelConfig,
-  "sparkScene" | "sparkDesmos" | "sparkQuiz" | "sparkFlash" | "providerOptions"
+  "sparkScene" | "sparkDesmos" | "sparkQuiz" | "sparkFlash"
 >;
 
 function toSparkWorkerModels(modelConfig: ModelConfig): SparkWorkerModels {
@@ -169,7 +175,6 @@ function toSparkWorkerModels(modelConfig: ModelConfig): SparkWorkerModels {
     sparkDesmos: modelConfig.sparkDesmos,
     sparkQuiz: modelConfig.sparkQuiz,
     sparkFlash: modelConfig.sparkFlash,
-    providerOptions: modelConfig.providerOptions,
   };
 }
 
@@ -208,115 +213,38 @@ const flashWorkerTimeoutMs = parseSparkWorkerTimeoutMs(
   Math.min(sparkWorkerTimeoutMs, 25_000),
 );
 
-const openrouter = createOpenRouter({
-  apiKey: openRouterApiKey,
-});
-
-type WorkerErrorKind = "timeout" | "cancelled" | "provider" | "other";
+type WorkerErrorKind = ModelFailureKind;
 
 class SparkWorkerError extends Error {
   kind: WorkerErrorKind;
   model: string;
+  safeMetadata: SafeModelFailureMetadata;
 
-  constructor(kind: WorkerErrorKind, model: string, message: string) {
-    super(message);
+  constructor(
+    kind: WorkerErrorKind,
+    model: string,
+    safeMetadata: SafeModelFailureMetadata = { kind },
+  ) {
+    super(getPublicSparkFailureMessage(kind));
     this.name = "SparkWorkerError";
     this.kind = kind;
     this.model = model;
+    this.safeMetadata = safeMetadata;
   }
 }
 
-function truncateText(text: string, maxLength: number): string {
-  return text.length <= maxLength
-    ? text
-    : `${text.slice(0, maxLength - 1).trimEnd()}...`;
-}
-
-function extractProviderErrorDetails(error: unknown): string | null {
-  if (!error || typeof error !== "object") {
-    return null;
-  }
-
-  const candidate = error as Record<string, unknown>;
-  const parts: string[] = [];
-
-  const name = candidate.name;
-  if (typeof name === "string" && name.trim()) {
-    parts.push(`name=${name.trim()}`);
-  }
-
-  const statusCode = candidate.statusCode;
-  if (typeof statusCode === "number") {
-    parts.push(`status=${statusCode}`);
-  }
-
-  const code = candidate.code;
-  if (typeof code === "string" && code.trim()) {
-    parts.push(`code=${code.trim()}`);
-  }
-
-  const message = candidate.message;
-  if (typeof message === "string" && message.trim()) {
-    parts.push(`message=${truncateText(message.trim(), 240)}`);
-  }
-
-  const responseBody = candidate.responseBody;
-  if (typeof responseBody === "string" && responseBody.trim()) {
-    parts.push(`response=${truncateText(responseBody.trim(), 240)}`);
-  }
-
-  const cause = candidate.cause;
-  if (cause && typeof cause === "object") {
-    const causeRecord = cause as Record<string, unknown>;
-    const causeMessage = causeRecord.message;
-    if (typeof causeMessage === "string" && causeMessage.trim()) {
-      parts.push(`cause=${truncateText(causeMessage.trim(), 200)}`);
-    }
-  }
-
-  if (parts.length === 0) {
-    return null;
-  }
-
-  return parts.join(" | ");
-}
-
-function isProviderError(error: unknown): boolean {
-  if (extractProviderErrorDetails(error)) {
-    return true;
-  }
-
-  const message = toMessage(error).toLowerCase();
-  return (
-    message.includes("provider returned error") ||
-    message.includes("api call") ||
-    message.includes("status code")
-  );
-}
-
-function toMessage(error: unknown): string {
-  const providerDetails = extractProviderErrorDetails(error);
-  if (providerDetails) {
-    return providerDetails;
-  }
-
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return String(error);
-}
-
-function toProviderFaultMessage(error: unknown): string {
-  if (
-    error instanceof SparkWorkerError &&
-    (error.kind === "provider" ||
-      error.kind === "timeout" ||
-      error.kind === "cancelled")
-  ) {
-    return `Provider fault: ${toMessage(error)}`;
-  }
-
-  return toMessage(error);
+function toSparkFailureFields(error: unknown): {
+  error: string;
+  failureMetadata: SafeModelFailureMetadata;
+} {
+  const failureMetadata =
+    error instanceof SparkWorkerError
+      ? error.safeMetadata
+      : getSafeModelFailureMetadata(error);
+  return {
+    error: getPublicSparkFailureMessage(failureMetadata.kind),
+    failureMetadata,
+  };
 }
 
 function isAbortError(error: unknown): boolean {
@@ -370,11 +298,10 @@ function createTimeoutSignal(
   };
 }
 
-async function generateWorkerObjectForModel<T>(params: {
+async function generateWorkerObjectForEndpoint<T>(params: {
   schema: z.ZodType<T>;
   prompt: string;
-  model: string;
-  providerOptions: OpenRouterProviderOptions;
+  endpoint: TextModelEndpoint;
   abortSignal?: AbortSignal;
   timeoutMs?: number;
   mode?: "auto" | "json" | "tool";
@@ -382,16 +309,17 @@ async function generateWorkerObjectForModel<T>(params: {
   object: T;
   usage?: UsageSnapshot;
   providerMetadata?: unknown;
+  endpoint: TextModelEndpoint;
 }> {
   const timeoutMs = params.timeoutMs ?? sparkWorkerTimeoutMs;
   const timeout = createTimeoutSignal(params.abortSignal, timeoutMs);
 
   try {
     const result = await generateObject({
-      model: openrouter.chat(params.model),
+      model: createTextLanguageModel(params.endpoint),
       schema: params.schema,
       prompt: params.prompt,
-      providerOptions: params.providerOptions,
+      providerOptions: params.endpoint.providerOptions,
       temperature: 0.2,
       abortSignal: timeout.signal,
       mode: params.mode,
@@ -402,37 +330,29 @@ async function generateWorkerObjectForModel<T>(params: {
       usage: (result as { usage?: UsageSnapshot }).usage,
       providerMetadata: (result as { providerMetadata?: unknown })
         .providerMetadata,
+      endpoint: params.endpoint,
     };
   } catch (error) {
     if (timeout.didTimeout()) {
-      throw new SparkWorkerError(
-        "timeout",
-        params.model,
-        `Spark worker timed out after ${timeoutMs}ms (model: ${params.model}).`,
-      );
+      throw new SparkWorkerError("timeout", params.endpoint.model);
     }
     if (timeout.wasCancelled() || isAbortError(error)) {
+      throw new SparkWorkerError("cancelled", params.endpoint.model);
+    }
+
+    const safeMetadata = getSafeModelFailureMetadata(error);
+    if (
+      safeMetadata.kind === "provider" ||
+      safeMetadata.kind === "invalid_output"
+    ) {
       throw new SparkWorkerError(
-        "cancelled",
-        params.model,
-        `Spark generation was cancelled (model: ${params.model}).`,
+        safeMetadata.kind,
+        params.endpoint.model,
+        safeMetadata,
       );
     }
 
-    if (isProviderError(error)) {
-      const detail = extractProviderErrorDetails(error) ?? toMessage(error);
-      throw new SparkWorkerError(
-        "provider",
-        params.model,
-        `Spark worker provider error (model: ${params.model}) - ${detail}`,
-      );
-    }
-
-    throw new SparkWorkerError(
-      "other",
-      params.model,
-      `Spark worker error (model: ${params.model}) - ${toMessage(error)}`,
-    );
+    throw new SparkWorkerError("other", params.endpoint.model, safeMetadata);
   } finally {
     timeout.cleanup();
   }
@@ -441,8 +361,7 @@ async function generateWorkerObjectForModel<T>(params: {
 async function generateWorkerObject<T>(params: {
   schema: z.ZodType<T>;
   prompt: string;
-  model: string;
-  providerOptions: OpenRouterProviderOptions;
+  route: TextModelRoute;
   abortSignal?: AbortSignal;
   timeoutMs?: number;
   mode?: "auto" | "json" | "tool";
@@ -451,23 +370,54 @@ async function generateWorkerObject<T>(params: {
   warnings: string[];
   usage?: UsageSnapshot;
   providerMetadata?: unknown;
+  endpoint: TextModelEndpoint;
+  usedFallback: boolean;
 }> {
-  const result = await generateWorkerObjectForModel({
-    schema: params.schema,
-    prompt: params.prompt,
-    model: params.model,
-    providerOptions: params.providerOptions,
-    abortSignal: params.abortSignal,
-    timeoutMs: params.timeoutMs,
-    mode: params.mode,
-  });
+  const endpoints = getConfiguredModelEndpointAttempts(params.route);
+  if (endpoints.length === 0) {
+    throw new SparkWorkerError("provider", params.route.primary.model, {
+      kind: "provider",
+      code: "provider_not_configured",
+    });
+  }
 
-  return {
-    object: result.object,
-    warnings: [],
-    usage: result.usage,
-    providerMetadata: result.providerMetadata,
-  };
+  let lastError: unknown;
+  for (let index = 0; index < endpoints.length; index += 1) {
+    try {
+      const result = await generateWorkerObjectForEndpoint({
+        schema: params.schema,
+        prompt: params.prompt,
+        endpoint: endpoints[index],
+        abortSignal: params.abortSignal,
+        timeoutMs: params.timeoutMs,
+        mode: params.mode,
+      });
+
+      return {
+        object: result.object,
+        warnings:
+          index === 0
+            ? []
+            : ["Spark worker used OpenRouter fallback after provider fault."],
+        usage: result.usage,
+        providerMetadata: result.providerMetadata,
+        endpoint: result.endpoint,
+        usedFallback: index > 0,
+      };
+    } catch (error) {
+      lastError = error;
+      const shouldTryFallback =
+        error instanceof SparkWorkerError &&
+        isCrossProviderFallbackKind(error.kind) &&
+        index < endpoints.length - 1;
+      if (shouldTryFallback) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError ?? new Error("Spark worker generation failed.");
 }
 
 function buildPrompt(params: {
@@ -506,16 +456,19 @@ function pushWorkerUsage(
   records: SparkWorkerUsageRecord[],
   params: {
     sparkId: SparkType;
-    model: string;
+    endpoint: TextModelEndpoint;
     attempt: "initial" | "repair";
     usage?: UsageSnapshot;
     providerMetadata?: unknown;
+    usedFallback: boolean;
   },
 ) {
   records.push({
     sparkId: params.sparkId,
-    model: params.model,
+    provider: params.endpoint.provider,
+    model: params.endpoint.model,
     attempt: params.attempt,
+    usedFallback: params.usedFallback,
     usage: params.usage,
     providerMetadata: params.providerMetadata,
   });
@@ -558,17 +511,17 @@ async function buildSceneSpark(
     const firstGeneration = await generateWorkerObject<SceneDraft>({
       schema: sceneWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkScene,
-      providerOptions: workerModels.providerOptions,
+      route: workerModels.sparkScene,
       abortSignal,
       timeoutMs: sceneWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "scene",
-      model: workerModels.sparkScene,
+      endpoint: firstGeneration.endpoint,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
+      usedFallback: firstGeneration.usedFallback,
     });
     firstDraft = firstGeneration.object;
     firstWarnings.push(...firstGeneration.warnings);
@@ -588,22 +541,17 @@ async function buildSceneSpark(
       };
     }
   } catch (error) {
-    if (
-      error instanceof SparkWorkerError &&
-      (error.kind === "provider" ||
-        error.kind === "timeout" ||
-        error.kind === "cancelled")
-    ) {
+    if (error instanceof SparkWorkerError) {
       return {
         status: "failed",
         workerSummary: `${sparkTypeLabel} generation failed due to provider fault.`,
         warnings: firstWarnings,
-        error: toProviderFaultMessage(error),
+        ...toSparkFailureFields(error),
         workerUsage,
       };
     }
 
-    firstErrors = [toMessage(error)];
+    firstErrors = [toSparkFailureFields(error).error];
   }
 
   if (!firstDraft) {
@@ -632,17 +580,17 @@ async function buildSceneSpark(
     const repairedGeneration = await generateWorkerObject<SceneDraft>({
       schema: sceneWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkScene,
-      providerOptions: workerModels.providerOptions,
+      route: workerModels.sparkScene,
       abortSignal,
       timeoutMs: sceneWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "scene",
-      model: workerModels.sparkScene,
+      endpoint: repairedGeneration.endpoint,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
+      usedFallback: repairedGeneration.usedFallback,
     });
     const repairedDraft = repairedGeneration.object;
     firstWarnings.push(...repairedGeneration.warnings);
@@ -673,7 +621,7 @@ async function buildSceneSpark(
       status: "failed",
       workerSummary: `${sparkTypeLabel} repair failed due to provider fault.`,
       warnings: firstWarnings,
-      error: toProviderFaultMessage(error),
+      ...toSparkFailureFields(error),
       workerUsage,
     };
   }
@@ -719,18 +667,18 @@ async function buildDesmosGraphSpark(
     const firstGeneration = await generateWorkerObject<DesmosDraft>({
       schema: desmosWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkDesmos,
-      providerOptions: workerModels.providerOptions,
+      route: workerModels.sparkDesmos,
       abortSignal,
       timeoutMs: desmosWorkerTimeoutMs,
       mode: "json",
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "desmos_graph",
-      model: workerModels.sparkDesmos,
+      endpoint: firstGeneration.endpoint,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
+      usedFallback: firstGeneration.usedFallback,
     });
     firstDraft = firstGeneration.object;
     firstWarnings.push(...firstGeneration.warnings);
@@ -749,22 +697,17 @@ async function buildDesmosGraphSpark(
       };
     }
   } catch (error) {
-    if (
-      error instanceof SparkWorkerError &&
-      (error.kind === "provider" ||
-        error.kind === "timeout" ||
-        error.kind === "cancelled")
-    ) {
+    if (error instanceof SparkWorkerError) {
       return {
         status: "failed",
         workerSummary: "Desmos generation failed due to provider fault.",
         warnings: firstWarnings,
-        error: toProviderFaultMessage(error),
+        ...toSparkFailureFields(error),
         workerUsage,
       };
     }
 
-    firstErrors = [toMessage(error)];
+    firstErrors = [toSparkFailureFields(error).error];
   }
 
   if (!firstDraft) {
@@ -793,18 +736,18 @@ async function buildDesmosGraphSpark(
     const repairedGeneration = await generateWorkerObject<DesmosDraft>({
       schema: desmosWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkDesmos,
-      providerOptions: workerModels.providerOptions,
+      route: workerModels.sparkDesmos,
       abortSignal,
       timeoutMs: desmosWorkerTimeoutMs,
       mode: "json",
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "desmos_graph",
-      model: workerModels.sparkDesmos,
+      endpoint: repairedGeneration.endpoint,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
+      usedFallback: repairedGeneration.usedFallback,
     });
     const repairedDraft = repairedGeneration.object;
     firstWarnings.push(...repairedGeneration.warnings);
@@ -834,7 +777,7 @@ async function buildDesmosGraphSpark(
       status: "failed",
       workerSummary: "Desmos repair failed due to provider fault.",
       warnings: firstWarnings,
-      error: toProviderFaultMessage(error),
+      ...toSparkFailureFields(error),
       workerUsage,
     };
   }
@@ -863,17 +806,17 @@ async function buildQuizSpark(
     const firstGeneration = await generateWorkerObject<QuizDraft>({
       schema: quizWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkQuiz,
-      providerOptions: workerModels.providerOptions,
+      route: workerModels.sparkQuiz,
       abortSignal,
       timeoutMs: quizWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "quiz",
-      model: workerModels.sparkQuiz,
+      endpoint: firstGeneration.endpoint,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
+      usedFallback: firstGeneration.usedFallback,
     });
 
     warnings.push(...firstGeneration.warnings);
@@ -900,7 +843,7 @@ async function buildQuizSpark(
       status: "failed",
       workerSummary: "Quiz generation failed due to provider fault.",
       warnings,
-      error: toProviderFaultMessage(error),
+      ...toSparkFailureFields(error),
       workerUsage,
     };
   }
@@ -929,17 +872,17 @@ async function buildQuizSpark(
     const repairedGeneration = await generateWorkerObject<QuizDraft>({
       schema: quizWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkQuiz,
-      providerOptions: workerModels.providerOptions,
+      route: workerModels.sparkQuiz,
       abortSignal,
       timeoutMs: quizWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "quiz",
-      model: workerModels.sparkQuiz,
+      endpoint: repairedGeneration.endpoint,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
+      usedFallback: repairedGeneration.usedFallback,
     });
 
     warnings.push(...repairedGeneration.warnings);
@@ -974,7 +917,7 @@ async function buildQuizSpark(
       status: "failed",
       workerSummary: "Quiz repair failed due to provider fault.",
       warnings,
-      error: toProviderFaultMessage(error),
+      ...toSparkFailureFields(error),
       workerUsage,
     };
   }
@@ -1003,17 +946,17 @@ async function buildFlashCardSpark(
     const firstGeneration = await generateWorkerObject<FlashCardDraft>({
       schema: flashCardWorkerOutputSchema,
       prompt,
-      model: workerModels.sparkFlash,
-      providerOptions: workerModels.providerOptions,
+      route: workerModels.sparkFlash,
       abortSignal,
       timeoutMs: flashWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "flash_card",
-      model: workerModels.sparkFlash,
+      endpoint: firstGeneration.endpoint,
       attempt: "initial",
       usage: firstGeneration.usage,
       providerMetadata: firstGeneration.providerMetadata,
+      usedFallback: firstGeneration.usedFallback,
     });
 
     warnings.push(...firstGeneration.warnings);
@@ -1040,7 +983,7 @@ async function buildFlashCardSpark(
       status: "failed",
       workerSummary: "Flash-card generation failed due to provider fault.",
       warnings,
-      error: toProviderFaultMessage(error),
+      ...toSparkFailureFields(error),
       workerUsage,
     };
   }
@@ -1069,17 +1012,17 @@ async function buildFlashCardSpark(
     const repairedGeneration = await generateWorkerObject<FlashCardDraft>({
       schema: flashCardWorkerOutputSchema,
       prompt: repairPrompt,
-      model: workerModels.sparkFlash,
-      providerOptions: workerModels.providerOptions,
+      route: workerModels.sparkFlash,
       abortSignal,
       timeoutMs: flashWorkerTimeoutMs,
     });
     pushWorkerUsage(workerUsage, {
       sparkId: "flash_card",
-      model: workerModels.sparkFlash,
+      endpoint: repairedGeneration.endpoint,
       attempt: "repair",
       usage: repairedGeneration.usage,
       providerMetadata: repairedGeneration.providerMetadata,
+      usedFallback: repairedGeneration.usedFallback,
     });
 
     warnings.push(...repairedGeneration.warnings);
@@ -1114,7 +1057,7 @@ async function buildFlashCardSpark(
       status: "failed",
       workerSummary: "Flash-card repair failed due to provider fault.",
       warnings,
-      error: toProviderFaultMessage(error),
+      ...toSparkFailureFields(error),
       workerUsage,
     };
   }
@@ -1329,7 +1272,7 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
           status: "failed",
           workerSummary: "Spark worker crashed while building the artifact.",
           warnings: [],
-          error: toMessage(error),
+          ...toSparkFailureFields(error),
         };
       }
 
@@ -1344,7 +1287,12 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
             workerSummary:
               "Code Spark could not establish its server runtime session.",
             warnings: result.warnings,
-            error: "Code Spark challenge persistence is unavailable.",
+            error:
+              "Code Spark challenge persistence is temporarily unavailable. Please try again.",
+            failureMetadata: {
+              kind: "other",
+              code: "code_spark_persistence_unavailable",
+            },
           };
         } else {
           try {
@@ -1370,13 +1318,18 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
               ...result,
               artifact: projectCodeSparkArtifactForPublic(result.artifact),
             };
-          } catch (error) {
+          } catch {
             result = {
               status: "failed",
               workerSummary:
                 "Code Spark could not establish its server runtime session.",
               warnings: result.warnings,
-              error: toMessage(error),
+              error:
+                "Code Spark challenge persistence is temporarily unavailable. Please try again.",
+              failureMetadata: {
+                kind: "other",
+                code: "code_spark_persistence_failed",
+              },
             };
           }
         }
@@ -1387,6 +1340,13 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
 
       if (ctx.userId) {
         const workerUsage = result.workerUsage ?? [];
+        const actualUsage = workerUsage[workerUsage.length - 1];
+        const failureMetadata =
+          result.status === "failed"
+            ? (result.failureMetadata ?? {
+                kind: classifyModelFailure(result.error),
+              })
+            : undefined;
         for (const record of workerUsage) {
           await ctx
             .runMutation(internalApi.telemetry.insertRawUsageInternal, {
@@ -1394,7 +1354,7 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
               threadId: ctx.threadId,
               agentName: `spark_worker:${record.sparkId}:${record.attempt}`,
               model: record.model,
-              provider: "openrouter",
+              provider: record.provider,
               usage: {
                 totalTokens: record.usage?.totalTokens,
                 inputTokens: record.usage?.inputTokens,
@@ -1430,28 +1390,36 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
             name: input.sparkId,
             status,
             durationMs,
-            errorCategory:
-              result.status === "failed"
-                ? result.error.toLowerCase().includes("timeout")
-                  ? "timeout"
-                  : result.error.toLowerCase().includes("provider")
-                    ? "provider"
-                    : "generation_error"
-                : undefined,
+            errorCategory: failureMetadata?.kind,
             retriable:
-              result.status === "failed"
-                ? result.error.toLowerCase().includes("provider") ||
-                  result.error.toLowerCase().includes("timeout") ||
-                  result.error.toLowerCase().includes("cancelled")
-                : undefined,
-            model: workerModelForSpark,
+              failureMetadata === undefined
+                ? undefined
+                : failureMetadata.kind === "provider" ||
+                  failureMetadata.kind === "timeout" ||
+                  failureMetadata.kind === "invalid_output",
+            model:
+              actualUsage?.model ??
+              (workerModelForSpark === "code_spark_template"
+                ? workerModelForSpark
+                : undefined),
             metadata: {
               sparkId: input.sparkId,
               warnings: result.warnings,
               workerSummary: result.workerSummary,
-              error: result.status === "failed" ? result.error : undefined,
+              failure: failureMetadata,
               artifactKind:
                 result.status === "success" ? result.artifact.kind : undefined,
+              primaryProvider:
+                workerModelForSpark === "code_spark_template"
+                  ? undefined
+                  : workerModelForSpark.primary.provider,
+              fallbackProvider:
+                workerModelForSpark === "code_spark_template"
+                  ? undefined
+                  : workerModelForSpark.fallback.provider,
+              actualProvider: actualUsage?.provider,
+              actualModel: actualUsage?.model,
+              fallbackUsed: actualUsage?.usedFallback ?? false,
             },
           })
           .catch((error) => {
@@ -1461,6 +1429,7 @@ function createSparkToolWithModels(workerModels: SparkWorkerModels) {
 
       const publicResult = { ...result } as CreateSparkToolResultWithUsage;
       delete publicResult.workerUsage;
+      delete publicResult.failureMetadata;
       return publicResult;
     },
   });

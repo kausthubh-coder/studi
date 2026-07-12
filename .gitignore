@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/playwright/.clerk/
 
 # next.js
 /.next/
@@ -54,10 +55,7 @@ next-env.d.ts
 /.tmp/**
 
 # local Oracle/browser evidence (may contain machine or provider metadata)
-/.artifacts/claude*/
-/.artifacts/screenshots/
-/.artifacts/thread-*/
-/.artifacts/demos/
+/.artifacts/
 /test-results/
 /.design/
 /.sandbox/

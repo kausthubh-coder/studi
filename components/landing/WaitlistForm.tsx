@@ -11,7 +11,11 @@ type FormState = "idle" | "loading" | "success" | "error";
 
 const TALLY_FORM_URL = "https://tally.so/r/WOAjRv";
 
-export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal" }) {
+export function WaitlistForm({
+  variant = "coral",
+}: {
+  variant?: "coral" | "teal";
+}) {
   const [state, setState] = useState<FormState>("idle");
   const [email, setEmail] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -78,7 +82,6 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
       restoreTarget?.focus();
     };
   }, [showModal]);
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = email.trim();
@@ -119,16 +122,18 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
             animate={{ opacity: 1, y: 0 }}
             className="text-center py-4"
           >
-            <p className="font-brand text-2xl text-[#1c1208] mb-1">
-              {alreadyOnList ? "You're already on the list!" : "You're on the list!"}
+            <p className="font-brand text-2xl text-fg mb-1">
+              {alreadyOnList
+                ? "You're already on the list!"
+                : "You're on the list!"}
             </p>
-            <p className="font-body text-[#6b5a47]">
+            <p className="font-body text-fg-muted">
               Check your inbox for updates.{" "}
               <button
                 ref={modalTriggerRef}
                 type="button"
                 onClick={() => setShowModal(true)}
-                className="underline font-bold text-[#1c1208] hover:text-[#e05a3a] transition-colors"
+                className="underline underline-offset-2 font-semibold text-fg hover:text-accent transition-colors"
               >
                 Get ahead in line →
               </button>
@@ -136,7 +141,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
           </motion.div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-3 w-full">
-            <div className="flex flex-col sm:flex-row gap-2 w-full">
+            <div className="flex flex-col sm:flex-row gap-2.5 w-full">
               <input
                 ref={inputRef}
                 type="email"
@@ -150,16 +155,16 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
                 }}
                 placeholder="your@email.com"
                 disabled={state === "loading"}
-                className="flex-1 px-4 py-3 rounded-xl border-2 border-[#1c1208] bg-white font-ui text-base placeholder:text-[#b8a99a] focus:outline-none focus:ring-2 focus:ring-[#e05a3a]/40 disabled:opacity-60 shadow-[2px_2px_0px_#1c1208]"
+                className="flex-1 px-4 py-3 rounded-xl border-2 border-fg bg-white font-ui text-base text-fg placeholder:text-fg-faint shadow-[3px_3px_0px_var(--fg)] focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
               />
               <button
                 type="submit"
                 disabled={state === "loading"}
-                style={{ backgroundColor: state === "loading" ? "#b8a99a" : accentColor }}
-                className="px-6 py-3 rounded-xl border-2 border-[#1c1208] text-white font-bold text-base whitespace-nowrap shadow-[3px_3px_0px_#1c1208] active:translate-y-0.5 active:shadow-[0px_0px_0px_#1c1208] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ backgroundColor: accentColor }}
+                className="px-6 py-3 rounded-xl border-2 border-fg bg-accent hover:bg-accent-hover text-fg font-ui font-bold text-base whitespace-nowrap transition-colors shadow-[3px_3px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {state === "loading" ? (
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center justify-center gap-2">
                     <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />
                     Joining...
                   </span>
@@ -177,14 +182,14 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  className="text-sm font-bold text-red-600 px-1"
+                  className="text-sm font-ui font-semibold text-red-600 px-1"
                 >
                   {errorMsg}
                 </motion.p>
               )}
             </AnimatePresence>
 
-            <p className="text-xs text-[#9b8c7e] text-center font-ui">
+            <p className="text-xs font-bold text-fg-faint text-center font-ui">
               No credit card required. Free for students.
             </p>
           </form>
@@ -201,44 +206,50 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
               exit={{ opacity: 0 }}
               onClick={() => setShowModal(false)}
               aria-hidden="true"
-              className="fixed inset-0 bg-[#1c1208]/60 z-50 backdrop-blur-sm"
+              className="fixed inset-0 bg-fg/50 z-50 backdrop-blur-sm"
             />
             <motion.div
               ref={dialogRef}
-              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
               role="dialog"
               aria-modal="true"
               aria-labelledby={dialogTitleId}
               className="fixed z-50 inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto"
             >
-              <div className="relative bg-white rounded-3xl border-4 border-[#1c1208] shadow-[8px_8px_0px_#3a9e8a] p-8 text-center">
+              <div className="relative bg-white rounded-3xl border-[3px] border-fg shadow-[8px_8px_0px_var(--accent2)] p-8 text-center">
                 <button
                   ref={closeButtonRef}
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full border-2 border-[#1c1208] font-bold text-sm hover:bg-[#f5ede0] transition-colors"
+                  className="absolute top-4 right-4 grid w-11 h-11 place-items-center rounded-lg border-2 border-fg bg-white text-fg text-sm font-bold hover:bg-bg-alt transition-colors shadow-[2px_2px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none"
                   aria-label="Close"
                 >
                   ✕
                 </button>
 
-                <div className="w-14 h-14 bg-[#3a9e8a] rounded-2xl border-4 border-[#1c1208] flex items-center justify-center mx-auto mb-4 text-white text-2xl font-bold">
+                <div className="grid w-14 h-14 place-items-center bg-accent2 rounded-2xl border-2 border-fg mx-auto mb-4 text-fg text-2xl font-bold shadow-[3px_3px_0px_var(--fg)]">
                   ✓
                 </div>
 
-                <h2 id={dialogTitleId} className="font-brand text-3xl text-[#1c1208] mb-2">
-                  {alreadyOnList ? "Already on the list!" : "You're on the list!"}
+                <h2
+                  id={dialogTitleId}
+                  className="font-brand text-3xl text-fg mb-2"
+                >
+                  {alreadyOnList
+                    ? "Already on the list!"
+                    : "You're on the list!"}
                 </h2>
-                <p className="font-body text-[#6b5a47] mb-6 leading-relaxed">
+                <p className="font-body text-fg-muted mb-6 leading-relaxed">
                   {alreadyOnList
                     ? "Your email is already registered. Want to move up in line?"
                     : "We'll let you know the moment Studi opens its doors."}
                   <br />
-                  <span className="font-bold text-[#1c1208]">
-                    Take 2 minutes to fill out our full form and get ahead of the queue.
+                  <span className="font-semibold text-fg">
+                    Take 2 minutes to fill out our full form and get ahead of
+                    the queue.
                   </span>
                 </p>
 
@@ -246,7 +257,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
                   href={TALLY_FORM_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block w-full font-bold px-6 py-4 rounded-xl border-2 border-[#1c1208] bg-[#3a9e8a] text-white hover:bg-[#2c7a6a] transition-all shadow-[4px_4px_0px_#1c1208] text-lg mb-3"
+                  className="inline-block w-full font-ui font-bold px-6 py-4 rounded-2xl border-2 border-fg bg-accent2 text-fg hover:bg-[#2c8a76] transition-colors text-lg mb-3 shadow-[4px_4px_0px_var(--fg)] active:translate-y-0.5 active:shadow-[2px_2px_0px_var(--fg)]"
                 >
                   Get ahead in line →
                 </a>
@@ -254,7 +265,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="text-sm text-[#9b8c7e] hover:text-[#6b5a47] transition-colors font-ui"
+                  className="inline-flex min-h-11 w-full items-center justify-center text-sm text-fg-faint hover:text-fg-muted transition-colors font-ui"
                 >
                   No thanks, I'll wait my turn
                 </button>

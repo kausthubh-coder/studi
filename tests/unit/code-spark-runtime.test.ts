@@ -72,6 +72,7 @@ describe("Code Spark runtime provider boundary", () => {
   it("fails closed in production instead of silently selecting local_fake", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("CONVEX_DEPLOYMENT", "");
     vi.stubEnv("CODE_SPARK_PROVIDER", "");
     vi.stubEnv("VERCEL_OIDC_TOKEN", "");
     vi.stubEnv("VERCEL_TOKEN", "");

@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import { DM_Serif_Display, Plus_Jakarta_Sans, Source_Serif_4 } from "next/font/google";
+import {
+  DM_Serif_Display,
+  Plus_Jakarta_Sans,
+  Source_Serif_4,
+} from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
@@ -31,7 +35,14 @@ export const metadata: Metadata = {
   description:
     "A warm, thoughtful AI tutor that helps you learn through conversation.",
   icons: {
-    icon: "/convex.svg",
+    icon: [
+      {
+        url: "/studi-paper-airplane-logo-rounded.png",
+        type: "image/png",
+      },
+    ],
+    shortcut: "/studi-paper-airplane-logo-rounded.png",
+    apple: "/studi-paper-airplane-logo-rounded.png",
   },
 };
 

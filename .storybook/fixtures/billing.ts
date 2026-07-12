@@ -4,6 +4,7 @@ export type StoryBillingState = {
   billingPeriod: string;
   caps: {
     freePromptLimit: number;
+    textPromptLimit: number;
     freeTextAiCostUsdLimit: number;
     textAiCostUsdLimit: number;
     totalEstimatedCostUsdLimit: number;
@@ -16,6 +17,7 @@ export type StoryBillingState = {
     lifetimeFreeTextAiCostUsd: number;
   };
   remaining: {
+    textPromptCount: number;
     textAiCostUsd: number;
     totalEstimatedCostUsd: number;
     lifetimeFreePromptCount: number;
@@ -33,6 +35,7 @@ export const freePreviewBilling = {
   billingPeriod: "2026-07-01",
   caps: {
     freePromptLimit: 3,
+    textPromptLimit: 3,
     freeTextAiCostUsdLimit: 0.15,
     textAiCostUsdLimit: 0.15,
     totalEstimatedCostUsdLimit: 0.15,
@@ -45,6 +48,7 @@ export const freePreviewBilling = {
     lifetimeFreeTextAiCostUsd: 0.03,
   },
   remaining: {
+    textPromptCount: 2,
     textAiCostUsd: 0.12,
     totalEstimatedCostUsd: 0.12,
     lifetimeFreePromptCount: 2,
@@ -66,6 +70,7 @@ export const exhaustedPreviewBilling = {
     lifetimeFreeTextAiCostUsd: 0.15,
   },
   remaining: {
+    textPromptCount: 0,
     textAiCostUsd: 0,
     totalEstimatedCostUsd: 0,
     lifetimeFreePromptCount: 0,
@@ -84,6 +89,7 @@ export const introBilling = {
   billingPeriod: "2026-07-01",
   caps: {
     freePromptLimit: 0,
+    textPromptLimit: 150,
     freeTextAiCostUsdLimit: 0,
     textAiCostUsdLimit: 5,
     totalEstimatedCostUsdLimit: 7,
@@ -96,6 +102,7 @@ export const introBilling = {
     lifetimeFreeTextAiCostUsd: 0.12,
   },
   remaining: {
+    textPromptCount: 112,
     textAiCostUsd: 3.58,
     totalEstimatedCostUsd: 5.38,
     lifetimeFreePromptCount: 0,
@@ -111,11 +118,13 @@ export const proBilling = {
   planKey: "pro",
   caps: {
     ...introBilling.caps,
+    textPromptLimit: 450,
     textAiCostUsdLimit: 20,
     totalEstimatedCostUsdLimit: 30,
   },
   remaining: {
     ...introBilling.remaining,
+    textPromptCount: 412,
     textAiCostUsd: 18.58,
     totalEstimatedCostUsd: 28.38,
   },

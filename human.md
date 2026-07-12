@@ -23,7 +23,7 @@
 - Sparks: contracts and validation live in `lib/sparks/`; renderers live in `components/sparks/`; generation tools live in `convex/sparks/`.
 - Code Spark: UI in `components/sparks/scenes/CodeSparkScene.tsx`; persistence/admission in `convex/codeSparks.ts`; execution action in `convex/codeSparkActions.ts`; provider adapter in `convex/codeSparkRuntime.ts`.
 - Data/state: Convex schema and functions live in `convex/`; Clerk supplies user identity.
-- External services: Clerk, Convex, Vercel, Vercel Sandbox, OpenRouter/OpenAI, Desmos, PostHog, and Tally. Environment variable names and safe setup checks are documented in `test.md`; never commit values.
+- External services: Clerk, Convex, Vercel, Vercel Sandbox, FreeModel's Anthropic-compatible API, OpenRouter/OpenAI, Desmos, PostHog, and Tally. Environment variable names and safe setup checks are documented in `test.md`; never commit values.
 
 ## Conventions
 
