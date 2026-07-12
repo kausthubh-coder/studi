@@ -2,7 +2,7 @@
 
 /* eslint-disable react/no-unescaped-entities */
 
-import { useState, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,10 +18,66 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
   const [showModal, setShowModal] = useState(false);
   const [alreadyOnList, setAlreadyOnList] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const modalTriggerRef = useRef<HTMLButtonElement>(null);
+  const errorId = useId();
+  const dialogTitleId = useId();
 
   const joinWaitlist = useAction(api.waitlistPublic.joinWaitlist);
 
   const accentColor = variant === "teal" ? "#3a9e8a" : "#e05a3a";
+
+  useEffect(() => {
+    if (!showModal) return;
+
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement &&
+      document.activeElement !== document.body
+        ? document.activeElement
+        : null;
+    const modalTrigger = modalTriggerRef.current;
+    const focusFrame = window.requestAnimationFrame(() => {
+      closeButtonRef.current?.focus();
+    });
+
+    function handleDialogKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setShowModal(false);
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) return;
+
+      const focusableElements = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements.at(-1);
+      if (!firstElement || !lastElement) return;
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleDialogKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleDialogKeyDown);
+      const restoreTarget = previouslyFocused?.isConnected
+        ? previouslyFocused
+        : modalTrigger;
+      restoreTarget?.focus();
+    };
+  }, [showModal]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,6 +125,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
             <p className="font-body text-[#6b5a47]">
               Check your inbox for updates.{" "}
               <button
+                ref={modalTriggerRef}
                 type="button"
                 onClick={() => setShowModal(true)}
                 className="underline font-bold text-[#1c1208] hover:text-[#e05a3a] transition-colors"
@@ -83,6 +140,9 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
               <input
                 ref={inputRef}
                 type="email"
+                aria-label="Email address"
+                aria-describedby={state === "error" ? errorId : undefined}
+                aria-invalid={state === "error"}
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
@@ -112,6 +172,8 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
             <AnimatePresence>
               {state === "error" && errorMsg && (
                 <motion.p
+                  id={errorId}
+                  role="alert"
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
@@ -138,17 +200,23 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowModal(false)}
+              aria-hidden="true"
               className="fixed inset-0 bg-[#1c1208]/60 z-50 backdrop-blur-sm"
             />
             <motion.div
+              ref={dialogRef}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 20 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={dialogTitleId}
               className="fixed z-50 inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto"
             >
               <div className="relative bg-white rounded-3xl border-4 border-[#1c1208] shadow-[8px_8px_0px_#3a9e8a] p-8 text-center">
                 <button
+                  ref={closeButtonRef}
                   type="button"
                   onClick={() => setShowModal(false)}
                   className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full border-2 border-[#1c1208] font-bold text-sm hover:bg-[#f5ede0] transition-colors"
@@ -161,7 +229,7 @@ export function WaitlistForm({ variant = "coral" }: { variant?: "coral" | "teal"
                   ✓
                 </div>
 
-                <h2 className="font-brand text-3xl text-[#1c1208] mb-2">
+                <h2 id={dialogTitleId} className="font-brand text-3xl text-[#1c1208] mb-2">
                   {alreadyOnList ? "Already on the list!" : "You're on the list!"}
                 </h2>
                 <p className="font-body text-[#6b5a47] mb-6 leading-relaxed">

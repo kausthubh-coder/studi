@@ -96,6 +96,7 @@ export function Composer({
                     type="button"
                     onClick={() => onRemoveAttachment(attachment.attachmentId)}
                     className="rounded p-0.5 transition-opacity hover:opacity-60"
+                    aria-label={`Remove ${attachment.filename ?? "file"}`}
                   >
                     <IconX />
                   </button>
@@ -134,6 +135,7 @@ export function Composer({
                 type="button"
                 className={`composer-plus-btn${plusMenuOpen ? " is-open" : ""}`}
                 aria-label="More options"
+                aria-expanded={plusMenuOpen}
                 onClick={() => setPlusMenuOpen((v) => !v)}
               >
                 <IconPlus />

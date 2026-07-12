@@ -13,7 +13,7 @@
     "lint": "eslint app components convex lib",
     "lint:all": "eslint .",
     "test": "bun run test:unit && bun run test:convex",
-    "test:unit": "vitest run --config vitest.config.ts",
+    "test:unit": "vitest run --config vitest.config.ts --project unit",
     "test:convex": "vitest run --config vitest.convex.config.ts",
     "test:e2e": "playwright test --grep-invert @live-code-spark-provider",
     "test:e2e:auth": "playwright test tests/e2e/authenticated-chat.spec.ts",
@@ -25,7 +25,11 @@
     "prompts:check": "bun lib/prompts/sync.ts --check",
     "browser:auth-url": "bun scripts/create-clerk-agent-task.ts",
     "billing:reset-dev-test-user": "bun scripts/reset-dev-test-billing.ts",
-    "playground": "bunx @convex-dev/agent-playground"
+    "playground": "bunx @convex-dev/agent-playground",
+    "storybook": "storybook dev -p 6006 --host 127.0.0.1",
+    "build-storybook": "storybook build",
+    "test:storybook": "vitest run --config vitest.config.ts --project storybook",
+    "check:storybook": "bun run test:storybook && bun run build-storybook"
   },
   "dependencies": {
     "@clerk/backend": "^2.33.0",
@@ -56,10 +60,16 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@chromatic-com/storybook": "^5.2.1",
     "@clerk/testing": "^2.0.33",
     "@convex-dev/eslint-plugin": "^1.1.1",
     "@edge-runtime/vm": "^5.0.0",
     "@playwright/test": "^1.60.0",
+    "@storybook/addon-a11y": "^10.5.0",
+    "@storybook/addon-docs": "^10.5.0",
+    "@storybook/addon-mcp": "^0.7.0",
+    "@storybook/addon-vitest": "^10.5.0",
+    "@storybook/nextjs-vite": "^10.5.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -68,14 +78,21 @@
     "@types/react": "^19.2.13",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/browser": "4.1.10",
+    "@vitest/browser-playwright": "4.1.10",
+    "@vitest/coverage-v8": "4.1.10",
     "convex-test": "^0.0.53",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.6",
+    "eslint-plugin-storybook": "^10.5.0",
     "jsdom": "^29.1.1",
     "npm-run-all2": "^8.0.4",
+    "playwright": "^1.61.1",
     "prettier": "^3.8.1",
+    "storybook": "^10.5.0",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.7"
+    "vite": "^8.1.4",
+    "vitest": "4.1.10"
   }
 }

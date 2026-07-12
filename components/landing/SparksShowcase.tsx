@@ -148,7 +148,9 @@ export function SparksShowcase() {
                     return (
                         <button
                             key={spark.id}
+                            type="button"
                             onClick={() => setCurrentIndex(index)}
+                            aria-pressed={isActive}
                             className={cn(
                                 "relative text-left p-3 rounded-2xl border-2 transition-all duration-300 ease-out shrink-0 md:shrink",
                                 isActive
@@ -163,12 +165,12 @@ export function SparksShowcase() {
                                 )}>
                                     {spark.icon}
                                 </div>
-                                <h4 className={cn(
+                                <span className={cn(
                                     "font-bold font-brand text-sm leading-tight",
                                     isActive ? "text-[#1c1208]" : "text-gray-500"
                                 )}>
                                     {spark.title}
-                                </h4>
+                                </span>
                             </div>
                             {isActive && (
                                 <motion.p
