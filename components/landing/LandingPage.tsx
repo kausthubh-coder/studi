@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { SparksShowcase } from "./SparksShowcase";
 import { WaitlistForm } from "./WaitlistForm";
 
@@ -19,15 +19,22 @@ const viewportOpts = { once: true, margin: "-80px" };
 // FAQ accordion item
 function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
+  const buttonId = useId();
+  const panelId = useId();
+
   return (
     <div className="border-2 border-[#1c1208] rounded-2xl overflow-hidden bg-white">
       <button
+        id={buttonId}
         type="button"
+        aria-controls={panelId}
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-6 py-5 text-left font-bold font-ui text-base md:text-lg text-[#1c1208] hover:bg-[#fdf8f2] transition-colors"
       >
         <span>{q}</span>
         <span
+          aria-hidden="true"
           className="shrink-0 ml-4 w-7 h-7 flex items-center justify-center rounded-full border-2 border-[#1c1208] bg-white text-[#1c1208] font-bold text-lg transition-transform"
           style={{ transform: open ? "rotate(45deg)" : "rotate(0deg)" }}
         >
@@ -37,6 +44,9 @@ function FaqItem({ q, a }: { q: string; a: string }) {
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
+            id={panelId}
+            role="region"
+            aria-labelledby={buttonId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -443,7 +453,7 @@ export function LandingPage() {
                     <div className="flex gap-4 items-start opacity-50">
                       <div className="w-8 h-8 rounded-full bg-[#1c1208] text-white flex items-center justify-center font-bold text-sm shrink-0 border-2 border-[#1c1208]">✓</div>
                       <div>
-                        <h4 className="font-bold text-base line-through">Limits and Infinity</h4>
+                        <h3 className="font-bold text-base line-through">Limits and Infinity</h3>
                         <p className="text-xs text-gray-400">Completed yesterday</p>
                       </div>
                     </div>
@@ -451,14 +461,14 @@ export function LandingPage() {
                       <div className="w-8 h-8 rounded-full bg-[#e8a030] text-[#1c1208] flex items-center justify-center font-bold text-lg shrink-0 border-2 border-[#1c1208]" />
                       <div>
                         <div className="inline-block px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-[#e8a030]/20 text-[#e8a030] border border-[#e8a030] uppercase mb-1">In Progress</div>
-                        <h4 className="font-bold text-xl">The Derivative</h4>
+                        <h3 className="font-bold text-xl">The Derivative</h3>
                         <p className="text-sm text-gray-600 font-medium">Visualising rates of change</p>
                       </div>
                     </div>
                     <div className="flex gap-4 items-start opacity-50">
                       <div className="w-8 h-8 rounded-full bg-white text-[#1c1208] flex items-center justify-center font-bold text-sm shrink-0 border-2 border-gray-300" />
                       <div>
-                        <h4 className="font-bold text-base">Integrals</h4>
+                        <h3 className="font-bold text-base">Integrals</h3>
                         <p className="text-xs text-gray-400">Locked — complete The Derivative first</p>
                       </div>
                     </div>

@@ -49,7 +49,7 @@ describe("Composer", () => {
     });
 
     expect(screen.getByText("diagram.png")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove diagram.png" }));
 
     expect(onRemoveAttachment).toHaveBeenCalledWith("attachment_1");
   });

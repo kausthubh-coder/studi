@@ -21,7 +21,13 @@ export function MessageColumn({
   expandedSparkInstanceId: string | null;
 }) {
   return (
-    <div ref={listRef} className="flex-1 overflow-y-auto">
+    <div
+      ref={listRef}
+      className="flex-1 overflow-y-auto"
+      role="region"
+      tabIndex={0}
+      aria-label="Conversation messages"
+    >
       <div
         className="mx-auto px-8 pt-14"
         style={{ maxWidth: "var(--column-max)" }}

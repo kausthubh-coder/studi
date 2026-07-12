@@ -61,3 +61,6 @@ next-env.d.ts
 /test-results/
 /.design/
 /.sandbox/
+
+*storybook.log
+storybook-static/
