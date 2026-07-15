@@ -12,7 +12,7 @@ const viewports = [
 ] as const;
 
 for (const viewport of viewports) {
-  test(`pricing stays truthful and stable on ${viewport.name}`, async ({
+  test(`signed-out pricing stays truthful and stable on ${viewport.name}`, async ({
     page,
   }) => {
     const protectedChatPrefetches: string[] = [];
@@ -60,16 +60,23 @@ for (const viewport of viewports) {
         name: "Pick the plan that matches your pace",
       }),
     ).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Starter" })).toBeVisible();
     await expect(
       page.getByText(/Clerk supplies the live prices/i),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Subscribe" })).toHaveCount(
-      2,
-    );
 
     const shell = page.getByTestId("clerk-pricing-table-shell");
     await expect(shell).toHaveAttribute("data-layout-reserve", "responsive");
+    for (const planName of ["Free", "Starter", "Pro"]) {
+      await expect(
+        shell.getByRole("heading", { name: planName, exact: true }),
+      ).toBeVisible();
+    }
+    // Clerk offers every plan to a signed-out visitor. Once signed in, the
+    // current plan's Subscribe action is replaced by its active-plan state.
+    await expect(
+      shell.getByRole("button", { name: "Subscribe", exact: true }),
+    ).toHaveCount(3);
+
     const minimumHeight = await shell.evaluate((element) =>
       Number.parseFloat(getComputedStyle(element).minHeight),
     );
