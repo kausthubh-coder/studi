@@ -8,7 +8,7 @@ import {
   MotionConfig,
   useReducedMotion,
 } from "framer-motion";
-import { useId, useState } from "react";
+import { useId, useState, useSyncExternalStore } from "react";
 import { Send } from "lucide-react";
 import { PRICING_FAQ_ANSWER } from "@/lib/billing/plan-catalog";
 import { SparksShowcase } from "./SparksShowcase";
@@ -32,6 +32,7 @@ const stagger = {
   visible: { transition: { staggerChildren: 0.1 } },
 };
 const viewportOpts = { once: true, margin: "-80px" };
+const subscribeToHydration = () => () => {};
 
 function scrollToWaitlist() {
   const section = document.getElementById("get-early-access");
@@ -304,9 +305,16 @@ function HeroChatDemo() {
 }
 
 export function LandingPage() {
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false,
+  );
+
   return (
     <MotionConfig reducedMotion="user">
       <div
+        data-studi-landing-hydrated={hydrated ? "true" : "false"}
         className="studi-landing min-h-screen bg-bg text-fg selection:bg-accent/20 font-ui overflow-x-clip"
         style={{ "--fg-faint": "#806f5d" } as React.CSSProperties}
       >
@@ -481,7 +489,7 @@ export function LandingPage() {
                 >
                   {/* Being told */}
                   <div className="relative rounded-2xl border-2 border-fg bg-bg-alt p-6 shadow-[4px_4px_0px_var(--fg)]">
-                    <p className="font-bold text-xs uppercase tracking-[0.18em] text-fg-faint mb-5">
+                    <p className="font-bold text-xs uppercase tracking-[0.18em] text-fg-muted mb-5">
                       How school told you
                     </p>
                     <div className="rounded-xl border-2 border-fg/25 bg-white/70 px-3.5 py-2.5 mb-3 font-body text-sm leading-relaxed text-fg-muted">

@@ -155,11 +155,15 @@ test.describe("public routes", () => {
     try {
       await page.goto("/", { waitUntil: "domcontentloaded" });
       const heading = page.getByRole("heading", {
-        name: /AI tutor that makes you feel/i,
+        name: /Learn it like you invented it/i,
       });
       await expect(heading).toBeVisible();
-      await expect(page.getByRole("link", { name: "Open chat" })).toBeVisible();
-      await expect(page.getByRole("textbox", { name: "Email address" }).first()).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Open chat" }).first(),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("textbox", { name: "Email address" }).first(),
+      ).toBeVisible();
       await expect(heading).not.toHaveCSS("opacity", "0");
     } finally {
       await context.close();
@@ -170,7 +174,7 @@ test.describe("public routes", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await waitForLandingHydration(page);
 
-    const graphTab = page.getByRole("tab", { name: /Desmos Graph/ });
+    const graphTab = page.getByRole("tab", { name: /Live Graph/ });
     await graphTab.click();
     await expect(graphTab).toHaveAttribute("aria-selected", "true");
     await page.waitForTimeout(5_000);
@@ -178,6 +182,16 @@ test.describe("public routes", () => {
   });
 
   test("reduced motion prevents Spark auto-advance", async ({ page }) => {
+    const hydrationWarnings: string[] = [];
+    page.on("console", (message) => {
+      if (
+        message.type() === "error" &&
+        message.text().includes("server rendered HTML didn't match")
+      ) {
+        hydrationWarnings.push(message.text());
+      }
+    });
+
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await waitForLandingHydration(page);
@@ -186,5 +200,6 @@ test.describe("public routes", () => {
     await expect(sceneTab).toHaveAttribute("aria-selected", "true");
     await page.waitForTimeout(5_000);
     await expect(sceneTab).toHaveAttribute("aria-selected", "true");
+    expect(hydrationWarnings).toEqual([]);
   });
 });

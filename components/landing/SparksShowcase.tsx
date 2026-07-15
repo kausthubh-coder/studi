@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { BrainCircuit, Box, Calculator, LibraryBig } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -209,13 +215,20 @@ function getSparksData(reduceMotion: boolean): SparkDemo[] {
 }
 
 const ROTATE_INTERVAL_MS = 4_500;
+const subscribeToHydration = () => () => {};
 
 export function SparksShowcase() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasUserSelected, setHasUserSelected] = useState(false);
   const [isPointerInside, setIsPointerInside] = useState(false);
   const [isFocusWithin, setIsFocusWithin] = useState(false);
-  const reduceMotion = Boolean(useReducedMotion());
+  const prefersReducedMotion = Boolean(useReducedMotion());
+  const hasHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false,
+  );
+  const reduceMotion = hasHydrated && prefersReducedMotion;
   const instanceId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sparks = getSparksData(reduceMotion);
