@@ -45,7 +45,11 @@ test.describe("billing settings truth", () => {
     ).toBeVisible();
 
     const isFreePreview = await page
-      .getByText("Guided preview", { exact: true })
+      .getByRole("heading", {
+        name: "Guided preview",
+        exact: true,
+        level: 2,
+      })
       .isVisible();
     await expect(promptVolumeMeter).toHaveCount(isFreePreview ? 0 : 1);
     if (!isFreePreview) {

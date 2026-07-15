@@ -131,8 +131,18 @@ export const FreshFreePreview: Story = {
   },
   play: async ({ canvas }) => {
     await expect(
-      canvas.getByRole("heading", { name: "Guided preview", level: 2 }),
+      canvas.getAllByText("Guided preview", { exact: true }),
+    ).toHaveLength(2);
+    await expect(
+      canvas.getByRole("heading", {
+        name: "Guided preview",
+        exact: true,
+        level: 2,
+      }),
     ).toBeInTheDocument();
+    await expect(
+      canvas.queryByRole("heading", { name: "Prompt volume" }),
+    ).not.toBeInTheDocument();
     await expect(canvas.getByText("Preview")).toBeInTheDocument();
     await expect(canvas.getByText("Free prompts left: 3")).toBeInTheDocument();
     await expect(
@@ -140,7 +150,7 @@ export const FreshFreePreview: Story = {
         name: "0% of monthly AI capacity used",
       }),
     ).toHaveAttribute("aria-valuenow", "0");
-    await expect(canvas.getByText("0 chat prompts sent")).toBeInTheDocument();
+    await expect(canvas.getAllByText("0 chat prompts sent")).toHaveLength(1);
   },
 };
 
