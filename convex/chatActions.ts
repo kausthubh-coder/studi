@@ -3,7 +3,7 @@
 import { v } from "convex/values";
 import { abortStream, listStreams } from "@convex-dev/agent";
 import type { FunctionReference } from "convex/server";
-import type { ModelMessage } from "ai";
+import { NoOutputGeneratedError, type ModelMessage } from "ai";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { api, components, internal } from "./_generated/api";
 import { activeModelProfile } from "../lib/model-config";
@@ -134,6 +134,21 @@ export function shouldRetryAssistantGeneration(
   return (
     !cancellationRequested &&
     getAssistantGenerationFailureMetadata(error).kind !== "cancelled"
+  );
+}
+
+type AssistantGenerationStepSummary = {
+  text?: unknown;
+  toolResults?: readonly unknown[];
+};
+
+export function hasMeaningfulAssistantGenerationSteps(
+  steps: readonly AssistantGenerationStepSummary[],
+): boolean {
+  return steps.some(
+    (step) =>
+      (typeof step.text === "string" && step.text.trim().length > 0) ||
+      (Array.isArray(step.toolResults) && step.toolResults.length > 0),
   );
 }
 
@@ -428,6 +443,12 @@ export const generateAssistantReply = internalAction({
           );
           if (!publishStreamDeltas) {
             await result.text;
+          }
+          const completedSteps = await result.steps;
+          if (!hasMeaningfulAssistantGenerationSteps(completedSteps)) {
+            throw new NoOutputGeneratedError({
+              message: "The model provider completed without learner-visible output.",
+            });
           }
 
           const controlAfterStream = (await ctx.runQuery(

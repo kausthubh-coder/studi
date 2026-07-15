@@ -3,6 +3,7 @@ import type { ModelMessage } from "ai";
 import {
   createAssistantGenerationFailureError,
   getAssistantGenerationFailureMetadata,
+  hasMeaningfulAssistantGenerationSteps,
   pollGenerationCancellation,
   prepareStudiStreamStep,
   shouldRetryAssistantGeneration,
@@ -142,6 +143,38 @@ describe("shouldRetryAssistantGeneration", () => {
         false,
       ),
     ).toBe(false);
+  });
+});
+
+describe("hasMeaningfulAssistantGenerationSteps", () => {
+  it("rejects an empty successful provider step so cross-provider fallback can run", () => {
+    expect(
+      hasMeaningfulAssistantGenerationSteps([
+        {
+          text: "",
+          toolResults: [],
+        },
+      ]),
+    ).toBe(false);
+  });
+
+  it("accepts learner-visible text or a completed tool result", () => {
+    expect(
+      hasMeaningfulAssistantGenerationSteps([
+        {
+          text: "What do you predict the function returns?",
+          toolResults: [],
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      hasMeaningfulAssistantGenerationSteps([
+        {
+          text: "",
+          toolResults: [{ toolName: "create_spark" }],
+        },
+      ]),
+    ).toBe(true);
   });
 });
 

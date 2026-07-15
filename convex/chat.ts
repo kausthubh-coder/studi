@@ -152,6 +152,15 @@ function hasVisibleText(message: { text?: string }): boolean {
   return typeof message.text === "string" && message.text.trim().length > 0;
 }
 
+function isStructurallyEmptyContent(value: unknown): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    (typeof value === "string" && value.trim().length === 0) ||
+    (Array.isArray(value) && value.length === 0)
+  );
+}
+
 function hasMeaningfulContent(value: unknown): boolean {
   if (value === null || value === undefined) {
     return false;
@@ -920,7 +929,9 @@ async function cleanupFailedAssistantTurnState(
     .filter((message) => {
       return (
         message.message?.role === "assistant" &&
-        (message.status === "pending" || message.status === "failed") &&
+        (message.status === "pending" ||
+          message.status === "failed" ||
+          isStructurallyEmptyContent(message.message.content)) &&
         !hasVisibleText(message) &&
         !hasMeaningfulContent(message.message.content)
       );

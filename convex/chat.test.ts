@@ -933,7 +933,7 @@ describe("chat Convex auth and ownership", () => {
   });
 
   // The provider retry path is integration-level; these tests pin the deterministic cleanup/fallback contract it uses.
-  it("removes an empty pending assistant before fallback and keeps fallback idempotent", async () => {
+  it("removes empty pending and successful assistants before fallback and keeps fallback idempotent", async () => {
     vi.useFakeTimers();
     const t = testConvex();
     const agentThread = await t.mutation(components.agent.threads.createThread, {
@@ -981,6 +981,24 @@ describe("chat Convex auth and ownership", () => {
       ],
     });
     const pendingAssistantId = pending.messages[0]!._id;
+    const successful = await t.mutation(
+      components.agent.messages.addMessages,
+      {
+        threadId: agentThread._id,
+        userId: "user_a",
+        promptMessageId: sent.promptMessageId,
+        messages: [
+          {
+            message: {
+              role: "assistant" as const,
+              content: [],
+            },
+            status: "success" as const,
+          },
+        ],
+      },
+    );
+    const successfulAssistantId = successful.messages[0]!._id;
 
     await t.mutation(components.agent.streams.create, {
       threadId: agentThread._id,
@@ -997,7 +1015,7 @@ describe("chat Convex auth and ownership", () => {
         promptMessageId: sent.promptMessageId,
       }),
     ).resolves.toMatchObject({
-      deletedMessages: 1,
+      deletedMessages: 2,
       deletedStreams: 1,
       meaningfulContentFound: false,
       retryEligible: true,
@@ -1013,13 +1031,14 @@ describe("chat Convex auth and ownership", () => {
       promptMessageId: sent.promptMessageId,
     });
 
-    const [deletedPendingAssistant] = await t.query(
+    const [deletedPendingAssistant, deletedSuccessfulAssistant] = await t.query(
       components.agent.messages.getMessagesByIds,
       {
-        messageIds: [pendingAssistantId],
+        messageIds: [pendingAssistantId, successfulAssistantId],
       },
     );
     expect(deletedPendingAssistant).toBeNull();
+    expect(deletedSuccessfulAssistant).toBeNull();
 
     const streams = await t.query(components.agent.streams.list, {
       threadId: agentThread._id,
