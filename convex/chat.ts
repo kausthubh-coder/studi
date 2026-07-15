@@ -1,5 +1,7 @@
 import {
+  abortStream,
   listUIMessages,
+  listStreams,
   saveMessage,
   syncStreams,
   vStreamArgs,
@@ -69,13 +71,94 @@ const cleanupFailedAssistantTurnResultValidator = v.object({
 
 const assistantGenerationFailureText =
   "I hit a snag while generating that reply. Please try again in a moment.";
+const assistantGenerationCanceledText =
+  "You stopped this response. Ask a follow-up whenever you're ready.";
+const assistantGenerationLeaseMs = 15 * 60 * 1000;
+
+const generationStateValidator = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("cancel_requested"),
+);
+
+const generationControlValidator = v.union(
+  v.null(),
+  v.object({
+    order: v.number(),
+    state: generationStateValidator,
+  }),
+);
 
 function truncateTitle(value: string): string {
   return value.length > 60 ? `${value.slice(0, 60)}...` : value;
 }
 
+async function getChatRequestReceipt(
+  ctx: MutationCtx,
+  args: { userId: string; threadId: string; requestId: string },
+) {
+  return await ctx.db
+    .query("chatRequestReceipts")
+    .withIndex("by_userId_and_threadId_and_requestId", (q) =>
+      q
+        .eq("userId", args.userId)
+        .eq("threadId", args.threadId)
+        .eq("requestId", args.requestId),
+    )
+    .unique();
+}
+
+async function backfillLastChatRequestReceipt(
+  ctx: MutationCtx,
+  thread: {
+    userId: string;
+    threadId: string;
+    lastRequestId?: string;
+    lastPromptMessageId?: string;
+  },
+) {
+  if (!thread.lastRequestId || !thread.lastPromptMessageId) {
+    return;
+  }
+
+  const existing = await getChatRequestReceipt(ctx, {
+    userId: thread.userId,
+    threadId: thread.threadId,
+    requestId: thread.lastRequestId,
+  });
+  if (existing) {
+    return;
+  }
+
+  const [promptMessage] = await ctx.runQuery(
+    components.agent.messages.getMessagesByIds,
+    { messageIds: [thread.lastPromptMessageId] },
+  );
+  if (!promptMessage) {
+    return;
+  }
+
+  await ctx.db.insert("chatRequestReceipts", {
+    userId: thread.userId,
+    threadId: thread.threadId,
+    requestId: thread.lastRequestId,
+    promptMessageId: thread.lastPromptMessageId,
+    order: promptMessage.order,
+    createdAt: Date.now(),
+  });
+}
+
 function hasVisibleText(message: { text?: string }): boolean {
   return typeof message.text === "string" && message.text.trim().length > 0;
+}
+
+function isStructurallyEmptyContent(value: unknown): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    (typeof value === "string" && value.trim().length === 0) ||
+    (Array.isArray(value) && value.length === 0)
+  );
 }
 
 function hasMeaningfulContent(value: unknown): boolean {
@@ -350,15 +433,33 @@ export const sendMessage = mutation({
       throw new Error("Thread not found");
     }
 
+    const requestReceipt = await getChatRequestReceipt(ctx, {
+      userId: identity.subject,
+      threadId: args.threadId,
+      requestId: args.requestId,
+    });
+    if (requestReceipt) {
+      return {
+        promptMessageId: requestReceipt.promptMessageId,
+        deduped: true,
+      };
+    }
+
     if (
       ownedThread.lastRequestId === args.requestId &&
       typeof ownedThread.lastPromptMessageId === "string"
     ) {
+      await backfillLastChatRequestReceipt(ctx, ownedThread);
       return {
         promptMessageId: ownedThread.lastPromptMessageId,
         deduped: true,
       };
     }
+
+    // Preserve the final pre-deployment request before lastRequestId advances.
+    // New requests use the receipt table directly, while these two legacy
+    // fields remain as a compatibility fallback for existing thread rows.
+    await backfillLastChatRequestReceipt(ctx, ownedThread);
 
     const billingSnapshot = await ctx.runMutation(
       internalApi.billing.assertCanSendMessageInternal,
@@ -401,13 +502,26 @@ export const sendMessage = mutation({
     }
 
     const now = Date.now();
-    const { messageId } = await saveMessage(ctx, components.agent, {
-      threadId: args.threadId,
-      userId: identity.subject,
-      message: {
-        role: "user",
-        content,
+    const { messageId, message: promptMessage } = await saveMessage(
+      ctx,
+      components.agent,
+      {
+        threadId: args.threadId,
+        userId: identity.subject,
+        message: {
+          role: "user",
+          content,
+        },
       },
+    );
+
+    await ctx.db.insert("chatRequestReceipts", {
+      userId: identity.subject,
+      threadId: args.threadId,
+      requestId: args.requestId,
+      promptMessageId: messageId,
+      order: promptMessage.order,
+      createdAt: now,
     });
 
     await ctx.db.patch(ownedThread._id, {
@@ -418,11 +532,30 @@ export const sendMessage = mutation({
           : ownedThread.title,
       lastRequestId: args.requestId,
       lastPromptMessageId: messageId,
+      activeGenerations: [
+        ...(ownedThread.activeGenerations ?? []),
+        {
+          promptMessageId: messageId,
+          order: promptMessage.order,
+          state: "queued",
+          createdAt: now,
+          expiresAt: now + assistantGenerationLeaseMs,
+        },
+      ],
     });
 
     await ctx.scheduler.runAfter(
       0,
       internal.chatActions.generateAssistantReply,
+      {
+        threadId: args.threadId,
+        userId: identity.subject,
+        promptMessageId: messageId,
+      },
+    );
+    await ctx.scheduler.runAfter(
+      assistantGenerationLeaseMs,
+      internal.chat.expireAssistantGenerationInternal,
       {
         threadId: args.threadId,
         userId: identity.subject,
@@ -449,6 +582,204 @@ export const sendMessage = mutation({
       promptMessageId: messageId,
       deduped: false,
     };
+  },
+});
+
+export const cancelGeneration = mutation({
+  args: {
+    threadId: v.string(),
+  },
+  returns: v.object({ stopped: v.boolean() }),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
+
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", identity.subject).eq("threadId", args.threadId),
+      )
+      .unique();
+    if (!ownedThread) {
+      throw new Error("Thread not found");
+    }
+
+    const activeGenerations = ownedThread.activeGenerations ?? [];
+    if (activeGenerations.length === 0) {
+      throw new Error("The response finished before it could be stopped.");
+    }
+
+    const activeOrders = new Set(
+      activeGenerations.map((generation) => generation.order),
+    );
+    const streams = await listStreams(ctx, components.agent, {
+      threadId: args.threadId,
+      startOrder: Math.min(...activeOrders),
+      includeStatuses: ["streaming"],
+    });
+    const activeStreams = streams.filter((stream) =>
+      activeOrders.has(stream.order),
+    );
+
+    await ctx.db.patch(ownedThread._id, {
+      activeGenerations: activeGenerations.map((generation) => ({
+        ...generation,
+        state: "cancel_requested" as const,
+        cancelRequestedAt: Date.now(),
+      })),
+    });
+
+    for (const stream of activeStreams) {
+      try {
+        await abortStream(ctx, components.agent, {
+          streamId: stream.streamId,
+          reason: "learner_requested_stop",
+        });
+      } catch (error) {
+        console.error("Failed to abort persisted assistant stream", error);
+      }
+    }
+    return { stopped: true };
+  },
+});
+
+export const beginAssistantGenerationInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    if (!ownedThread) throw new Error("Thread not found");
+    const generationIndex = (ownedThread.activeGenerations ?? []).findIndex(
+      (generation) => generation.promptMessageId === args.promptMessageId,
+    );
+    if (generationIndex < 0) {
+      return false;
+    }
+    const generation = ownedThread.activeGenerations![generationIndex]!;
+    if (generation.state === "cancel_requested") return false;
+    const activeGenerations = [...ownedThread.activeGenerations!];
+    activeGenerations[generationIndex] = {
+      ...generation,
+      state: "running",
+    };
+    await ctx.db.patch(ownedThread._id, {
+      activeGenerations,
+    });
+    return true;
+  },
+});
+
+export const getGenerationControlInternal = internalQuery({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: generationControlValidator,
+  handler: async (ctx, args) => {
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    const activeGeneration = ownedThread?.activeGenerations?.find(
+      (generation) => generation.promptMessageId === args.promptMessageId,
+    );
+    if (!activeGeneration) {
+      return null;
+    }
+    return {
+      order: activeGeneration.order,
+      state: activeGeneration.state,
+    };
+  },
+});
+
+export const completeAssistantGenerationInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    if (ownedThread?.activeGenerations) {
+      const remainingGenerations = ownedThread.activeGenerations.filter(
+        (generation) => generation.promptMessageId !== args.promptMessageId,
+      );
+      if (
+        remainingGenerations.length !== ownedThread.activeGenerations.length
+      ) {
+        await ctx.db.patch(ownedThread._id, {
+          activeGenerations:
+            remainingGenerations.length > 0 ? remainingGenerations : undefined,
+        });
+      }
+    }
+    return null;
+  },
+});
+
+export const expireAssistantGenerationInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    const generation = ownedThread?.activeGenerations?.find(
+      (candidate) => candidate.promptMessageId === args.promptMessageId,
+    );
+    if (!ownedThread || !generation || generation.expiresAt > Date.now()) {
+      return null;
+    }
+
+    const streams = await listStreams(ctx, components.agent, {
+      threadId: args.threadId,
+      startOrder: generation.order,
+      includeStatuses: ["streaming"],
+    });
+    for (const stream of streams) {
+      if (stream.order !== generation.order) continue;
+      await abortStream(ctx, components.agent, {
+        streamId: stream.streamId,
+        reason: "generation_lease_expired",
+      });
+    }
+
+    const remainingGenerations = ownedThread.activeGenerations!.filter(
+      (candidate) => candidate.promptMessageId !== args.promptMessageId,
+    );
+    await ctx.db.patch(ownedThread._id, {
+      activeGenerations:
+        remainingGenerations.length > 0 ? remainingGenerations : undefined,
+    });
+    return null;
   },
 });
 
@@ -598,7 +929,9 @@ async function cleanupFailedAssistantTurnState(
     .filter((message) => {
       return (
         message.message?.role === "assistant" &&
-        (message.status === "pending" || message.status === "failed") &&
+        (message.status === "pending" ||
+          message.status === "failed" ||
+          isStructurallyEmptyContent(message.message.content)) &&
         !hasVisibleText(message) &&
         !hasMeaningfulContent(message.message.content)
       );
@@ -695,8 +1028,92 @@ export const saveAssistantFailureMessageInternal = internalMutation({
   },
 });
 
+export const saveAssistantCancellationMessageInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const cleanupResult = await cleanupFailedAssistantTurnState(ctx, args);
+    if (!cleanupResult.promptFound) {
+      return null;
+    }
+
+    const [promptMessage] = await ctx.runQuery(
+      components.agent.messages.getMessagesByIds,
+      { messageIds: [args.promptMessageId] },
+    );
+    if (!promptMessage || promptMessage.threadId !== args.threadId) return null;
+
+    const promptTurnMessages = await ctx.runQuery(
+      components.agent.messages.listMessagesByThreadId,
+      {
+        threadId: args.threadId,
+        order: "desc",
+        statuses: ["pending", "success", "failed"],
+        upToAndIncludingMessageId: args.promptMessageId,
+        paginationOpts: { cursor: null, numItems: 256 },
+      },
+    );
+    const cancellationAlreadySaved = promptTurnMessages.page.some(
+      (message) =>
+        message.order === promptMessage.order &&
+        message.message?.role === "assistant" &&
+        message.text?.trim() === assistantGenerationCanceledText,
+    );
+    if (cancellationAlreadySaved) return null;
+
+    const ownedThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .unique();
+    if (!ownedThread) throw new Error("Thread not found");
+
+    await saveMessage(ctx, components.agent, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      message: {
+        role: "assistant",
+        content: assistantGenerationCanceledText,
+      },
+    });
+    await ctx.db.patch(ownedThread._id, { lastMessageAt: Date.now() });
+    return null;
+  },
+});
+
 const codeSparkSessionsPerDeleteBatch = 4;
 const codeSparkRowsPerDeleteBatch = 64;
+const chatRequestReceiptsPerDeleteBatch = 64;
+
+async function deleteChatRequestReceiptBatch(
+  ctx: MutationCtx,
+  args: { userId: string; threadId: string },
+) {
+  const receipts = await ctx.db
+    .query("chatRequestReceipts")
+    .withIndex("by_userId_and_threadId", (q) =>
+      q.eq("userId", args.userId).eq("threadId", args.threadId),
+    )
+    .take(chatRequestReceiptsPerDeleteBatch);
+  for (const receipt of receipts) {
+    await ctx.db.delete(receipt._id);
+  }
+
+  return Boolean(
+    await ctx.db
+      .query("chatRequestReceipts")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .first(),
+  );
+}
 
 async function deleteCodeSparkThreadBatch(
   ctx: MutationCtx,
@@ -771,8 +1188,9 @@ export const continueDeleteThreadCodeSparksInternal = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const hasMore = await deleteCodeSparkThreadBatch(ctx, args);
-    if (hasMore) {
+    const hasMoreCodeSparkData = await deleteCodeSparkThreadBatch(ctx, args);
+    const hasMoreRequestReceipts = await deleteChatRequestReceiptBatch(ctx, args);
+    if (hasMoreCodeSparkData || hasMoreRequestReceipts) {
       await ctx.scheduler.runAfter(
         0,
         internalApi.chat.continueDeleteThreadCodeSparksInternal,
@@ -802,8 +1220,9 @@ export const deleteThreadRecordInternal = internalMutation({
     }
 
     const hasMoreCodeSparkData = await deleteCodeSparkThreadBatch(ctx, args);
+    const hasMoreRequestReceipts = await deleteChatRequestReceiptBatch(ctx, args);
     await ctx.db.delete(thread._id);
-    if (hasMoreCodeSparkData) {
+    if (hasMoreCodeSparkData || hasMoreRequestReceipts) {
       await ctx.scheduler.runAfter(
         0,
         internalApi.chat.continueDeleteThreadCodeSparksInternal,

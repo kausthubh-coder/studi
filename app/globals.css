@@ -163,13 +163,13 @@ body::after {
 .sidebar-thread-delete-btn {
   position: absolute;
   top: 50%;
-  right: 0.72rem;
+  right: 0.18rem;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.45rem;
-  height: 1.45rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 999px;
   border: 1px solid transparent;
   color: var(--fg-faint);
@@ -211,12 +211,14 @@ body::after {
     inset: 0 auto 0 0;
     z-index: 40;
     transform: translateX(-100%);
+    pointer-events: none;
     transition: transform 220ms ease;
     box-shadow: 0 18px 46px rgba(28, 18, 8, 0.26);
   }
 
   .studi-thread-sidebar[data-mobile-open="true"] {
     transform: translateX(0);
+    pointer-events: auto;
   }
 }
 
@@ -310,6 +312,8 @@ body::after {
 
 .thread-delete-modal-cancel,
 .thread-delete-modal-danger {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   border-radius: 0.62rem;
   padding: 0.48rem 0.78rem;
   font-family: var(--font-jakarta), system-ui, sans-serif;
@@ -371,31 +375,13 @@ body::after {
   box-shadow: 8px 8px 0px #1c1208;
 }
 
-/* Chat composer wrapper — floating over scroll content */
+/* Chat composer wrapper — occupies layout space so responses cannot hide below it. */
 .composer-footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex-shrink: 0;
   z-index: 10;
   padding: 0 1.5rem 1rem;
-  pointer-events: none;
-}
-
-.composer-footer > * {
-  pointer-events: auto;
-  position: relative;
-  z-index: 1;
-}
-
-.composer-footer::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  top: -2rem;
-  z-index: 0;
-  background: linear-gradient(to bottom, transparent, var(--bg) 60%);
-  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--bg) 28%);
 }
 
 .composer-card textarea {
@@ -484,7 +470,6 @@ body::after {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-
   .studi-landing .landing-marquee {
     transform: none !important;
   }
@@ -2628,13 +2613,11 @@ body::after {
   color: var(--code-spark-muted);
 }
 
-.code-spark-test-results[data-tone="passed"]
-  .code-spark-test-results-status {
+.code-spark-test-results[data-tone="passed"] .code-spark-test-results-status {
   color: var(--code-spark-green);
 }
 
-.code-spark-test-results[data-tone="failed"]
-  .code-spark-test-results-status {
+.code-spark-test-results[data-tone="failed"] .code-spark-test-results-status {
   color: var(--code-spark-red);
 }
 
@@ -3763,7 +3746,7 @@ body::after {
   .spark-chat-column {
     width: var(--spark-chat-width, 420px);
     max-width: var(--spark-chat-width, 420px);
-    min-width: 320px;
+    min-width: 0;
   }
 }
 
@@ -3831,13 +3814,20 @@ body::after {
 }
 
 .spark-resize-handle:hover,
-.spark-resize-handle:active {
+.spark-resize-handle:active,
+.spark-resize-handle:focus-visible {
   background: var(--accent-dim);
 }
 
 .spark-resize-handle:hover::after,
-.spark-resize-handle:active::after {
+.spark-resize-handle:active::after,
+.spark-resize-handle:focus-visible::after {
   opacity: 0.5;
+}
+
+.spark-resize-handle:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: -3px;
 }
 
 @media (min-width: 1024px) {
@@ -4629,4 +4619,22 @@ body::after {
 
 .voice-warning-banner-cta:hover {
   background: #8a5e14;
+}
+
+/* Reserve the space Clerk's client-rendered plan cards need before they mount. */
+.studi-pricing-table-reserve {
+  min-height: 27rem;
+  contain: layout;
+}
+
+@media (min-width: 48rem) {
+  .studi-pricing-table-reserve {
+    min-height: 18rem;
+  }
+}
+
+@media (min-width: 64rem) {
+  .studi-pricing-table-reserve {
+    min-height: 16rem;
+  }
 }

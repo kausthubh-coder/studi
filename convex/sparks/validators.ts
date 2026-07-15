@@ -180,7 +180,10 @@ const blockedSceneCodePatterns: Array<[RegExp, string]> = [
   [/\bWebSocket\b/i, "WebSocket is not allowed in Scene Spark v2."],
   [/\bEventSource\b/i, "EventSource is not allowed in Scene Spark v2."],
   [/\bsendBeacon\s*\(/i, "sendBeacon() is not allowed in Scene Spark v2."],
-  [/\bnavigator\.sendBeacon\s*\(/i, "sendBeacon() is not allowed in Scene Spark v2."],
+  [
+    /\bnavigator\.sendBeacon\s*\(/i,
+    "sendBeacon() is not allowed in Scene Spark v2.",
+  ],
   [/\blocalStorage\b/i, "Browser storage is not allowed in Scene Spark v2."],
   [/\bsessionStorage\b/i, "Browser storage is not allowed in Scene Spark v2."],
   [/\bindexedDB\b/i, "Browser storage is not allowed in Scene Spark v2."],
@@ -190,12 +193,24 @@ const blockedSceneCodePatterns: Array<[RegExp, string]> = [
   [/\bimport\s*\(/i, "Dynamic import is not allowed in Scene Spark v2."],
   [/\bwindow\.open\s*\(/i, "Popups are not allowed in Scene Spark v2."],
   [/\bopen\s*\(/i, "Popups are not allowed in Scene Spark v2."],
-  [/\btop\.location\b/i, "Top-level navigation is not allowed in Scene Spark v2."],
-  [/\bparent\.location\b/i, "Parent navigation is not allowed in Scene Spark v2."],
+  [
+    /\btop\.location\b/i,
+    "Top-level navigation is not allowed in Scene Spark v2.",
+  ],
+  [
+    /\bparent\.location\b/i,
+    "Parent navigation is not allowed in Scene Spark v2.",
+  ],
   [/\bwindow\.location\b/i, "Navigation is not allowed in Scene Spark v2."],
   [/\bdocument\.location\b/i, "Navigation is not allowed in Scene Spark v2."],
-  [/\blocation\.(assign|replace|href)\b/i, "Navigation is not allowed in Scene Spark v2."],
-  [/\bnavigator\.serviceWorker\b/i, "Service workers are not allowed in Scene Spark v2."],
+  [
+    /\blocation\.(assign|replace|href)\b/i,
+    "Navigation is not allowed in Scene Spark v2.",
+  ],
+  [
+    /\bnavigator\.serviceWorker\b/i,
+    "Service workers are not allowed in Scene Spark v2.",
+  ],
 ];
 
 function validateSceneCodeSafety(code: string): string[] {
@@ -212,6 +227,376 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+type SceneHtmlElement = {
+  tagName: string;
+  attributes: string;
+};
+
+function readHtmlAttribute(attributes: string, name: string): string | null {
+  const match = attributes.match(
+    new RegExp(
+      `\\b${escapeRegExp(name)}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+      "i",
+    ),
+  );
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+function findSceneElementById(
+  indexHtml: string,
+  controlId: string,
+): SceneHtmlElement | null {
+  const tagPattern = /<\s*([a-z][\w:-]*)\b([^>]*)>/gi;
+  for (const match of indexHtml.matchAll(tagPattern)) {
+    const attributes = match[2] ?? "";
+    if (readHtmlAttribute(attributes, "id") === controlId) {
+      return {
+        tagName: (match[1] ?? "").toLowerCase(),
+        attributes,
+      };
+    }
+  }
+  return null;
+}
+
+function hasEventHandlerForControl(
+  code: string,
+  controlId: string,
+  elementAttributes: string,
+  eventNames: string[],
+): boolean {
+  const eventPattern = eventNames.map(escapeRegExp).join("|");
+  if (
+    new RegExp(`\\bon(?:${eventPattern})\\s*=`, "i").test(elementAttributes)
+  ) {
+    return true;
+  }
+
+  const escapedId = escapeRegExp(controlId);
+  const lookup = `(?:document\\s*\\.\\s*)?(?:getElementById\\s*\\(\\s*["']${escapedId}["']\\s*\\)|querySelector\\s*\\(\\s*["']#${escapedId}["']\\s*\\))`;
+  const namedEvent = `["'](?:${eventPattern})["']`;
+  const directHandler = new RegExp(
+    `${lookup}\\s*\\?*\\.\\s*addEventListener\\s*\\(\\s*${namedEvent}`,
+    "i",
+  );
+  if (directHandler.test(code)) {
+    return true;
+  }
+
+  const assignmentPattern = new RegExp(
+    `\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*${lookup}`,
+    "gi",
+  );
+  for (const match of code.matchAll(assignmentPattern)) {
+    const variableName = match[1];
+    if (!variableName) continue;
+    const variableHandler = new RegExp(
+      `\\b${escapeRegExp(variableName)}\\s*\\?*\\.\\s*addEventListener\\s*\\(\\s*${namedEvent}`,
+      "i",
+    );
+    const assignedHandler = new RegExp(
+      `\\b${escapeRegExp(variableName)}\\s*\\.\\s*on(?:${eventPattern})\\s*=`,
+      "i",
+    );
+    if (variableHandler.test(code) || assignedHandler.test(code)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasKeyboardHandlerForControl(
+  code: string,
+  controlId: string,
+  elementAttributes: string,
+): boolean {
+  return hasEventHandlerForControl(code, controlId, elementAttributes, [
+    "keydown",
+    "keyup",
+  ]);
+}
+
+function validateSceneV2SliderAccessibility(
+  controls: unknown,
+  indexHtml: string,
+  code: string,
+): string[] {
+  if (!Array.isArray(controls)) return [];
+
+  const errors: string[] = [];
+  for (const control of controls) {
+    if (!isPlainRecord(control) || control.type !== "slider") continue;
+    const id = typeof control.id === "string" ? control.id.trim() : "";
+    if (!id) continue;
+
+    const element = findSceneElementById(indexHtml, id);
+    if (!element) {
+      errors.push(
+        `Slider control "${id}" must use the same stable id on its interactive element.`,
+      );
+      continue;
+    }
+
+    const isNativeRange =
+      element.tagName === "input" &&
+      readHtmlAttribute(element.attributes, "type")?.toLowerCase() === "range";
+    if (isNativeRange) continue;
+
+    const hasSliderSemantics =
+      readHtmlAttribute(element.attributes, "role")?.toLowerCase() ===
+        "slider" &&
+      readHtmlAttribute(element.attributes, "tabindex") === "0" &&
+      readHtmlAttribute(element.attributes, "aria-valuemin") !== null &&
+      readHtmlAttribute(element.attributes, "aria-valuemax") !== null &&
+      readHtmlAttribute(element.attributes, "aria-valuenow") !== null;
+    const hasKeyboardHandler = hasKeyboardHandlerForControl(
+      code,
+      id,
+      element.attributes,
+    );
+
+    if (!hasSliderSemantics || !hasKeyboardHandler) {
+      errors.push(
+        `Slider control "${id}" must be a native range input or a focusable role="slider" with value semantics and a keyboard handler bound to that control id.`,
+      );
+    }
+  }
+
+  return errors;
+}
+
+type PointerTargetExtraction = {
+  targetIds: Set<string>;
+  hasUnresolvedTarget: boolean;
+};
+
+function extractPointerTargets(
+  indexHtml: string,
+  code: string,
+): PointerTargetExtraction {
+  const targetIds = new Set<string>();
+  const variableIds = new Map<string, string>();
+  const lookupAssignments = [
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:document\s*\.\s*)?getElementById\s*\(\s*["']([^"']+)["']\s*\)/gi,
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:document\s*\.\s*)?querySelector\s*\(\s*["']#([^"']+)["']\s*\)/gi,
+  ];
+  for (const pattern of lookupAssignments) {
+    for (const match of code.matchAll(pattern)) {
+      const variableName = match[1];
+      const targetId = match[2];
+      if (variableName && targetId) variableIds.set(variableName, targetId);
+    }
+  }
+
+  const listenerPattern =
+    /\baddEventListener\s*\(\s*["'](?:pointerdown|mousedown|touchstart)["']/gi;
+  const propertyPattern =
+    /\.\s*on(?:pointerdown|mousedown|touchstart)\s*=/gi;
+  const pointerBindingCount =
+    Array.from(code.matchAll(listenerPattern)).length +
+    Array.from(code.matchAll(propertyPattern)).length;
+  let resolvedBindingCount = 0;
+
+  const directBindings = [
+    /(?:document\s*\.\s*)?getElementById\s*\(\s*["']([^"']+)["']\s*\)\s*\?*\.\s*addEventListener\s*\(\s*["'](?:pointerdown|mousedown|touchstart)["']/gi,
+    /(?:document\s*\.\s*)?querySelector\s*\(\s*["']#([^"']+)["']\s*\)\s*\?*\.\s*addEventListener\s*\(\s*["'](?:pointerdown|mousedown|touchstart)["']/gi,
+    /(?:document\s*\.\s*)?getElementById\s*\(\s*["']([^"']+)["']\s*\)\s*\?*\.\s*on(?:pointerdown|mousedown|touchstart)\s*=/gi,
+    /(?:document\s*\.\s*)?querySelector\s*\(\s*["']#([^"']+)["']\s*\)\s*\?*\.\s*on(?:pointerdown|mousedown|touchstart)\s*=/gi,
+  ];
+  for (const pattern of directBindings) {
+    for (const match of code.matchAll(pattern)) {
+      const targetId = match[1];
+      if (!targetId) continue;
+      targetIds.add(targetId);
+      resolvedBindingCount += 1;
+    }
+  }
+
+  const variableBindings = [
+    /\b([A-Za-z_$][\w$]*)\s*\?*\.\s*addEventListener\s*\(\s*["'](?:pointerdown|mousedown|touchstart)["']/gi,
+    /\b([A-Za-z_$][\w$]*)\s*\.\s*on(?:pointerdown|mousedown|touchstart)\s*=/gi,
+  ];
+  for (const pattern of variableBindings) {
+    for (const match of code.matchAll(pattern)) {
+      const variableName = match[1];
+      const targetId = variableName ? variableIds.get(variableName) : undefined;
+      if (!targetId) continue;
+      targetIds.add(targetId);
+      resolvedBindingCount += 1;
+    }
+  }
+
+  let hasUnresolvedTarget = resolvedBindingCount < pointerBindingCount;
+  const tagPattern = /<\s*([a-z][\w:-]*)\b([^>]*)>/gi;
+  for (const match of indexHtml.matchAll(tagPattern)) {
+    const attributes = match[2] ?? "";
+    const hasInlinePointerHandler =
+      /\bon(?:pointerdown|mousedown|touchstart)\s*=/i.test(attributes);
+    const draggable = readHtmlAttribute(attributes, "draggable");
+    const isDraggable =
+      (draggable !== null && draggable.toLowerCase() !== "false") ||
+      /\bdraggable\b(?!\s*=)/i.test(attributes);
+    if (!hasInlinePointerHandler && !isDraggable) continue;
+
+    const targetId = readHtmlAttribute(attributes, "id");
+    if (targetId) targetIds.add(targetId);
+    else hasUnresolvedTarget = true;
+  }
+
+  return { targetIds, hasUnresolvedTarget };
+}
+
+function isNativeKeyboardControl(element: SceneHtmlElement): boolean {
+  if (
+    element.tagName === "button" ||
+    element.tagName === "select" ||
+    element.tagName === "textarea" ||
+    element.tagName === "summary"
+  ) {
+    return true;
+  }
+  if (element.tagName === "input") {
+    return (
+      readHtmlAttribute(element.attributes, "type")?.toLowerCase() !== "hidden"
+    );
+  }
+  return (
+    element.tagName === "a" &&
+    readHtmlAttribute(element.attributes, "href") !== null
+  );
+}
+
+function hasNativeActivationEquivalent(
+  element: SceneHtmlElement,
+  code: string,
+  targetId: string,
+): boolean {
+  let activationEvents: string[];
+  if (
+    element.tagName === "button" ||
+    element.tagName === "summary" ||
+    element.tagName === "a"
+  ) {
+    activationEvents = ["click"];
+  } else if (element.tagName === "input") {
+    const inputType =
+      readHtmlAttribute(element.attributes, "type")?.toLowerCase() ?? "text";
+    activationEvents = ["button", "submit", "reset", "image"].includes(
+      inputType,
+    )
+      ? ["click"]
+      : inputType === "checkbox" || inputType === "radio"
+        ? ["click", "change"]
+        : ["input", "change"];
+  } else {
+    activationEvents = ["input", "change"];
+  }
+
+  return (
+    hasEventHandlerForControl(
+      code,
+      targetId,
+      element.attributes,
+      activationEvents,
+    ) || hasKeyboardHandlerForControl(code, targetId, element.attributes)
+  );
+}
+
+function hasCustomKeyboardSemantics(
+  element: SceneHtmlElement,
+  code: string,
+  targetId: string,
+): boolean {
+  const role = readHtmlAttribute(element.attributes, "role")?.toLowerCase();
+  const supportedRoles = new Set([
+    "button",
+    "checkbox",
+    "option",
+    "radio",
+    "slider",
+    "spinbutton",
+    "switch",
+  ]);
+  if (
+    !role ||
+    !supportedRoles.has(role) ||
+    readHtmlAttribute(element.attributes, "tabindex") !== "0" ||
+    !hasKeyboardHandlerForControl(code, targetId, element.attributes)
+  ) {
+    return false;
+  }
+
+  if (role === "slider" || role === "spinbutton") {
+    return (
+      readHtmlAttribute(element.attributes, "aria-valuemin") !== null &&
+      readHtmlAttribute(element.attributes, "aria-valuemax") !== null &&
+      readHtmlAttribute(element.attributes, "aria-valuenow") !== null
+    );
+  }
+  return true;
+}
+
+function validatePointerTargetAccessibility(
+  controls: unknown,
+  indexHtml: string,
+  code: string,
+): string[] {
+  const errors: string[] = [];
+  const declaredSliderIds = new Set(
+    Array.isArray(controls)
+      ? controls
+          .filter(
+            (control) =>
+              isPlainRecord(control) &&
+              control.type === "slider" &&
+              typeof control.id === "string" &&
+              control.id.trim(),
+          )
+          .map((control) =>
+            String((control as Record<string, unknown>).id).trim(),
+          )
+      : [],
+  );
+  const { targetIds, hasUnresolvedTarget } = extractPointerTargets(
+    indexHtml,
+    code,
+  );
+
+  if (hasUnresolvedTarget) {
+    errors.push(
+      "Pointer-start handlers must be bound to an interactive element with a stable id so keyboard access can be validated.",
+    );
+  }
+
+  for (const targetId of targetIds) {
+    const element = findSceneElementById(indexHtml, targetId);
+    if (!element) {
+      errors.push(
+        `Pointer target "${targetId}" must use the same stable id on its interactive element.`,
+      );
+      continue;
+    }
+    if (isNativeKeyboardControl(element)) {
+      if (hasNativeActivationEquivalent(element, code, targetId)) continue;
+      errors.push(
+        `Pointer target "${targetId}" must bind a same-target click, input, change, or keyboard handler so native keyboard activation performs the same behavior.`,
+      );
+      continue;
+    }
+    if (declaredSliderIds.has(targetId)) continue;
+    if (hasCustomKeyboardSemantics(element, code, targetId)) {
+      continue;
+    }
+
+    errors.push(
+      `Pointer target "${targetId}" must be a native keyboard control or expose a focusable interactive role and keyboard handler bound to that id.`,
+    );
+  }
+
+  return errors;
+}
+
 function validateSceneV2Controls(controls: unknown): string[] {
   const errors: string[] = [];
 
@@ -226,8 +611,7 @@ function validateSceneV2Controls(controls: unknown): string[] {
       return;
     }
     const id = typeof control.id === "string" ? control.id : "";
-    const controlLabel =
-      typeof control.label === "string" ? control.label : "";
+    const controlLabel = typeof control.label === "string" ? control.label : "";
     if (!id.trim()) {
       errors.push(`${label} id is required.`);
     }
@@ -320,10 +704,7 @@ export function validateSceneV2Payload(
   }
 
   const fileEntries = Object.entries(files);
-  if (
-    typeof files["index.html"] !== "string" ||
-    !files["index.html"].trim()
-  ) {
+  if (typeof files["index.html"] !== "string" || !files["index.html"].trim()) {
     errors.push("Scene v2 requires files.index.html.");
   }
 
@@ -341,14 +722,63 @@ export function validateSceneV2Payload(
     }
   }
 
+  const indexHtml =
+    typeof files["index.html"] === "string" ? files["index.html"] : "";
   const combinedCode = fileEntries
     .filter(([, contents]) => typeof contents === "string")
     .map(([, contents]) => contents)
     .join("\n");
+  const behaviorCode = [
+    typeof files["script.js"] === "string" ? files["script.js"] : "",
+    ...extractInlineScriptBlocks(indexHtml),
+  ].join("\n");
   errors.push(...validateSceneCodeSafety(combinedCode));
 
-  const indexHtml =
-    typeof files["index.html"] === "string" ? files["index.html"] : "";
+  errors.push(
+    ...validateSceneV2SliderAccessibility(
+      candidate.controls,
+      indexHtml,
+      combinedCode,
+    ),
+  );
+  errors.push(
+    ...validatePointerTargetAccessibility(
+      candidate.controls,
+      indexHtml,
+      behaviorCode,
+    ),
+  );
+
+  const hasControls =
+    Array.isArray(candidate.controls) && candidate.controls.length > 0;
+  const hasCheckpoints =
+    Array.isArray(candidate.checkpoints) && candidate.checkpoints.length > 0;
+  const hasStatefulMetadata = hasControls || hasCheckpoints;
+  if (
+    hasStatefulMetadata &&
+    !/\bStudiScene\s*\?*\.\s*onRestore\s*\(/i.test(combinedCode)
+  ) {
+    errors.push(
+      "Interactive Scene v2 controls must restore progress with window.StudiScene.onRestore(...).",
+    );
+  }
+  if (
+    hasControls &&
+    !/\bStudiScene\s*\?*\.\s*interaction\s*\(/i.test(behaviorCode)
+  ) {
+    errors.push(
+      "Scene v2 controls must emit progress with window.StudiScene.interaction(...).",
+    );
+  }
+  if (
+    hasCheckpoints &&
+    !/\bStudiScene\s*\?*\.\s*checkpoint\s*\(/i.test(behaviorCode)
+  ) {
+    errors.push(
+      "Scene v2 checkpoints must emit answers with window.StudiScene.checkpoint(...).",
+    );
+  }
+
   const externalScriptSrcs = extractExternalScriptSrcs(indexHtml);
   if (externalScriptSrcs.length > 0) {
     errors.push(
@@ -357,7 +787,9 @@ export function validateSceneV2Payload(
   }
 
   if (/<\s*link\b[^>]*\bhref\s*=/i.test(indexHtml)) {
-    errors.push("External stylesheets and preloads are not allowed in Scene Spark v2.");
+    errors.push(
+      "External stylesheets and preloads are not allowed in Scene Spark v2.",
+    );
   }
 
   if (/<\s*meta\b[^>]*http-equiv\s*=\s*["']?refresh/i.test(indexHtml)) {

@@ -29,6 +29,7 @@ import type {
   ThreadSummary,
 } from "@/components/studi-chat/types";
 import { SparkPanel } from "@/components/sparks/SparkPanel";
+import { SparkResizeHandle } from "@/components/sparks/SparkResizeHandle";
 import type { SparkArtifact } from "@/lib/sparks/contracts";
 import { IconCompose } from "@/components/studi-chat/icons";
 
@@ -76,6 +77,7 @@ export default function StudiChat() {
   );
   const generateUploadUrl = useMutation(api.chat.generateUploadUrl);
   const saveAttachment = useMutation(api.chat.saveAttachment);
+  const cancelGeneration = useMutation(api.chat.cancelGeneration);
   const syncBillingProfile = useAction(
     api.billingActions.syncCurrentUserBillingProfile,
   );
@@ -95,6 +97,10 @@ export default function StudiChat() {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isStoppingGeneration, setIsStoppingGeneration] = useState(false);
+  const [stopGenerationError, setStopGenerationError] = useState<string | null>(
+    null,
+  );
   const [pendingAttachments, setPendingAttachments] = useState<
     PendingAttachment[]
   >([]);
@@ -105,7 +111,7 @@ export default function StudiChat() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const touchTrackingRef = useRef(false);
-  const sparkResizingRef = useRef(false);
+  const sparkSplitContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
@@ -145,12 +151,6 @@ export default function StudiChat() {
     selectedThreadId ? { threadId: selectedThreadId } : "skip",
     { initialNumItems: 30, stream: true },
   );
-
-  useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
-  }, [selectedThreadId, uiMessages.results.length]);
 
   const currentAgentState = useMemo<AgentUiState>(
     () => deriveAgentUiState(uiMessages.results),
@@ -247,6 +247,7 @@ export default function StudiChat() {
       );
 
       setComposerError(null);
+      setStopGenerationError(null);
       setInput("");
       setPendingAttachments([]);
       setIsSending(true);
@@ -287,6 +288,33 @@ export default function StudiChat() {
     ],
   );
 
+  const handleStopGeneration = useCallback(async () => {
+    if (!selectedThreadId || isStoppingGeneration) return;
+    const targetThreadId = selectedThreadId;
+    setStopGenerationError(null);
+    setIsStoppingGeneration(true);
+    let stopAccepted = false;
+    try {
+      await cancelGeneration({ threadId: selectedThreadId });
+      stopAccepted = true;
+    } catch (error) {
+      console.error("Stop generation failed", error);
+      if (selectedThreadIdRef.current === targetThreadId) {
+        setStopGenerationError(getErrorMessage(error));
+      }
+    } finally {
+      if (!stopAccepted && selectedThreadIdRef.current === targetThreadId) {
+        setIsStoppingGeneration(false);
+      }
+    }
+  }, [cancelGeneration, isStoppingGeneration, selectedThreadId]);
+
+  useEffect(() => {
+    if (currentAgentState.phase === "idle") {
+      setIsStoppingGeneration(false);
+    }
+  }, [currentAgentState.phase]);
+
   const removeAttachment = useCallback((attachmentId: Id<"attachments">) => {
     setPendingAttachments((previous) => {
       const removed = previous.find(
@@ -305,6 +333,8 @@ export default function StudiChat() {
     setExpandedSpark(null);
     setMobilePanelView("chat");
     setInput("");
+    setIsStoppingGeneration(false);
+    setStopGenerationError(null);
     setPendingAttachments((previous) => {
       releaseAttachmentPreviewUrls(previous);
       return [];
@@ -318,6 +348,8 @@ export default function StudiChat() {
     setSelectedThreadId(id);
     setExpandedSpark(null);
     setMobilePanelView("chat");
+    setIsStoppingGeneration(false);
+    setStopGenerationError(null);
     setIsMobileSidebarOpen(false);
   }, []);
 
@@ -365,53 +397,6 @@ export default function StudiChat() {
       setMobilePanelView("chat");
     }
   }, [expandedSpark]);
-
-  const handleSparkResizeStart = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      sparkResizingRef.current = true;
-      const onMove = (moveEvent: MouseEvent) => {
-        if (!sparkResizingRef.current) return;
-        const nextWidth = Math.min(
-          Math.max(moveEvent.clientX, 340),
-          window.innerWidth - 420,
-        );
-        setSparkChatWidth(nextWidth);
-      };
-      const onUp = () => {
-        sparkResizingRef.current = false;
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-      };
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    },
-    [],
-  );
-
-  const handleSparkResizeTouchStart = useCallback(
-    () => {
-      sparkResizingRef.current = true;
-      const onMove = (moveEvent: globalThis.TouchEvent) => {
-        if (!sparkResizingRef.current) return;
-        const touch = moveEvent.touches[0];
-        if (!touch) return;
-        const nextWidth = Math.min(
-          Math.max(touch.clientX, 340),
-          window.innerWidth - 420,
-        );
-        setSparkChatWidth(nextWidth);
-      };
-      const onEnd = () => {
-        sparkResizingRef.current = false;
-        window.removeEventListener("touchmove", onMove);
-        window.removeEventListener("touchend", onEnd);
-      };
-      window.addEventListener("touchmove", onMove);
-      window.addEventListener("touchend", onEnd);
-    },
-    [],
-  );
 
   const handleTouchStart = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
@@ -511,7 +496,11 @@ export default function StudiChat() {
 
       <main className="relative flex min-w-0 flex-1 overflow-hidden">
         {threadDeleteError || billingBanner ? (
-          <div className="absolute left-1/2 top-3 z-20 w-full max-w-xl -translate-x-1/2 px-4">
+          <div
+            className={`absolute left-1/2 z-20 w-full max-w-xl -translate-x-1/2 px-4 ${
+              isMobile ? "top-14" : "top-3"
+            }`}
+          >
             {threadDeleteError ? (
               <div className="rounded-2xl border border-red-200 bg-red-50/95 px-4 py-3 text-sm text-red-900 shadow-sm backdrop-blur">
                 {threadDeleteError}
@@ -549,6 +538,7 @@ export default function StudiChat() {
           />
         ) : (
           <div
+            ref={sparkSplitContainerRef}
             className={`flex flex-1 overflow-hidden ${
               expandedSpark ? "flex-col lg:flex-row" : ""
             }`}
@@ -606,6 +596,10 @@ export default function StudiChat() {
                 onPaste={onPaste}
                 onUpload={uploadFiles}
                 onRemoveAttachment={removeAttachment}
+                agentPhase={currentAgentState.phase}
+                isStoppingGeneration={isStoppingGeneration}
+                stopGenerationError={stopGenerationError}
+                onStopGeneration={() => void handleStopGeneration()}
               />
             </div>
 
@@ -613,11 +607,10 @@ export default function StudiChat() {
               <div
                 className={`flex min-w-0 flex-1 ${isMobile && mobilePanelView !== "spark" ? "hidden" : ""}`}
               >
-                <div
-                  className="spark-resize-handle"
-                  onMouseDown={handleSparkResizeStart}
-                  onTouchStart={handleSparkResizeTouchStart}
-                  title="Drag to resize"
+                <SparkResizeHandle
+                  containerRef={sparkSplitContainerRef}
+                  width={sparkChatWidth}
+                  onWidthChange={setSparkChatWidth}
                 />
                 <SparkPanel
                   spark={expandedSpark}

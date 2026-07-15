@@ -5,9 +5,8 @@ import { WaitlistForm } from "./WaitlistForm";
 
 const joinSuccessfully = fn(async () => ({
   success: true,
-  alreadyOnList: false,
 }));
-const joinAgain = fn(async () => ({ success: true, alreadyOnList: true }));
+const joinAgain = fn(async () => ({ success: true }));
 const rejectJoin = fn(async () => ({
   success: false,
   error: "Early access is paused for a moment. Please try again soon.",
@@ -66,7 +65,7 @@ export const CoralIdle: Story = {
   play: async ({ canvas }) => {
     await expect(canvas.getByRole("textbox", { name: /email/i })).toBeEnabled();
     await expect(
-      canvas.getByText("No credit card required. Free for students."),
+      canvas.getByText(/one email joins the waitlist/i),
     ).toBeInTheDocument();
   },
 };
@@ -102,46 +101,23 @@ export const Submitting: Story = {
   },
 };
 
-export const NewSignupSuccessModal: Story = {
+export const NewSignupSuccess: Story = {
   play: async ({ canvas, userEvent }) => {
     await submitEmail(canvas, userEvent);
-    await waitFor(() =>
-      expect(canvas.getByRole("dialog")).toHaveAccessibleName(
-        "You're on the list!",
-      ),
-    );
-    await expect(canvas.getByText(/opens its doors/i)).toBeInTheDocument();
-    const closeButton = canvas.getByRole("button", { name: "Close" });
-    await waitFor(() => expect(closeButton).toHaveFocus());
-
-    await userEvent.click(closeButton);
-    await waitFor(() =>
-      expect(canvas.queryByRole("dialog")).not.toBeInTheDocument(),
-    );
-
-    const reopenButton = canvas.getByRole("button", {
-      name: "Get ahead in line →",
-    });
-    await waitFor(() => expect(reopenButton).toHaveFocus());
-
-    await userEvent.click(reopenButton);
-    await waitFor(() =>
-      expect(canvas.getByRole("button", { name: "Close" })).toHaveFocus(),
-    );
-    await userEvent.tab({ shift: true });
+    const status = await canvas.findByRole("status");
+    await expect(status).toHaveTextContent("You're on the list!");
+    await waitFor(() => expect(status).toHaveFocus());
     await expect(
-      canvas.getByRole("button", { name: "No thanks, I'll wait my turn" }),
-    ).toHaveFocus();
-
-    await userEvent.keyboard("{Escape}");
-    await waitFor(() =>
-      expect(canvas.queryByRole("dialog")).not.toBeInTheDocument(),
+      canvas.getByRole("link", { name: /optional: answer 8 short steps/i }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringMatching(/^\/waitlist\/?\?source=landing$/),
     );
-    await waitFor(() => expect(reopenButton).toHaveFocus());
+    await expect(canvas.queryByRole("dialog")).not.toBeInTheDocument();
   },
 };
 
-export const AlreadyRegistered: Story = {
+export const RepeatSignupUsesGenericSuccess: Story = {
   parameters: {
     studi: {
       convex: { actions: { "waitlistPublic:joinWaitlist": joinAgain } },
@@ -149,10 +125,12 @@ export const AlreadyRegistered: Story = {
   },
   play: async ({ canvas, userEvent }) => {
     await submitEmail(canvas, userEvent);
+    await expect(await canvas.findByRole("status")).toHaveTextContent(
+      "You're on the list!",
+    );
     await expect(
-      await canvas.findByRole("heading", { name: "Already on the list!" }),
-    ).toBeInTheDocument();
-    await expect(canvas.getByText(/already registered/i)).toBeInTheDocument();
+      canvas.queryByText(/already registered/i),
+    ).not.toBeInTheDocument();
   },
 };
 
@@ -184,7 +162,7 @@ export const NetworkError: Story = {
   },
 };
 
-export const MobileModal: Story = {
+export const MobileSuccess: Story = {
   parameters: { viewport: { defaultViewport: "mobile1" } },
-  play: NewSignupSuccessModal.play,
+  play: NewSignupSuccess.play,
 };

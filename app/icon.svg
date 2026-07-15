@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Studi">
+  <rect width="64" height="64" rx="16" fill="#fdf8f2"/>
+  <path d="M11 29.8 52 11 38.5 53l-9.2-15.7L11 29.8Z" fill="#e05a3a" stroke="#1c1208" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m29.3 37.3 22.7-26-29.2 20.9" fill="none" stroke="#1c1208" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

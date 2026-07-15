@@ -8,10 +8,12 @@ const mocks = vi.hoisted(() => ({
   sendFollowupMessage: vi.fn(),
   rawSendMessageMutation: vi.fn(),
   deleteThread: vi.fn(),
+  cancelGeneration: vi.fn(),
   backfillThreadActivity: vi.fn(),
   generateUploadUrl: vi.fn(),
   saveAttachment: vi.fn(),
   syncBillingProfile: vi.fn(),
+  uiMessages: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("next/link", () => ({
@@ -32,7 +34,7 @@ vi.mock("@clerk/nextjs", () => ({
 
 vi.mock("@convex-dev/agent/react", () => ({
   useUIMessages: () => ({
-    results: [],
+    results: mocks.uiMessages,
     status: "Exhausted",
     loadMore: vi.fn(),
   }),
@@ -62,6 +64,9 @@ vi.mock("convex/react", () => ({
     }
     if (name === "chat:backfillThreadActivityForCurrentUser") {
       return mocks.backfillThreadActivity;
+    }
+    if (name === "chat:cancelGeneration") {
+      return mocks.cancelGeneration;
     }
     if (name === "chat:generateUploadUrl") {
       return mocks.generateUploadUrl;
@@ -98,6 +103,7 @@ describe("StudiChat follow-up sending", () => {
       deduped: false,
     });
     mocks.deleteThread.mockResolvedValue({ deleted: true });
+    mocks.cancelGeneration.mockResolvedValue({ stopped: true });
     mocks.backfillThreadActivity.mockResolvedValue({ scanned: 0, patched: 0 });
     mocks.generateUploadUrl.mockResolvedValue("http://localhost/upload");
     mocks.saveAttachment.mockResolvedValue({
@@ -110,6 +116,7 @@ describe("StudiChat follow-up sending", () => {
       planKey: "free_onboarding",
       status: "onboarding",
     });
+    mocks.uiMessages = [];
 
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -125,9 +132,12 @@ describe("StudiChat follow-up sending", () => {
   it("sends follow-up messages through the chat action, not the raw mutation", async () => {
     render(<StudiChat />);
 
-    fireEvent.change(screen.getByPlaceholderText("What would you like to learn?"), {
-      target: { value: "Explain slope" },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to learn?"),
+      {
+        target: { value: "Explain slope" },
+      },
+    );
     fireEvent.click(screen.getByLabelText("Send message"));
 
     await waitFor(() => {
@@ -139,9 +149,8 @@ describe("StudiChat follow-up sending", () => {
       );
     });
 
-    const followupComposer = await screen.findByPlaceholderText(
-      "Ask a follow-up...",
-    );
+    const followupComposer =
+      await screen.findByPlaceholderText("Ask a follow-up...");
     fireEvent.change(followupComposer, {
       target: { value: "Can you give another example?" },
     });
@@ -160,5 +169,77 @@ describe("StudiChat follow-up sending", () => {
       );
     });
     expect(mocks.rawSendMessageMutation).not.toHaveBeenCalled();
+  });
+
+  it("keeps a durable live status above the composer while agent work is active", async () => {
+    const view = render(<StudiChat />);
+
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to learn?"),
+      {
+        target: { value: "Build a visual explanation" },
+      },
+    );
+    fireEvent.click(screen.getByLabelText("Send message"));
+
+    await screen.findByPlaceholderText("Ask a follow-up...");
+    mocks.uiMessages = [
+      {
+        key: "assistant_streaming",
+        role: "assistant",
+        status: "streaming",
+        parts: [],
+      },
+    ];
+    view.rerender(<StudiChat />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /working on your next step/i,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /stay visible above the composer/i,
+    );
+    expect(
+      screen.getByRole("button", { name: /stop response generation/i }),
+    ).toBeVisible();
+  });
+
+  it("stops the selected thread generation and reports cancellation failures in place", async () => {
+    const view = render(<StudiChat />);
+
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to learn?"),
+      { target: { value: "Build a visual explanation" } },
+    );
+    fireEvent.click(screen.getByLabelText("Send message"));
+    await screen.findByPlaceholderText("Ask a follow-up...");
+
+    mocks.uiMessages = [
+      {
+        key: "assistant_streaming",
+        role: "assistant",
+        status: "streaming",
+        parts: [],
+      },
+    ];
+    mocks.cancelGeneration.mockRejectedValueOnce(
+      new Error("The response finished before it could be stopped."),
+    );
+    view.rerender(<StudiChat />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /stop response generation/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.cancelGeneration).toHaveBeenCalledWith({
+        threadId: "thread_1",
+      });
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /finished before it could be stopped/i,
+    );
   });
 });

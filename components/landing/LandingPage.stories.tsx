@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fireEvent, fn, waitFor } from "storybook/test";
 
+import { PRICING_FAQ_ANSWER } from "@/lib/billing/plan-catalog";
 import { LandingPage } from "./LandingPage";
 
 const joinWaitlist = fn(async () => ({
   success: true,
-  alreadyOnList: false,
 })).mockName("landingPageJoinWaitlist");
 
 const scrollIntoView = fn().mockName("landingPageScrollIntoView");
@@ -16,7 +16,6 @@ const meta = {
   parameters: {
     layout: "fullscreen",
     studi: {
-      auth: { status: "unauthenticated", user: null },
       convex: {
         actions: { "waitlistPublic:joinWaitlist": joinWaitlist },
       },
@@ -27,7 +26,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const SignedOutDesktop: Story = {
+export const Desktop: Story = {
   play: async ({ canvas }) => {
     await expect(
       canvas.getByRole("heading", {
@@ -35,40 +34,35 @@ export const SignedOutDesktop: Story = {
         name: /learn it like you invented it/i,
       }),
     ).toBeInTheDocument();
-    for (const signInLink of canvas.getAllByRole("link", { name: "Sign in" })) {
-      await expect(signInLink).toHaveAttribute("href", "/chat");
+    for (const openChatLink of canvas.getAllByRole("link", {
+      name: "Open chat",
+    })) {
+      await expect(openChatLink).toHaveAttribute("href", "/chat");
     }
     await expect(
       canvas.getAllByRole("textbox", { name: "Email address" }),
     ).toHaveLength(2);
     await expect(
-      canvas.queryByRole("link", { name: "Open chat" }),
+      canvas.queryByRole("link", { name: "Sign in" }),
     ).not.toBeInTheDocument();
   },
 };
 
-export const SignedInLearner: Story = {
-  parameters: {
-    studi: {
-      auth: { status: "authenticated" },
-    },
-  },
+export const UniversalChatEntry: Story = {
   play: async ({ canvas }) => {
-    for (const linkName of ["Open chat", "Continue learning →"]) {
-      const links = canvas.getAllByRole("link", { name: linkName });
-      await expect(links.length).toBeGreaterThan(0);
-      for (const link of links) {
-        await expect(link).toHaveAttribute("href", "/chat");
-      }
+    const openChatLinks = canvas.getAllByRole("link", { name: "Open chat" });
+    await expect(openChatLinks.length).toBeGreaterThan(0);
+    for (const link of openChatLinks) {
+      await expect(link).toHaveAttribute("href", "/chat");
     }
 
     await expect(
-      canvas.queryByRole("textbox", { name: "Email address" }),
-    ).not.toBeInTheDocument();
+      canvas.getAllByRole("textbox", { name: "Email address" }),
+    ).toHaveLength(2);
   },
 };
 
-export const MobileSignedOut: Story = {
+export const Mobile: Story = {
   parameters: {
     viewport: { defaultViewport: "mobile1" },
   },
@@ -128,20 +122,25 @@ export const EarlyAccessCtaFocusesHeroForm: Story = {
 };
 
 export const FaqAccordion: Story = {
-  play: async ({ canvas, userEvent }) => {
+  play: async ({ canvas, canvasElement, userEvent }) => {
     const freeQuestion = canvas.getByRole("button", { name: /^Is it free\?/ });
     const sparkQuestion = canvas.getByRole("button", {
       name: /^What is a Spark\?/,
     });
+    const freeRegionId = freeQuestion.getAttribute("aria-controls");
+    const freeRegion = freeRegionId
+      ? canvasElement.ownerDocument.getElementById(freeRegionId)
+      : null;
+    if (!freeRegion) throw new Error("The free FAQ region was not rendered");
 
     freeQuestion.scrollIntoView({ block: "center" });
     await waitFor(() => expect(freeQuestion).toBeVisible());
     await expect(freeQuestion).toHaveAttribute("aria-expanded", "false");
+    await expect(freeRegion).not.toBeVisible();
     await userEvent.click(freeQuestion);
     await expect(freeQuestion).toHaveAttribute("aria-expanded", "true");
-    await expect(
-      canvas.getByText(/free for students during early access/i),
-    ).toBeInTheDocument();
+    await expect(freeRegion).toBeVisible();
+    await expect(freeRegion).toHaveTextContent(PRICING_FAQ_ANSWER);
 
     await userEvent.click(sparkQuestion);
     await expect(sparkQuestion).toHaveAttribute("aria-expanded", "true");
@@ -153,11 +152,9 @@ export const FaqAccordion: Story = {
 
     await userEvent.click(freeQuestion);
     await expect(freeQuestion).toHaveAttribute("aria-expanded", "false");
-    await waitFor(() =>
-      expect(
-        canvas.queryByText(/free for students during early access/i),
-      ).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(freeRegion).not.toBeVisible());
+    await expect(freeRegion).toHaveAttribute("hidden");
+    await expect(freeRegion).toHaveTextContent(PRICING_FAQ_ANSWER);
   },
 };
 
@@ -179,23 +176,15 @@ export const WaitlistSignupSuccess: Story = {
     await expect(joinWaitlist).toHaveBeenCalledWith({
       email: "learner@studi.test",
     });
-    await expect(
-      await canvas.findByRole("dialog", { name: "You're on the list!" }),
-    ).toBeInTheDocument();
-    await waitFor(() =>
-      expect(
-        canvas.getByText(
-          "We'll let you know the moment Studi opens its doors.",
-        ),
-      ).toBeVisible(),
+    const successMessage = await canvas.findByText(
+      "One email is all it takes. Check your inbox for updates.",
     );
-
-    await userEvent.click(canvas.getByRole("button", { name: "Close" }));
-    await waitFor(() =>
-      expect(canvas.queryByRole("dialog")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(successMessage).toBeVisible());
     await expect(
-      canvas.getByText("You're on the list!", { selector: "p" }),
-    ).toBeVisible();
+      canvas.getByRole("link", { name: "Optional: answer 8 short steps →" }),
+    ).toHaveAttribute("href", "/waitlist?source=landing");
+    await expect(
+      canvas.queryByText(/already (?:on|joined)/i),
+    ).not.toBeInTheDocument();
   },
 };

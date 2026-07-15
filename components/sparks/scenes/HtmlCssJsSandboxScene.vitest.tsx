@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import HtmlCssJsSandboxScene from "./HtmlCssJsSandboxScene";
 import {
   sparkSceneV2Version,
@@ -26,16 +26,14 @@ describe("HtmlCssJsSandboxScene", () => {
   };
 
   it("renders v2 scene files with CSP and the Studi runtime bridge", () => {
-    render(
-      <HtmlCssJsSandboxScene
-        isExpanded={false}
-        payload={payload}
-      />,
-    );
+    render(<HtmlCssJsSandboxScene isExpanded={false} payload={payload} />);
 
     const iframe = screen.getByTitle("spark-scene-preview");
     expect(iframe).toHaveAttribute("sandbox", "allow-scripts");
-    expect(iframe).not.toHaveAttribute("allow", expect.stringContaining("same-origin"));
+    expect(iframe).not.toHaveAttribute(
+      "allow",
+      expect.stringContaining("same-origin"),
+    );
 
     const srcDoc = iframe.getAttribute("srcdoc") ?? "";
     expect(srcDoc).toContain("Content-Security-Policy");
@@ -70,7 +68,9 @@ describe("HtmlCssJsSandboxScene", () => {
   it("accepts scene messages only from the rendered iframe", async () => {
     render(<HtmlCssJsSandboxScene isExpanded={false} payload={payload} />);
 
-    const iframe = screen.getByTitle("spark-scene-preview") as HTMLIFrameElement;
+    const iframe = screen.getByTitle(
+      "spark-scene-preview",
+    ) as HTMLIFrameElement;
     expect(screen.getByRole("status")).toHaveTextContent("Loading scene");
 
     window.dispatchEvent(
@@ -111,5 +111,90 @@ describe("HtmlCssJsSandboxScene", () => {
       }),
     );
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  });
+
+  it("restores interaction and checkpoint progress when the scene remounts", async () => {
+    const firstMount = render(
+      <HtmlCssJsSandboxScene
+        isExpanded={false}
+        payload={payload}
+        sessionKey="thread_1:spark_1"
+      />,
+    );
+    const firstFrame = screen.getByTitle(
+      "spark-scene-preview",
+    ) as HTMLIFrameElement;
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: firstFrame.contentWindow,
+        data: {
+          source: "studi-scene",
+          version: 1,
+          type: "interaction",
+          payload: { id: "outlier", value: 14 },
+        },
+      }),
+    );
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: firstFrame.contentWindow,
+        data: {
+          source: "studi-scene",
+          version: 1,
+          type: "checkpoint",
+          payload: { id: "mean_moves", value: "mean", correct: true },
+        },
+      }),
+    );
+    firstMount.unmount();
+
+    render(
+      <HtmlCssJsSandboxScene
+        isExpanded
+        payload={payload}
+        sessionKey="thread_1:spark_1"
+      />,
+    );
+    const restoredFrame = screen.getByTitle(
+      "spark-scene-preview",
+    ) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(restoredFrame.contentWindow!, "postMessage");
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: restoredFrame.contentWindow,
+        data: {
+          source: "studi-scene",
+          version: 1,
+          type: "ready",
+          payload: {},
+        },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: "studi-host",
+          version: 1,
+          type: "restore",
+          payload: expect.objectContaining({ state: expect.any(String) }),
+        }),
+        "*",
+      );
+    });
+    const state = JSON.parse(
+      postMessage.mock.calls.at(-1)?.[0].payload.state as string,
+    );
+    expect(state.interactions.outlier).toBe(14);
+    expect(state.checkpoints.mean_moves).toEqual({
+      value: "mean",
+      correct: true,
+    });
+
+    const srcDoc = restoredFrame.getAttribute("srcdoc") ?? "";
+    expect(srcDoc).toContain("onRestore");
+    expect(srcDoc).toContain("studi:restore");
   });
 });
