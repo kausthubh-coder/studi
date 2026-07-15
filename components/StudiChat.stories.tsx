@@ -20,7 +20,11 @@ const sendFirstMessage = fn(async () => ({
 const sendFirstMessageFailure = fn(async () => {
   throw new Error("The tutor could not start this thread. Your draft is safe.");
 });
-const sendFollowupMessage = fn(async () => null);
+const sendFollowupMessage = fn(async () => ({
+  promptMessageId: "message_story_followup",
+  deduped: false,
+}));
+const cancelGeneration = fn(async () => ({ stopped: true }));
 const sendFollowupFailure = fn(async () => {
   throw new Error("The follow-up could not be sent. Try again.");
 });
@@ -91,6 +95,9 @@ const baseStudiParameters = {
       "chatActions:sendFirstMessage": sendFirstMessage,
       "chatActions:sendMessage": sendFollowupMessage,
     },
+    mutations: {
+      "chat:cancelGeneration": cancelGeneration,
+    },
   },
   agent: { results: derivativeConversation, status: "Exhausted" as const },
 };
@@ -130,6 +137,7 @@ const meta = {
     sendFirstMessageFailure.mockClear();
     sendFollowupMessage.mockClear();
     sendFollowupFailure.mockClear();
+    cancelGeneration.mockClear();
     deleteThreadFailure.mockClear();
   },
 } satisfies Meta<typeof StudiChat>;
@@ -222,6 +230,14 @@ export const AgentReasoning: Story = {
     await expect(
       canvas.getByRole("button", { name: "Send message" }),
     ).toBeDisabled();
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Stop response generation" }),
+    );
+    await waitFor(() =>
+      expect(cancelGeneration).toHaveBeenCalledWith({
+        threadId: "thread_story_derivatives",
+      }),
+    );
   },
 };
 
@@ -350,6 +366,18 @@ export const DeleteFailureBanner: Story = {
   play: async ({ canvas, userEvent }) => {
     await userEvent.click(
       canvas.getByRole("button", { name: "Delete Understanding derivatives" }),
+    );
+    await expect(canvas.getByRole("alertdialog")).toHaveTextContent(
+      "Understanding derivatives",
+    );
+    await expect(deleteThreadFailure).not.toHaveBeenCalled();
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Delete thread" }),
+    );
+    await waitFor(() =>
+      expect(deleteThreadFailure).toHaveBeenCalledWith({
+        threadId: "thread_story_derivatives",
+      }),
     );
     await expect(
       await canvas.findByText("This thread could not be deleted."),

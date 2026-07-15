@@ -3,6 +3,7 @@ import { expect, fn, spyOn, waitFor } from "storybook/test";
 
 import {
   exhaustedPreviewBilling,
+  expiredCanceledIntroBilling,
   freePreviewBilling,
   introBilling,
   proBilling,
@@ -53,14 +54,14 @@ const proNearMonthlyCapBilling = {
   usage: {
     ...proBilling.usage,
     textPromptCount: 324,
-    textAiCostUsd: 18.4,
-    totalEstimatedCostUsd: 27.75,
+    textAiCostUsd: 4.14,
+    totalEstimatedCostUsd: 5.55,
   },
   remaining: {
     ...proBilling.remaining,
     textPromptCount: 126,
-    textAiCostUsd: 1.6,
-    totalEstimatedCostUsd: 2.25,
+    textAiCostUsd: 0.36,
+    totalEstimatedCostUsd: 0.45,
   },
   upgradeReason: "You are close to this month's text tutoring allowance.",
 } satisfies StoryBillingState;
@@ -129,10 +130,17 @@ export const FreshFreePreview: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(canvas.getByText("Onboarding")).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("heading", { name: "Guided preview", level: 2 }),
+    ).toBeInTheDocument();
+    await expect(canvas.getByText("Preview")).toBeInTheDocument();
     await expect(canvas.getByText("Free prompts left: 3")).toBeInTheDocument();
-    await expect(canvas.getByText("0%")).toBeInTheDocument();
-    await expect(canvas.getByText("0 prompts this month")).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("progressbar", {
+        name: "0% of monthly AI capacity used",
+      }),
+    ).toHaveAttribute("aria-valuenow", "0");
+    await expect(canvas.getByText("0 chat prompts sent")).toBeInTheDocument();
   },
 };
 
@@ -148,8 +156,12 @@ export const FreePreviewNearLimit: Story = {
   },
   play: async ({ canvas }) => {
     await expect(canvas.getByText("Free prompts left: 1")).toBeInTheDocument();
-    await expect(canvas.getByText("80%")).toBeInTheDocument();
-    await expect(canvas.getByText("2 prompts this month")).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("progressbar", {
+        name: "80% of monthly AI capacity used",
+      }),
+    ).toHaveAttribute("aria-valuenow", "80");
+    await expect(canvas.getByText("2 chat prompts sent")).toBeInTheDocument();
     await expect(
       canvas.getByText(/one free onboarding chat remains/i),
     ).toBeInTheDocument();
@@ -168,14 +180,18 @@ export const FreePreviewExhausted: Story = {
   },
   play: async ({ canvas }) => {
     await expect(canvas.getByText("Free prompts left: 0")).toBeInTheDocument();
-    await expect(canvas.getByText("100%")).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("progressbar", {
+        name: "100% of monthly AI capacity used",
+      }),
+    ).toHaveAttribute("aria-valuenow", "100");
     await expect(
       canvas.getByText(/choose a plan to keep learning/i),
     ).toBeInTheDocument();
   },
 };
 
-export const IntroPlan: Story = {
+export const StarterPlan: Story = {
   parameters: {
     studi: {
       convex: {
@@ -184,9 +200,18 @@ export const IntroPlan: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(canvas.getByText("Intro")).toBeInTheDocument();
-    await expect(canvas.getByText("28%")).toBeInTheDocument();
-    await expect(canvas.getByText("38 prompts this month")).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("heading", { name: "Starter", level: 2 }),
+    ).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("progressbar", { name: "112 of 150 remaining" }),
+    ).toHaveAttribute("aria-valuenow", "25");
+    await expect(
+      canvas.getByRole("progressbar", {
+        name: "28% of monthly AI capacity used",
+      }),
+    ).toHaveAttribute("aria-valuenow", "28");
+    await expect(canvas.getAllByText("38 chat prompts sent")).toHaveLength(2);
     await expect(canvas.queryByText(/guided preview/i)).not.toBeInTheDocument();
   },
 };
@@ -202,20 +227,54 @@ export const ProNearMonthlyCap: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(canvas.getByText("Pro")).toBeInTheDocument();
-    await expect(canvas.getByText("92%")).toBeInTheDocument();
     await expect(
-      canvas.getByText("324 prompts this month"),
+      canvas.getByRole("heading", { name: "Pro", level: 2 }),
     ).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("progressbar", { name: "126 of 450 remaining" }),
+    ).toHaveAttribute("aria-valuenow", "72");
+    await expect(
+      canvas.getByRole("progressbar", {
+        name: "92% of monthly AI capacity used",
+      }),
+    ).toHaveAttribute("aria-valuenow", "92");
+    await expect(canvas.getAllByText("324 chat prompts sent")).toHaveLength(2);
     await expect(
       canvas.getByText(/close to this month's/i),
     ).toBeInTheDocument();
   },
 };
 
+export const CanceledPaidAccessExpired: Story = {
+  parameters: {
+    studi: {
+      convex: {
+        queries: {
+          "billing:getViewerBillingState": expiredCanceledIntroBilling,
+        },
+      },
+    },
+  },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText("Canceled")).toBeInTheDocument();
+    await expect(
+      canvas.getByText(/paid plan is not active/i),
+    ).toBeInTheDocument();
+  },
+};
+
 export const BillingTab: Story = {
   play: async ({ canvas, userEvent }) => {
-    await userEvent.click(canvas.getByRole("button", { name: /billing/i }));
+    await userEvent.click(canvas.getByRole("tab", { name: /billing/i }));
+    await expect(
+      canvas.getByRole("heading", { name: "Guided preview" }),
+    ).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("heading", { name: "Starter" }),
+    ).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("heading", { name: "Pro" }),
+    ).toBeInTheDocument();
     await expect(
       canvas.getByRole("region", {
         name: "Storybook pricing table fixture",
@@ -230,7 +289,7 @@ export const BillingTab: Story = {
 
 export const AccountTab: Story = {
   play: async ({ canvas, userEvent }) => {
-    await userEvent.click(canvas.getByRole("button", { name: /account/i }));
+    await userEvent.click(canvas.getByRole("tab", { name: /account/i }));
     await expect(
       canvas.getByRole("region", {
         name: "Storybook user profile fixture",
@@ -292,10 +351,20 @@ export const MobileUsageAndNavigation: Story = {
     },
   },
   play: async ({ canvas, userEvent }) => {
-    await expect(canvas.getByText("Intro")).toBeInTheDocument();
-    await userEvent.click(canvas.getByRole("button", { name: /billing/i }));
+    await expect(
+      canvas.getByRole("heading", { name: "Starter", level: 2 }),
+    ).toBeInTheDocument();
+    await expect(
+      canvas.getByRole("progressbar", { name: "112 of 150 remaining" }),
+    ).toHaveAttribute("aria-valuenow", "25");
+    await expect(
+      canvas.getByRole("progressbar", {
+        name: "28% of monthly AI capacity used",
+      }),
+    ).toHaveAttribute("aria-valuenow", "28");
+    await userEvent.click(canvas.getByRole("tab", { name: /billing/i }));
     await expect(canvas.getByText("Mock pricing plans")).toBeInTheDocument();
-    await userEvent.click(canvas.getByRole("button", { name: /usage/i }));
-    await expect(canvas.getByText("38 prompts this month")).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("tab", { name: /usage/i }));
+    await expect(canvas.getAllByText("38 chat prompts sent")).toHaveLength(2);
   },
 };

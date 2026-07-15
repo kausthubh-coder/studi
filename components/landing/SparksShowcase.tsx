@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { useEffect, useId, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { BrainCircuit, Box, Calculator, LibraryBig } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { getNextSparkTabIndex } from "./spark-tab-navigation";
 
 export type SparkDemo = {
@@ -15,216 +15,264 @@ export type SparkDemo = {
   content: React.ReactNode;
 };
 
-const SPARKS_DATA: SparkDemo[] = [
-  {
-    id: "scene",
-    title: "Interactive Scene",
-    description:
-      "Break a concept by touching it. Physics simulations and visual models built for your exact question.",
-    icon: <Box className="w-4.5 h-4.5" />,
-    accent: "var(--accent2)",
-    content: (
-      <div className="w-full h-full flex items-center justify-center bg-accent2-dim rounded-2xl overflow-hidden relative">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-          className="w-24 h-24 border-[3px] border-accent2 rounded-2xl absolute opacity-70"
-        />
-        <motion.div
-          animate={{ rotate: -360 }}
-          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-          className="w-16 h-16 border-[3px] border-accent2/60 rounded-full absolute"
-        />
-        <motion.div
-          animate={{ scale: [1, 1.2, 1] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="w-4 h-4 bg-accent2 rounded-full absolute"
-        />
-        <p className="font-ui font-semibold text-fg z-10 bg-bg-card/90 px-3.5 py-1.5 rounded-full text-xs shadow-sm backdrop-blur-sm absolute bottom-4">
-          Collision Physics
-        </p>
-      </div>
-    ),
-  },
-  {
-    id: "graph",
-    title: "Live Graph",
-    description:
-      "See the math move. Manipulate equations and watch the graph respond in real time.",
-    icon: <Calculator className="w-4.5 h-4.5" />,
-    accent: "var(--accent4)",
-    content: (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-accent4-dim rounded-2xl p-5">
-        <div className="w-full h-2/3 border-b border-l border-accent4/40 relative flex items-end">
-          <motion.svg
-            className="w-full h-full"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-          >
-            <motion.path
-              d="M0 100 Q 25 20, 50 50 T 100 0"
-              fill="none"
-              stroke="var(--accent4)"
-              strokeWidth="2.5"
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                repeatType: "reverse",
-                ease: "easeInOut",
-              }}
-            />
-            <motion.path
-              d="M0 50 Q 25 80, 50 40 T 100 60"
-              fill="none"
-              stroke="var(--accent4)"
-              strokeOpacity="0.45"
-              strokeWidth="1.5"
-              strokeDasharray="4 2"
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{
-                duration: 3,
-                repeat: Infinity,
-                repeatType: "reverse",
-                ease: "easeInOut",
-                delay: 0.5,
-              }}
-            />
-          </motion.svg>
-        </div>
-        <p className="text-xs font-mono text-fg mt-4 bg-bg-card px-3 py-1.5 rounded-lg border border-border-warm">
-          y = sin(x) + cos(2x)
-        </p>
-      </div>
-    ),
-  },
-  {
-    id: "quiz",
-    title: "Adaptive Quiz",
-    description:
-      "Prove you got it. Targeted questions that surface exactly where your understanding is shaky.",
-    icon: <BrainCircuit className="w-4.5 h-4.5" />,
-    accent: "var(--accent)",
-    content: (
-      <div className="w-full h-full flex flex-col justify-center bg-accent-dim rounded-2xl p-5">
-        <p className="font-ui font-semibold text-fg mb-4 text-center text-sm">
-          What is the average time complexity of QuickSort?
-        </p>
-        <div className="space-y-2 w-full max-w-xs mx-auto">
-          <div className="w-full bg-bg-card border border-border-warm p-2.5 rounded-xl text-center text-xs font-ui font-medium text-fg-muted">
-            O(n)
-          </div>
+function getSparksData(reduceMotion: boolean): SparkDemo[] {
+  return [
+    {
+      id: "scene",
+      title: "Interactive Scene",
+      description:
+        "Break a concept by touching it. Physics simulations and visual models built for your exact question.",
+      icon: <Box className="h-4.5 w-4.5" />,
+      accent: "var(--accent2)",
+      content: (
+        <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-2xl bg-accent2-dim">
           <motion.div
-            className="w-full bg-accent2-dim border border-accent2/50 p-2.5 rounded-xl text-xs font-ui font-semibold text-fg flex justify-between items-center px-3"
-            initial={{ scale: 0.96 }}
-            animate={{ scale: 1 }}
-          >
-            <span>O(n log n)</span>
-            <span className="bg-accent2 text-fg rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold">
-              ✓
-            </span>
-          </motion.div>
-          <div className="w-full bg-bg-card border border-border-warm p-2.5 rounded-xl text-center text-xs font-ui font-medium text-fg-muted">
-            O(n²)
-          </div>
+            animate={reduceMotion ? { rotate: 0 } : { rotate: 360 }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: 10, repeat: Infinity, ease: "linear" }
+            }
+            className="absolute h-24 w-24 rounded-2xl border-[3px] border-accent2 opacity-70"
+          />
+          <motion.div
+            animate={reduceMotion ? { rotate: 0 } : { rotate: -360 }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: 15, repeat: Infinity, ease: "linear" }
+            }
+            className="absolute h-16 w-16 rounded-full border-[3px] border-accent2/60"
+          />
+          <motion.div
+            animate={reduceMotion ? { scale: 1 } : { scale: [1, 1.2, 1] }}
+            transition={
+              reduceMotion ? { duration: 0 } : { duration: 2, repeat: Infinity }
+            }
+            className="absolute h-4 w-4 rounded-full bg-accent2"
+          />
+          <p className="absolute bottom-4 z-10 rounded-full bg-bg-card/90 px-3.5 py-1.5 font-ui text-xs font-semibold text-fg shadow-sm backdrop-blur-sm">
+            Collision Physics
+          </p>
         </div>
-      </div>
-    ),
-  },
-  {
-    id: "flashcard",
-    title: "Flashcards",
-    description:
-      "Lock in what you've discovered. Spaced repetition built into your session — not a separate app.",
-    icon: <LibraryBig className="w-4.5 h-4.5" />,
-    accent: "var(--accent3)",
-    content: (
-      <div className="w-full h-full flex items-center justify-center relative p-5 bg-accent3-dim rounded-2xl">
-        <motion.div
-          className="w-full h-full max-w-sm relative"
-          initial={{ rotateY: 0 }}
-          animate={{ rotateY: 180 }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            repeatType: "reverse",
-            repeatDelay: 1.5,
-          }}
-          style={{ transformStyle: "preserve-3d" }}
-        >
-          <div
-            className="absolute inset-0 flex items-center justify-center bg-bg-card rounded-2xl border border-border-warm shadow-sm"
-            style={{ backfaceVisibility: "hidden" }}
-          >
-            <div className="text-center">
-              <p className="text-[10px] text-fg-muted font-ui font-bold uppercase tracking-[0.18em] mb-2">
-                Biology
-              </p>
-              <h3 className="text-lg font-brand text-fg">Mitochondria</h3>
+      ),
+    },
+    {
+      id: "graph",
+      title: "Live Graph",
+      description:
+        "See the math move. Manipulate equations and watch the graph respond in real time.",
+      icon: <Calculator className="h-4.5 w-4.5" />,
+      accent: "var(--accent4)",
+      content: (
+        <div className="flex h-full w-full flex-col items-center justify-center rounded-2xl bg-accent4-dim p-5">
+          <div className="relative flex h-2/3 w-full items-end border-b border-l border-accent4/40">
+            <motion.svg
+              className="h-full w-full"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+            >
+              <motion.path
+                d="M0 100 Q 25 20, 50 50 T 100 0"
+                fill="none"
+                stroke="var(--accent4)"
+                strokeWidth="2.5"
+                initial={reduceMotion ? false : { pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={
+                  reduceMotion
+                    ? { duration: 0 }
+                    : {
+                        duration: 2,
+                        repeat: Infinity,
+                        repeatType: "reverse",
+                        ease: "easeInOut",
+                      }
+                }
+              />
+              <motion.path
+                d="M0 50 Q 25 80, 50 40 T 100 60"
+                fill="none"
+                stroke="var(--accent4)"
+                strokeOpacity="0.45"
+                strokeWidth="1.5"
+                strokeDasharray="4 2"
+                initial={reduceMotion ? false : { pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={
+                  reduceMotion
+                    ? { duration: 0 }
+                    : {
+                        duration: 3,
+                        repeat: Infinity,
+                        repeatType: "reverse",
+                        ease: "easeInOut",
+                        delay: 0.5,
+                      }
+                }
+              />
+            </motion.svg>
+          </div>
+          <p className="mt-4 rounded-lg border border-border-warm bg-bg-card px-3 py-1.5 font-mono text-xs text-fg">
+            y = sin(x) + cos(2x)
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: "quiz",
+      title: "Adaptive Quiz",
+      description:
+        "Prove you got it. Targeted questions that surface exactly where your understanding is shaky.",
+      icon: <BrainCircuit className="h-4.5 w-4.5" />,
+      accent: "var(--accent)",
+      content: (
+        <div className="flex h-full w-full flex-col justify-center rounded-2xl bg-accent-dim p-5">
+          <p className="mb-4 text-center font-ui text-sm font-semibold text-fg">
+            What is the average time complexity of QuickSort?
+          </p>
+          <div className="mx-auto w-full max-w-xs space-y-2">
+            <div className="w-full rounded-xl border border-border-warm bg-bg-card p-2.5 text-center font-ui text-xs font-medium text-fg-muted">
+              O(n)
+            </div>
+            <motion.div
+              className="flex w-full items-center justify-between rounded-xl border border-accent2/50 bg-accent2-dim p-2.5 px-3 font-ui text-xs font-semibold text-fg"
+              initial={reduceMotion ? false : { scale: 0.96 }}
+              animate={{ scale: 1 }}
+              transition={reduceMotion ? { duration: 0 } : undefined}
+            >
+              <span>O(n log n)</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent2 text-[10px] font-bold text-fg">
+                ✓
+              </span>
+            </motion.div>
+            <div className="w-full rounded-xl border border-border-warm bg-bg-card p-2.5 text-center font-ui text-xs font-medium text-fg-muted">
+              O(n²)
             </div>
           </div>
-          <div
-            className="absolute inset-0 flex items-center justify-center bg-bg-card rounded-2xl border border-border-warm shadow-sm"
-            style={{
-              transform: "rotateY(180deg)",
-              backfaceVisibility: "hidden",
-            }}
+        </div>
+      ),
+    },
+    {
+      id: "flashcard",
+      title: "Flashcards",
+      description:
+        "Lock in what you've discovered. Spaced repetition built into your session — not a separate app.",
+      icon: <LibraryBig className="h-4.5 w-4.5" />,
+      accent: "var(--accent3)",
+      content: (
+        <div className="relative flex h-full w-full items-center justify-center rounded-2xl bg-accent3-dim p-5">
+          <motion.div
+            className="relative h-full w-full max-w-sm"
+            initial={{ rotateY: 0 }}
+            animate={reduceMotion ? { rotateY: 0 } : { rotateY: 180 }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : {
+                    duration: 2,
+                    repeat: Infinity,
+                    repeatType: "reverse",
+                    repeatDelay: 1.5,
+                  }
+            }
+            style={{ transformStyle: "preserve-3d" }}
           >
-            <p className="text-sm font-body text-fg-muted px-6 text-center leading-relaxed">
-              The powerhouse of the cell — produces ATP through cellular
-              respiration.
-            </p>
-          </div>
-        </motion.div>
-      </div>
-    ),
-  },
-];
+            <div
+              className="absolute inset-0 flex items-center justify-center rounded-2xl border border-border-warm bg-bg-card shadow-sm"
+              style={{ backfaceVisibility: "hidden" }}
+            >
+              <div className="text-center">
+                <p className="mb-2 font-ui text-[10px] font-bold uppercase tracking-[0.18em] text-fg-muted">
+                  Biology
+                </p>
+                <h3 className="font-brand text-lg text-fg">Mitochondria</h3>
+              </div>
+            </div>
+            <div
+              className="absolute inset-0 flex items-center justify-center rounded-2xl border border-border-warm bg-bg-card shadow-sm"
+              style={{
+                transform: "rotateY(180deg)",
+                backfaceVisibility: "hidden",
+              }}
+            >
+              <p className="px-6 text-center font-body text-sm leading-relaxed text-fg-muted">
+                The powerhouse of the cell — produces ATP through cellular
+                respiration.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      ),
+    },
+  ];
+}
 
-const ROTATE_INTERVAL_MS = 4500;
+const ROTATE_INTERVAL_MS = 4_500;
 
 export function SparksShowcase() {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const reduceMotion = useReducedMotion();
+  const [hasUserSelected, setHasUserSelected] = useState(false);
+  const [isPointerInside, setIsPointerInside] = useState(false);
+  const [isFocusWithin, setIsFocusWithin] = useState(false);
+  const reduceMotion = Boolean(useReducedMotion());
+  const instanceId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const sparks = getSparksData(reduceMotion);
+  const panelId = `${instanceId}-spark-showcase-panel`;
 
-  // Auto-rotate until the user picks a tab themselves.
   useEffect(() => {
-    if (paused || reduceMotion) return;
-    const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % SPARKS_DATA.length);
-    }, ROTATE_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [paused, reduceMotion]);
+    if (hasUserSelected || isPointerInside || isFocusWithin || reduceMotion) {
+      return;
+    }
 
-  const activeSpark = SPARKS_DATA[currentIndex];
+    const timer = window.setInterval(() => {
+      setCurrentIndex((previous) => (previous + 1) % sparks.length);
+    }, ROTATE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [
+    hasUserSelected,
+    isFocusWithin,
+    isPointerInside,
+    reduceMotion,
+    sparks.length,
+  ]);
+
+  const activeSpark = sparks[currentIndex];
+
+  function tabId(sparkId: string) {
+    return `${instanceId}-spark-tab-${sparkId}`;
+  }
 
   function selectSpark(index: number, moveFocus = false) {
-    setPaused(true);
+    setHasUserSelected(true);
     setCurrentIndex(index);
-    if (moveFocus) {
-      requestAnimationFrame(() => tabRefs.current[index]?.focus());
-    }
+    if (moveFocus) tabRefs.current[index]?.focus();
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto flex flex-col md:flex-row gap-5 items-stretch min-h-[440px]">
-      {/* Tabs */}
-      <div className="w-full md:w-[230px] shrink-0">
+    <div
+      data-testid="sparks-showcase"
+      className="mx-auto flex min-h-[440px] w-full max-w-5xl flex-col items-stretch gap-5 md:flex-row"
+      onPointerEnter={() => setIsPointerInside(true)}
+      onPointerLeave={() => setIsPointerInside(false)}
+      onFocusCapture={() => setIsFocusWithin(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setIsFocusWithin(false);
+        }
+      }}
+    >
+      <div className="w-full shrink-0 md:w-[230px]">
         <p className="mb-2 text-left text-xs font-bold text-fg-muted md:hidden">
           Swipe to see every Spark type →
         </p>
         <div
-          className="w-full flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-3 md:pb-0 snap-x snap-mandatory"
+          className="flex w-full snap-x snap-mandatory flex-row gap-2 overflow-x-auto pb-3 md:flex-col md:overflow-visible md:pb-0"
           role="tablist"
           aria-label="Spark types"
-          onFocusCapture={() => setPaused(true)}
-          onPointerEnter={() => setPaused(true)}
         >
-          {SPARKS_DATA.map((spark, index) => {
+          {sparks.map((spark, index) => {
             const isActive = index === currentIndex;
             return (
               <button
@@ -232,41 +280,48 @@ export function SparksShowcase() {
                 ref={(element) => {
                   tabRefs.current[index] = element;
                 }}
-                id={`spark-tab-${spark.id}`}
+                id={tabId(spark.id)}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                aria-controls="spark-showcase-panel"
+                aria-controls={panelId}
                 tabIndex={isActive ? 0 : -1}
                 onClick={() => selectSpark(index)}
                 onKeyDown={(event) => {
+                  const navigationKey =
+                    event.key === "ArrowDown"
+                      ? "ArrowRight"
+                      : event.key === "ArrowUp"
+                        ? "ArrowLeft"
+                        : event.key;
                   const nextIndex = getNextSparkTabIndex(
                     index,
-                    event.key,
-                    SPARKS_DATA.length,
+                    navigationKey,
+                    sparks.length,
                   );
                   if (
                     nextIndex === index &&
-                    !["Home", "End"].includes(event.key)
-                  )
+                    !["Home", "End"].includes(navigationKey)
+                  ) {
                     return;
+                  }
                   event.preventDefault();
                   selectSpark(nextIndex, true);
                 }}
                 className={cn(
-                  "relative min-w-[180px] snap-start text-left p-3.5 rounded-2xl border-2 transition-all duration-300 ease-out shrink-0 md:min-w-0 md:shrink",
+                  "relative min-w-[180px] shrink-0 snap-start rounded-2xl border-2 p-3.5 text-left transition-all duration-300 ease-out md:min-w-0 md:shrink",
                   isActive
-                    ? "bg-white border-fg shadow-[4px_4px_0px_var(--fg)] md:-translate-y-0.5"
-                    : "bg-bg-alt/70 border-transparent hover:bg-bg-elevated hover:border-fg/30",
+                    ? "border-fg bg-white shadow-[4px_4px_0px_var(--fg)] md:-translate-y-0.5"
+                    : "border-transparent bg-bg-alt/70 hover:border-fg/30 hover:bg-bg-elevated",
                 )}
               >
                 <div className="flex items-center gap-2.5">
                   <span
                     className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center transition-colors shrink-0 border-2",
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 transition-colors",
                       isActive
-                        ? "text-fg border-fg"
-                        : "bg-white text-fg-muted border-fg/30",
+                        ? "border-fg text-fg"
+                        : "border-fg/30 bg-white text-fg-muted",
                     )}
                     style={
                       isActive ? { backgroundColor: spark.accent } : undefined
@@ -276,7 +331,7 @@ export function SparksShowcase() {
                   </span>
                   <span
                     className={cn(
-                      "font-ui font-bold text-sm leading-tight",
+                      "font-ui text-sm font-bold leading-tight",
                       isActive ? "text-fg" : "text-fg-muted",
                     )}
                   >
@@ -285,9 +340,10 @@ export function SparksShowcase() {
                 </div>
                 {isActive && (
                   <motion.p
-                    initial={{ opacity: 0, height: 0 }}
+                    initial={reduceMotion ? false : { opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
-                    className="text-xs mt-2.5 text-fg-muted leading-snug hidden md:block"
+                    transition={reduceMotion ? { duration: 0 } : undefined}
+                    className="mt-2.5 hidden text-xs leading-snug text-fg-muted md:block"
                   >
                     {spark.description}
                   </motion.p>
@@ -298,21 +354,20 @@ export function SparksShowcase() {
         </div>
       </div>
 
-      {/* Preview */}
       <div
-        id="spark-showcase-panel"
+        id={panelId}
         role="tabpanel"
-        aria-labelledby={`spark-tab-${activeSpark.id}`}
+        aria-labelledby={tabId(activeSpark.id)}
         tabIndex={0}
-        className="flex-1 relative rounded-3xl border-[3px] border-fg bg-white shadow-[8px_8px_0px_var(--fg)] overflow-hidden flex flex-col min-h-[320px]"
+        className="relative flex min-h-[320px] flex-1 flex-col overflow-hidden rounded-3xl border-[3px] border-fg bg-white shadow-[8px_8px_0px_var(--fg)]"
       >
-        <div className="w-full h-11 border-b-[3px] border-fg bg-bg-elevated flex items-center px-4 gap-2 shrink-0">
-          <span className="w-3 h-3 rounded-full bg-accent border-2 border-fg" />
-          <span className="w-3 h-3 rounded-full bg-accent3 border-2 border-fg" />
-          <span className="w-3 h-3 rounded-full bg-accent2 border-2 border-fg" />
+        <div className="flex h-11 w-full shrink-0 items-center gap-2 border-b-[3px] border-fg bg-bg-elevated px-4">
+          <span className="h-3 w-3 rounded-full border-2 border-fg bg-accent" />
+          <span className="h-3 w-3 rounded-full border-2 border-fg bg-accent3" />
+          <span className="h-3 w-3 rounded-full border-2 border-fg bg-accent2" />
           <span className="ml-3 flex items-center gap-1.5">
             <span
-              className="animate-pulse w-1.5 h-1.5 rounded-full"
+              className="h-1.5 w-1.5 animate-pulse rounded-full motion-reduce:animate-none"
               style={{ backgroundColor: activeSpark.accent }}
             />
             <span className="font-mono text-[11px] text-fg-muted">
@@ -321,14 +376,18 @@ export function SparksShowcase() {
           </span>
         </div>
 
-        <div className="flex-1 relative overflow-hidden p-3">
+        <div className="relative flex-1 overflow-hidden p-3">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeSpark.id}
-              initial={{ y: 14, opacity: 0 }}
+              initial={reduceMotion ? false : { y: 14, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -14, opacity: 0 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
+              exit={reduceMotion ? undefined : { y: -14, opacity: 0 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : { duration: 0.3, ease: "easeOut" }
+              }
               className="absolute inset-3"
             >
               {activeSpark.content}

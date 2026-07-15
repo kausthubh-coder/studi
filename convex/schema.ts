@@ -17,10 +17,41 @@ export default defineSchema({
     lastMessageAt: v.optional(v.number()),
     lastRequestId: v.optional(v.string()),
     lastPromptMessageId: v.optional(v.string()),
+    activeGenerations: v.optional(
+      v.array(
+        v.object({
+          promptMessageId: v.string(),
+          order: v.number(),
+          state: v.union(
+            v.literal("queued"),
+            v.literal("running"),
+            v.literal("cancel_requested"),
+          ),
+          createdAt: v.number(),
+          expiresAt: v.number(),
+          cancelRequestedAt: v.optional(v.number()),
+        }),
+      ),
+    ),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_and_lastMessageAt", ["userId", "lastMessageAt"])
     .index("by_threadId", ["threadId"])
+    .index("by_userId_and_threadId", ["userId", "threadId"]),
+
+  chatRequestReceipts: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    requestId: v.string(),
+    promptMessageId: v.string(),
+    order: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_userId_and_threadId_and_requestId", [
+      "userId",
+      "threadId",
+      "requestId",
+    ])
     .index("by_userId_and_threadId", ["userId", "threadId"]),
 
   attachments: defineTable({

@@ -49,7 +49,21 @@ Use window.StudiScene when useful:
 - window.StudiScene.resize(height)
 - window.StudiScene.interaction(id, value)
 - window.StudiScene.checkpoint(id, value, correct)
+- window.StudiScene.onRestore(state => { /* restore controls and answers */ })
 - window.StudiScene.error(message)
+
+Progress continuity requirements:
+
+- Give every control and checkpoint a stable id. Use the same id in the DOM, metadata, and `interaction` or `checkpoint` call.
+- Register `window.StudiScene.onRestore(...)` and restore control values, derived visuals, selected answers, and feedback from `state.interactions` and `state.checkpoints`.
+- Restoration must be idempotent and must not re-submit answers or duplicate analytics.
+
+Keyboard and semantics requirements:
+
+- Prefer native controls such as `<input type="range">` for numeric dragging.
+- A custom draggable must use `role="slider"`, `tabindex="0"`, `aria-valuemin`, `aria-valuemax`, and a current `aria-valuenow`.
+- Support Arrow keys for every custom drag control and keep its visual position and `aria-valuenow` synchronized.
+- Pointer-only drag interactions are invalid. Buttons and answer choices must use native button semantics and expose selected state when applicable.
 
 Speed + reliability constraints:
 

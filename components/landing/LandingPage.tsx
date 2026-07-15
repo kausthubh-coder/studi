@@ -3,15 +3,14 @@
 /* eslint-disable react/no-unescaped-entities */
 
 import Link from "next/link";
-import { SignedIn, SignedOut } from "@clerk/nextjs";
 import {
   motion,
-  AnimatePresence,
   MotionConfig,
   useReducedMotion,
 } from "framer-motion";
 import { useId, useState } from "react";
 import { Send } from "lucide-react";
+import { PRICING_FAQ_ANSWER } from "@/lib/billing/plan-catalog";
 import { SparksShowcase } from "./SparksShowcase";
 import { WaitlistForm } from "./WaitlistForm";
 
@@ -94,7 +93,7 @@ function StickyNote({
   );
 }
 
-function FaqItem({ q, a }: { q: string; a: string }) {
+export function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   const buttonId = useId();
   const panelId = useId();
@@ -126,24 +125,17 @@ function FaqItem({ q, a }: { q: string; a: string }) {
           </svg>
         </span>
       </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            id={panelId}
-            role="region"
-            aria-labelledby={buttonId}
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="overflow-hidden"
-          >
-            <p className="px-5 md:px-6 pb-5 pt-4 font-body text-fg-muted leading-relaxed border-t-2 border-dashed border-border-warm">
-              {a}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div
+        id={panelId}
+        role="region"
+        aria-labelledby={buttonId}
+        hidden={!open}
+        className="overflow-hidden"
+      >
+        <p className="px-5 md:px-6 pb-5 pt-4 font-body text-fg-muted leading-relaxed border-t-2 border-dashed border-border-warm">
+          {a}
+        </p>
+      </div>
     </div>
   );
 }
@@ -339,32 +331,21 @@ export function LandingPage() {
               <Wordmark />
             </Link>
 
-            <SignedOut>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <a
-                  href="/chat"
-                  className="inline-flex min-h-11 items-center justify-center font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl border-2 border-fg bg-white hover:bg-bg-alt transition-colors shadow-[2px_2px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none"
-                >
-                  Sign in
-                </a>
-                <button
-                  type="button"
-                  onClick={scrollToWaitlist}
-                  className="min-h-11 font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl border-2 border-fg bg-accent text-fg hover:bg-accent-hover transition-colors shadow-[2px_2px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none"
-                >
-                  Get Early Access
-                </button>
-              </div>
-            </SignedOut>
-
-            <SignedIn>
-              <Link
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <a
                 href="/chat"
-                className="inline-flex min-h-11 items-center justify-center font-bold text-sm px-4 py-2 rounded-xl border-2 border-fg bg-accent text-fg hover:bg-accent-hover transition-colors shadow-[2px_2px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none"
+                className="inline-flex min-h-11 items-center justify-center font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl border-2 border-fg bg-white hover:bg-bg-alt transition-colors shadow-[2px_2px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none"
               >
                 Open chat
-              </Link>
-            </SignedIn>
+              </a>
+              <button
+                type="button"
+                onClick={scrollToWaitlist}
+                className="min-h-11 font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl border-2 border-fg bg-accent text-fg hover:bg-accent-hover transition-colors shadow-[2px_2px_0px_var(--fg)] active:translate-y-0.5 active:shadow-none"
+              >
+                Get Early Access
+              </button>
+            </div>
           </div>
         </header>
 
@@ -372,7 +353,7 @@ export function LandingPage() {
           {/* ── HERO ── */}
           <section className="px-4 md:px-6 max-w-6xl mx-auto">
             <motion.div
-              initial="hidden"
+              initial={false}
               animate="visible"
               variants={stagger}
               className="flex flex-col items-center text-center"
@@ -418,36 +399,16 @@ export function LandingPage() {
                 id="get-early-access"
                 className="w-full max-w-xl mb-4"
               >
-                <SignedOut>
-                  <WaitlistForm />
-                </SignedOut>
-                <SignedIn>
-                  <div>
-                    <Link
-                      href="/chat"
-                      className="inline-block font-bold px-10 py-4 rounded-2xl border-2 border-fg bg-accent text-fg hover:bg-accent-hover transition-colors text-lg shadow-[5px_5px_0px_var(--fg)] active:translate-y-1 active:shadow-[2px_2px_0px_var(--fg)]"
-                    >
-                      Continue learning →
-                    </Link>
-                    <p className="mt-4 text-sm font-bold text-fg-muted">
-                      Pick up where you left off.
-                    </p>
-                  </div>
-                </SignedIn>
+                <WaitlistForm />
               </motion.div>
 
-              <SignedOut>
-                <motion.p
-                  variants={fadeUp}
-                  className="font-bold text-sm text-fg-faint mb-16 md:mb-20"
-                >
-                  Join <span className="text-fg">340+</span> students on the
-                  waitlist
-                </motion.p>
-              </SignedOut>
-              <SignedIn>
-                <div className="mb-12 md:mb-16" />
-              </SignedIn>
+              <motion.p
+                variants={fadeUp}
+                className="font-bold text-sm text-fg-faint mb-16 md:mb-20"
+              >
+                Join <span className="text-fg">340+</span> students on the
+                waitlist
+              </motion.p>
 
               <motion.div variants={fadeUp} className="w-full max-w-4xl">
                 <HeroChatDemo />
@@ -489,7 +450,7 @@ export function LandingPage() {
             {/* ── THE PROBLEM ── */}
             <section>
               <motion.div
-                initial="hidden"
+                initial={false}
                 whileInView="visible"
                 viewport={viewportOpts}
                 variants={stagger}
@@ -592,7 +553,7 @@ export function LandingPage() {
             {/* ── HOW IT WORKS ── */}
             <section>
               <motion.div
-                initial="hidden"
+                initial={false}
                 whileInView="visible"
                 viewport={viewportOpts}
                 variants={stagger}
@@ -667,7 +628,7 @@ export function LandingPage() {
             {/* ── SPARKS ── */}
             <section>
               <motion.div
-                initial="hidden"
+                initial={false}
                 whileInView="visible"
                 viewport={viewportOpts}
                 variants={stagger}
@@ -718,7 +679,7 @@ export function LandingPage() {
             {/* ── PRODUCT PROOF ── */}
             <section>
               <motion.div
-                initial="hidden"
+                initial={false}
                 whileInView="visible"
                 viewport={viewportOpts}
                 variants={stagger}
@@ -797,7 +758,7 @@ export function LandingPage() {
             {/* ── FAQ ── */}
             <section>
               <motion.div
-                initial="hidden"
+                initial={false}
                 whileInView="visible"
                 viewport={viewportOpts}
                 variants={stagger}
@@ -812,7 +773,7 @@ export function LandingPage() {
                 <motion.div variants={fadeUp} className="space-y-4">
                   <FaqItem
                     q="Is it free?"
-                    a="Studi is free for students during early access. We'll introduce a paid plan later with fair student pricing — and there will always be a meaningful free tier."
+                    a={PRICING_FAQ_ANSWER}
                   />
                   <FaqItem
                     q="How is this different from ChatGPT?"
@@ -837,7 +798,7 @@ export function LandingPage() {
             {/* ── FINAL CTA ── */}
             <section id="final-cta">
               <motion.div
-                initial="hidden"
+                initial={false}
                 whileInView="visible"
                 viewport={viewportOpts}
                 variants={stagger}
@@ -848,66 +809,35 @@ export function LandingPage() {
                   aria-hidden
                 />
                 <div className="relative bg-white rounded-[2rem] border-[3px] border-fg px-6 py-14 md:px-12 md:py-16 text-center">
-                  <SignedOut>
-                    <motion.h2
-                      variants={fadeUp}
-                      className="font-brand text-4xl sm:text-6xl md:text-7xl leading-[1.03] tracking-tight mb-5"
-                    >
-                      Stop being told.
-                      <br />
-                      <span className="text-accent">
-                        Start figuring it out.
-                      </span>
-                    </motion.h2>
-                    <motion.p
-                      variants={fadeUp}
-                      className="font-body text-lg md:text-xl text-fg-muted mb-9 max-w-md mx-auto"
-                    >
-                      Join the waitlist and be first in when Studi opens its
-                      doors.
-                    </motion.p>
-                  </SignedOut>
-                  <SignedIn>
-                    <motion.h2
-                      variants={fadeUp}
-                      className="font-brand text-4xl sm:text-6xl md:text-7xl leading-[1.03] tracking-tight mb-5"
-                    >
-                      Your next aha is waiting.
-                    </motion.h2>
-                    <motion.p
-                      variants={fadeUp}
-                      className="font-body text-lg md:text-xl text-fg-muted mb-9 max-w-md mx-auto"
-                    >
-                      Open Studi and keep working from the thought you left
-                      unfinished.
-                    </motion.p>
-                  </SignedIn>
+                  <motion.h2
+                    variants={fadeUp}
+                    className="font-brand text-4xl sm:text-6xl md:text-7xl leading-[1.03] tracking-tight mb-5"
+                  >
+                    Stop being told.
+                    <br />
+                    <span className="text-accent">Start figuring it out.</span>
+                  </motion.h2>
+                  <motion.p
+                    variants={fadeUp}
+                    className="font-body text-lg md:text-xl text-fg-muted mb-9 max-w-md mx-auto"
+                  >
+                    Join with one email. The optional learner questionnaire can
+                    wait until after your place is saved.
+                  </motion.p>
 
                   <motion.div
                     variants={fadeUp}
                     className="w-full max-w-lg mx-auto"
                   >
-                    <SignedOut>
-                      <WaitlistForm />
-                    </SignedOut>
-                    <SignedIn>
-                      <Link
-                        href="/chat"
-                        className="inline-block font-bold px-10 py-4 rounded-2xl border-2 border-fg bg-accent text-fg hover:bg-accent-hover transition-colors text-lg shadow-[5px_5px_0px_var(--fg)] active:translate-y-1 active:shadow-[2px_2px_0px_var(--fg)]"
-                      >
-                        Continue learning →
-                      </Link>
-                    </SignedIn>
+                    <WaitlistForm />
                   </motion.div>
 
-                  <SignedOut>
-                    <StickyNote
-                      className="absolute -top-4 right-6 hidden md:block"
-                      rotate={3}
-                    >
-                      free for students ✏️
-                    </StickyNote>
-                  </SignedOut>
+                  <StickyNote
+                    className="absolute -top-4 right-6 hidden md:block"
+                    rotate={3}
+                  >
+                    one email to join ✏️
+                  </StickyNote>
                 </div>
               </motion.div>
             </section>
@@ -922,22 +852,12 @@ export function LandingPage() {
               <Link href="/pricing" className="hover:text-fg transition-colors">
                 Pricing
               </Link>
-              <SignedOut>
-                <Link
-                  href="/waitlist"
-                  className="hover:text-fg transition-colors"
-                >
-                  Waitlist
-                </Link>
-                <Link href="/chat" className="hover:text-fg transition-colors">
-                  Sign in
-                </Link>
-              </SignedOut>
-              <SignedIn>
-                <Link href="/chat" className="hover:text-fg transition-colors">
-                  Open chat
-                </Link>
-              </SignedIn>
+              <Link href="/waitlist" className="hover:text-fg transition-colors">
+                Optional questionnaire
+              </Link>
+              <Link href="/chat" className="hover:text-fg transition-colors">
+                Open chat
+              </Link>
             </nav>
             <p className="font-bold text-xs text-fg-faint uppercase tracking-widest text-center md:text-right">
               © 2026 Studi · Learn it like you invented it.

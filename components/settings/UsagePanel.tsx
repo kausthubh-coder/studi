@@ -1,19 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { PricingTable, UserProfile, useUser, SignOutButton } from "@clerk/nextjs";
+import { UserProfile, useUser, SignOutButton } from "@clerk/nextjs";
 import { useAction, useQuery } from "convex/react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import {
+  ClerkPricingTableShell,
+  PlanBenefits,
+} from "@/components/billing/PricingExperience";
 import { api } from "@/convex/_generated/api";
+import {
+  CLERK_BILLING_BOUNDARY_COPY,
+  STUDI_PLAN_CATALOG,
+  getStudiPlan,
+  getStudiPlanStatus,
+} from "@/lib/billing/plan-catalog";
+import { buildMonthlyUsageDisplay } from "@/lib/billing/usage-display";
+import {
+  getNextSettingsTabIndex,
+  isSettingsTabNavigationKey,
+} from "@/components/settings/settings-tab-navigation";
 
 // ─── Formatting helpers ──────────────────────────────────────────────────────
-
-function formatInteger(value: number): string {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
-    value,
-  );
-}
 
 function formatMonthLabel(periodStart: string): string {
   const date = new Date(`${periodStart}T00:00:00.000Z`);
@@ -24,28 +33,35 @@ function formatMonthLabel(periodStart: string): string {
   });
 }
 
-function formatPlanLabel(planKey: string): string {
-  if (planKey === "pro") return "Pro";
-  if (planKey === "intro") return "Intro";
-  return "Onboarding";
+function formatInteger(value: number): string {
+  return Math.max(0, Math.floor(Number.isFinite(value) ? value : 0)).toLocaleString(
+    "en-US",
+  );
+}
+
+function promptCountPercent(used: number, limit: number): number {
+  if (!Number.isFinite(limit) || limit <= 0) return 0;
+  const safeUsed = Number.isFinite(used) ? Math.max(0, used) : 0;
+  return Math.min(100, Math.round((safeUsed / limit) * 100));
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function UsageMeter({
   label,
-  used,
-  limit,
-  detail,
+  percent,
+  capacityLabel,
+  promptLabel,
+  explanation,
   icon,
 }: {
   label: string;
-  used: number;
-  limit: number;
-  detail: string;
+  percent: number;
+  capacityLabel: string;
+  promptLabel: string;
+  explanation: string;
   icon: ReactNode;
 }) {
-  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   const isWarning = percent >= 80;
   const barColor = isWarning
     ? "var(--accent)"
@@ -80,18 +96,23 @@ function UsageMeter({
           </h3>
         </div>
         <span
-          className="text-sm font-bold tabular-nums"
+          className="max-w-40 text-right text-xs font-bold tabular-nums"
           style={{
             fontFamily: "var(--font-jakarta)",
             color: isWarning ? "var(--accent)" : "var(--fg-faint)",
           }}
         >
-          {percent}%
+          {capacityLabel}
         </span>
       </div>
       <div
         className="mt-4 h-2 overflow-hidden rounded-full"
         style={{ background: "var(--bg-alt)" }}
+        role="progressbar"
+        aria-label={capacityLabel}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
       >
         <div
           className="h-full rounded-full transition-all duration-700 ease-out"
@@ -99,10 +120,16 @@ function UsageMeter({
         />
       </div>
       <p
-        className="mt-3 text-sm"
+        className="mt-3 text-sm font-semibold"
         style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
       >
-        {detail}
+        {promptLabel}
+      </p>
+      <p
+        className="mt-1 text-xs leading-5"
+        style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-faint)" }}
+      >
+        {explanation}
       </p>
     </article>
   );
@@ -172,33 +199,6 @@ const clerkAppearance = {
   },
 };
 
-const pricingAppearance = {
-  variables: {
-    colorPrimary: "#e05a3a",
-    colorBackground: "var(--bg-card)",
-    colorForeground: "#1c1208",
-    colorMutedForeground: "#6b5a47",
-    colorNeutral: "#b0a090",
-    colorBorder: "#f0e9e0",
-    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-    borderRadius: "1rem",
-  },
-  elements: {
-    rootBox: {
-      width: "100%",
-    },
-    pricingTable: {
-      width: "100%",
-    },
-    card: {
-      boxShadow: "none",
-      border: "none",
-      background: "transparent",
-      padding: 0,
-    }
-  },
-};
-
 // ─── Tab panels ──────────────────────────────────────────────────────────────
 
 function UsageTab({
@@ -241,6 +241,14 @@ function UsageTab({
     );
   }
 
+  const plan = getStudiPlan(billing.planKey);
+  const planStatus = getStudiPlanStatus(billing.status);
+  const monthlyUsage = buildMonthlyUsageDisplay({
+    textAiCostUsd: billing.usage.textAiCostUsd,
+    textAiCostUsdLimit: billing.caps.textAiCostUsdLimit,
+    textPromptCount: billing.usage.textPromptCount,
+  });
+
   return (
     <div className="space-y-6">
       {/* Plan header */}
@@ -251,20 +259,27 @@ function UsageTab({
           borderColor: "var(--border-faint)",
         }}
       >
-        <div>
+        <div className="min-w-0">
           <SectionLabel>Current plan</SectionLabel>
-          <h2
-            className="mt-2 text-3xl"
-            style={{ fontFamily: "var(--font-dm-serif)", color: "var(--fg)" }}
-          >
-            {formatPlanLabel(billing.planKey)}
-          </h2>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <h2
+              className="text-3xl"
+              style={{ fontFamily: "var(--font-dm-serif)", color: "var(--fg)" }}
+            >
+              {plan.name}
+            </h2>
+            <span
+              className="rounded-full border border-border-warm bg-bg-alt px-3 py-1 text-xs font-semibold text-fg-muted"
+              style={{ fontFamily: "var(--font-jakarta)" }}
+            >
+              {planStatus.label}
+            </span>
+          </div>
           <p
-            className="mt-2 text-sm"
+            className="mt-2 max-w-xl text-sm leading-6"
             style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
           >
-            {billing.upgradeReason ??
-              "Your usage is tracked monthly."}
+            {billing.upgradeReason ?? plan.summary} {planStatus.detail}
           </p>
         </div>
       </div>
@@ -289,7 +304,7 @@ function UsageTab({
             className="mt-2 max-w-lg text-sm"
             style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
           >
-            Try a few text chats first. Uploads unlock after you pick a paid plan.
+            {plan.summary} Uploads unlock after you choose Starter or Pro.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <span
@@ -319,17 +334,22 @@ function UsageTab({
           {billing.planKey !== "free_onboarding" && (
             <UsageMeter
               label="Prompt volume"
-              used={billing.usage.textPromptCount}
-              limit={billing.caps.textPromptLimit}
-              detail={`${formatInteger(billing.remaining.textPromptCount)} of ${formatInteger(billing.caps.textPromptLimit)} prompts remaining this month`}
+              percent={promptCountPercent(
+                billing.usage.textPromptCount,
+                billing.caps.textPromptLimit,
+              )}
+              capacityLabel={`${formatInteger(billing.remaining.textPromptCount)} of ${formatInteger(billing.caps.textPromptLimit)} remaining`}
+              promptLabel={`${formatInteger(billing.usage.textPromptCount)} chat prompts sent`}
+              explanation="Prompt count is an operational safety ceiling and is tracked separately from monthly AI capacity."
               icon="📝"
             />
           )}
           <UsageMeter
-            label="Text"
-            used={billing.usage.textAiCostUsd}
-            limit={billing.caps.textAiCostUsdLimit}
-            detail={`${formatInteger(billing.usage.textPromptCount)} prompts this month`}
+            label="Monthly AI capacity"
+            percent={monthlyUsage.percent}
+            capacityLabel={monthlyUsage.capacityLabel}
+            promptLabel={monthlyUsage.promptLabel}
+            explanation={monthlyUsage.explanation}
             icon="💬"
           />
         </div>
@@ -340,30 +360,11 @@ function UsageTab({
 
 function BillingTab() {
   return (
-    <div className="space-y-6">
-      <div>
-        <p
-          className="text-sm"
-          style={{ fontFamily: "var(--font-jakarta)", color: "var(--fg-muted)" }}
-        >
-          Intro gives you full text tutoring. Pro unlocks higher monthly
-          limits.
-        </p>
-      </div>
-
-      <div
-        className="overflow-hidden rounded-[24px] border p-2 sm:p-4"
-        style={{
-          background: "var(--bg-card)",
-          borderColor: "var(--border-faint)",
-          boxShadow: "0 4px 12px rgba(28,18,8,0.03)",
-        }}
-      >
-        <PricingTable
-          appearance={pricingAppearance}
-          newSubscriptionRedirectUrl="/settings?from=checkout"
-        />
-      </div>
+    <div className="space-y-10">
+      <PlanBenefits plans={Object.values(STUDI_PLAN_CATALOG)} />
+      <ClerkPricingTableShell
+        boundaryCopy={CLERK_BILLING_BOUNDARY_COPY}
+      />
     </div>
   );
 }
@@ -469,16 +470,39 @@ export function UsagePanel() {
 
         {/* Tab bar */}
         <nav
+          role="tablist"
+          aria-label="Settings sections"
+          aria-orientation="horizontal"
           className="mt-6 flex gap-1 overflow-x-auto rounded-xl border p-1"
           style={{
             background: "var(--bg-alt)",
             borderColor: "var(--border-faint)",
           }}
         >
-          {TABS.map((tab) => (
+          {TABS.map((tab, index) => (
             <button
               key={tab.id}
+              id={`settings-tab-${tab.id}`}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls="settings-panel"
+              tabIndex={activeTab === tab.id ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
+              onKeyDown={(event) => {
+                if (!isSettingsTabNavigationKey(event.key)) return;
+                event.preventDefault();
+                const nextIndex = getNextSettingsTabIndex(
+                  index,
+                  event.key,
+                  TABS.length,
+                );
+                const nextTab = TABS[nextIndex];
+                setActiveTab(nextTab.id);
+                requestAnimationFrame(() => {
+                  document.getElementById(`settings-tab-${nextTab.id}`)?.focus();
+                });
+              }}
               className="flex shrink-0 items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all duration-150"
               style={{
                 fontFamily: "var(--font-jakarta)",
@@ -498,7 +522,13 @@ export function UsagePanel() {
       </header>
 
       {/* Tab content */}
-      <main className="mx-auto mt-6 w-full max-w-4xl">
+      <main
+        id="settings-panel"
+        role="tabpanel"
+        aria-labelledby={`settings-tab-${activeTab}`}
+        tabIndex={0}
+        className="mx-auto mt-6 w-full max-w-4xl"
+      >
         {activeTab === "usage" && <UsageTab billing={billing} />}
         {activeTab === "billing" && <BillingTab />}
         {activeTab === "account" && <AccountTab />}

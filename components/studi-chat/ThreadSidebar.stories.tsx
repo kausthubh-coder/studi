@@ -84,6 +84,13 @@ export const ConversationHistory: Story = {
     await userEvent.click(
       canvas.getByRole("button", { name: "Delete Recursion and base cases" }),
     );
+    await expect(canvas.getByRole("alertdialog")).toHaveTextContent(
+      "Recursion and base cases",
+    );
+    await expect(args.onDeleteThread).not.toHaveBeenCalled();
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Delete thread" }),
+    );
     await expect(args.onDeleteThread).toHaveBeenCalledWith(THREADS[1]);
   },
 };

@@ -32,7 +32,10 @@ function createDefaultRuntime(): StudiMockRuntime {
         "chatActions:sendFirstMessage": asyncResult("sendFirstMessage", {
           threadId: "thread_story_created",
         }),
-        "chatActions:sendMessage": asyncResult("sendMessage", null),
+        "chatActions:sendMessage": asyncResult("sendMessage", {
+          promptMessageId: "message_story_followup",
+          deduped: false,
+        }),
         "chatActions:deleteThread": asyncResult("deleteThread", {
           deleted: true,
         }),
@@ -42,7 +45,6 @@ function createDefaultRuntime(): StudiMockRuntime {
         ),
         "waitlistPublic:joinWaitlist": asyncResult("joinWaitlist", {
           success: true,
-          alreadyOnList: false,
         }),
         "codeSparkActions:run": asyncResult(
           "runCodeSpark",
@@ -63,6 +65,9 @@ function createDefaultRuntime(): StudiMockRuntime {
           filename: "story-notes.png",
           mimeType: "image/png",
           size: 128,
+        }),
+        "chat:cancelGeneration": asyncResult("cancelGeneration", {
+          stopped: true,
         }),
         "codeSparks:upsertSessionFromArtifact": asyncResult(
           "upsertCodeSparkSession",

@@ -67,4 +67,24 @@ describe("Storybook setup", () => {
       expect(externalMock).not.toContain(".storybook/mocks/");
     }
   });
+
+  it("keeps Storybook fixtures aligned with the production remediation contracts", () => {
+    const provider = readProjectFile(".storybook/mocks/StudiMockProvider.tsx");
+    const billing = readProjectFile(".storybook/fixtures/billing.ts");
+    const chatStories = readProjectFile("components/StudiChat.stories.tsx");
+    const landingStories = readProjectFile(
+      "components/landing/LandingPage.stories.tsx",
+    );
+
+    expect(provider).toContain('"chat:cancelGeneration"');
+    expect(provider).toContain('promptMessageId: "message_story_followup"');
+    expect(provider).not.toContain("alreadyOnList");
+    expect(chatStories).toContain('promptMessageId: "message_story_followup"');
+    expect(chatStories).toContain('"chat:cancelGeneration": cancelGeneration');
+    expect(landingStories).not.toContain("alreadyOnList");
+    expect(billing).toContain("textAiCostUsdLimit: 1.5");
+    expect(billing).toContain("textAiCostUsdLimit: 4.5");
+    expect(billing).toContain('status: "canceled"');
+    expect(billing).toContain("textPromptLimit: 450");
+  });
 });

@@ -91,20 +91,20 @@ export const introBilling = {
     freePromptLimit: 0,
     textPromptLimit: 150,
     freeTextAiCostUsdLimit: 0,
-    textAiCostUsdLimit: 5,
-    totalEstimatedCostUsdLimit: 7,
+    textAiCostUsdLimit: 1.5,
+    totalEstimatedCostUsdLimit: 2,
   },
   usage: {
     textPromptCount: 38,
-    textAiCostUsd: 1.42,
-    totalEstimatedCostUsd: 1.62,
+    textAiCostUsd: 0.42,
+    totalEstimatedCostUsd: 0.62,
     lifetimeFreePromptCount: 3,
     lifetimeFreeTextAiCostUsd: 0.12,
   },
   remaining: {
     textPromptCount: 112,
-    textAiCostUsd: 3.58,
-    totalEstimatedCostUsd: 5.38,
+    textAiCostUsd: 1.08,
+    totalEstimatedCostUsd: 1.38,
     lifetimeFreePromptCount: 0,
   },
   lockedSurfaces: {
@@ -119,13 +119,24 @@ export const proBilling = {
   caps: {
     ...introBilling.caps,
     textPromptLimit: 450,
-    textAiCostUsdLimit: 20,
-    totalEstimatedCostUsdLimit: 30,
+    textAiCostUsdLimit: 4.5,
+    totalEstimatedCostUsdLimit: 6,
   },
   remaining: {
     ...introBilling.remaining,
     textPromptCount: 412,
-    textAiCostUsd: 18.58,
-    totalEstimatedCostUsd: 28.38,
+    textAiCostUsd: 4.08,
+    totalEstimatedCostUsd: 5.38,
   },
+} satisfies StoryBillingState;
+
+export const expiredCanceledIntroBilling = {
+  ...introBilling,
+  status: "canceled",
+  lockedSurfaces: {
+    chat: true,
+    attachments: true,
+  },
+  upgradeReason:
+    "Your paid plan is not active. Update billing to keep learning.",
 } satisfies StoryBillingState;

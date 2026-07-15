@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 const projectRoot = process.cwd();
 const componentsRoot = join(projectRoot, "components");
 
-const excludedInfrastructure = new Set(["components/ConvexClientProvider.tsx"]);
+const excludedInfrastructure = new Set([
+  "components/ConvexClientProvider.tsx",
+  "components/PublicConvexClientProvider.tsx",
+]);
 
 function listFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

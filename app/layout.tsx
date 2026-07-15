@@ -7,8 +7,7 @@ import {
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.css";
-import ConvexClientProvider from "@/components/ConvexClientProvider";
-import { ClerkProvider } from "@clerk/nextjs";
+import { siteMetadata } from "@/lib/site-metadata";
 
 const dmSerifDisplay = DM_Serif_Display({
   variable: "--font-dm-serif",
@@ -30,21 +29,7 @@ const sourceSerif = Source_Serif_4({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Studi — Your Learning Companion",
-  description:
-    "A warm, thoughtful AI tutor that helps you learn through conversation.",
-  icons: {
-    icon: [
-      {
-        url: "/studi-paper-airplane-logo-rounded.png",
-        type: "image/png",
-      },
-    ],
-    shortcut: "/studi-paper-airplane-logo-rounded.png",
-    apple: "/studi-paper-airplane-logo-rounded.png",
-  },
-};
+export const metadata: Metadata = siteMetadata;
 
 export default function RootLayout({
   children,
@@ -56,9 +41,7 @@ export default function RootLayout({
       <body
         className={`${dmSerifDisplay.variable} ${plusJakartaSans.variable} ${sourceSerif.variable} antialiased`}
       >
-        <ClerkProvider dynamic>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
-        </ClerkProvider>
+        {children}
       </body>
     </html>
   );
