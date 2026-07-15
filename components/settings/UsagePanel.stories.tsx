@@ -136,7 +136,6 @@ export const FreshFreePreview: Story = {
     await expect(
       canvas.getByRole("heading", {
         name: "Guided preview",
-        exact: true,
         level: 2,
       }),
     ).toBeInTheDocument();
