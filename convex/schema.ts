@@ -54,6 +54,37 @@ export default defineSchema({
     ])
     .index("by_userId_and_threadId", ["userId", "threadId"]),
 
+  chatGenerationLeases: defineTable({
+    userId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+    state: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("cancel_requested"),
+    ),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_userId_and_expiresAt", ["userId", "expiresAt"])
+    .index("by_userId_and_threadId_and_expiresAt", [
+      "userId",
+      "threadId",
+      "expiresAt",
+    ])
+    .index("by_userId_and_threadId_and_promptMessageId", [
+      "userId",
+      "threadId",
+      "promptMessageId",
+    ]),
+
+  chatGenerationLeaseMigrations: defineTable({
+    userId: v.string(),
+    state: v.union(v.literal("running"), v.literal("complete")),
+    cursor: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   attachments: defineTable({
     userId: v.string(),
     storageId: v.id("_storage"),

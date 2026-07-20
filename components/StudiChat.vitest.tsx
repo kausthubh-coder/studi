@@ -14,6 +14,12 @@ const mocks = vi.hoisted(() => ({
   saveAttachment: vi.fn(),
   syncBillingProfile: vi.fn(),
   uiMessages: [] as Array<Record<string, unknown>>,
+  threads: [] as Array<Record<string, unknown>>,
+  chatAdmission: {
+    canSend: true,
+    reason: null,
+    activeThread: null,
+  } as Record<string, unknown> | undefined,
 }));
 
 vi.mock("next/link", () => ({
@@ -79,7 +85,10 @@ vi.mock("convex/react", () => ({
   useQuery: (reference: unknown) => {
     const name = getFunctionName(reference as never);
     if (name === "chat:listThreads") {
-      return [];
+      return mocks.threads;
+    }
+    if (name === "chat:getChatAdmissionState") {
+      return mocks.chatAdmission;
     }
     if (name === "billing:getViewerBillingState") {
       return {
@@ -117,6 +126,12 @@ describe("StudiChat follow-up sending", () => {
       status: "onboarding",
     });
     mocks.uiMessages = [];
+    mocks.threads = [];
+    mocks.chatAdmission = {
+      canSend: true,
+      reason: null,
+      activeThread: null,
+    };
 
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -169,6 +184,96 @@ describe("StudiChat follow-up sending", () => {
       );
     });
     expect(mocks.rawSendMessageMutation).not.toHaveBeenCalled();
+  });
+
+  it("explains a cross-thread Starter block and returns to the active lesson", async () => {
+    mocks.threads = [
+      {
+        threadId: "thread_active",
+        title: "Understanding derivatives",
+        lastMessageAt: 2,
+      },
+    ];
+    mocks.chatAdmission = {
+      canSend: false,
+      reason: "another_thread_active",
+      activeThread: {
+        threadId: "thread_active",
+        title: "Understanding derivatives",
+      },
+    };
+
+    render(<StudiChat />);
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to learn?"),
+      { target: { value: "Teach me vectors" } },
+    );
+
+    expect(screen.getByLabelText("Send message")).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /finish your active lesson before starting another one/i,
+    );
+    expect(screen.getByRole("link", { name: /view pro/i })).toHaveAttribute(
+      "href",
+      "/pricing?entry_point=chat_concurrency&plan=pro",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /return to understanding derivatives/i }),
+    );
+    expect(
+      await screen.findByPlaceholderText("Ask a follow-up..."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the welcome composer available for Pro cross-thread work", () => {
+    mocks.chatAdmission = {
+      canSend: true,
+      reason: null,
+      activeThread: {
+        threadId: "thread_active",
+        title: "Understanding derivatives",
+      },
+    };
+
+    render(<StudiChat />);
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to learn?"),
+      { target: { value: "Teach me vectors" } },
+    );
+
+    expect(screen.getByLabelText("Send message")).not.toBeDisabled();
+    expect(screen.queryByText(/finish your active lesson/i)).not.toBeInTheDocument();
+  });
+
+  it("ignores cached streaming messages from the previous thread on the Pro welcome screen", () => {
+    mocks.uiMessages = [
+      {
+        key: "cached_stream",
+        role: "assistant",
+        status: "streaming",
+        parts: [],
+      },
+    ];
+    mocks.chatAdmission = { canSend: true, reason: null, activeThread: null };
+
+    render(<StudiChat />);
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to learn?"),
+      { target: { value: "Teach me vectors" } },
+    );
+
+    expect(screen.getByLabelText("Send message")).toBeEnabled();
+    expect(screen.queryByText(/working on your next step/i)).not.toBeInTheDocument();
+  });
+
+  it("explains admission loading instead of silently disabling send", () => {
+    mocks.chatAdmission = undefined;
+    render(<StudiChat />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /checking lesson availability/i,
+    );
+    expect(screen.getByLabelText("Send message")).toBeDisabled();
   });
 
   it("keeps a durable live status above the composer while agent work is active", async () => {

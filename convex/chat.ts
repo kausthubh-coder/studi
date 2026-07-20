@@ -7,14 +7,16 @@ import {
   vStreamArgs,
 } from "@convex-dev/agent";
 import { paginationOptsValidator, type FunctionReference } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
   mutation,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 
 const internalApi = internal as unknown as {
@@ -26,6 +28,10 @@ const internalApi = internal as unknown as {
   };
   chat: {
     continueDeleteThreadCodeSparksInternal: FunctionReference<
+      "mutation",
+      "internal"
+    >;
+    continueGenerationLeaseMigrationInternal: FunctionReference<
       "mutation",
       "internal"
     >;
@@ -59,6 +65,23 @@ const queuedSendResultValidator = v.object({
   deduped: v.boolean(),
 });
 
+const chatAdmissionStateValidator = v.object({
+  canSend: v.boolean(),
+  reason: v.union(
+    v.null(),
+    v.literal("same_thread_active"),
+    v.literal("another_thread_active"),
+    v.literal("syncing"),
+  ),
+  activeThread: v.union(
+    v.null(),
+    v.object({
+      threadId: v.string(),
+      title: v.optional(v.string()),
+    }),
+  ),
+});
+
 const cleanupFailedAssistantTurnResultValidator = v.object({
   promptFound: v.boolean(),
   deletedMessages: v.number(),
@@ -74,6 +97,198 @@ const assistantGenerationFailureText =
 const assistantGenerationCanceledText =
   "You stopped this response. Ask a follow-up whenever you're ready.";
 const assistantGenerationLeaseMs = 15 * 60 * 1000;
+
+function hasActiveProAccess(
+  profile: Doc<"billingProfiles"> | null,
+  now: number,
+): boolean {
+  return (
+    profile?.planKey === "pro" &&
+    (profile.status === "active" ||
+      (profile.status === "canceled" &&
+        typeof profile.currentPeriodEnd === "number" &&
+        profile.currentPeriodEnd > now))
+  );
+}
+
+async function getActiveLeaseForThread(
+  ctx: Pick<QueryCtx, "db">,
+  userId: string,
+  threadId: string,
+  now: number,
+) {
+  return await ctx.db
+    .query("chatGenerationLeases")
+    .withIndex("by_userId_and_threadId_and_expiresAt", (q) =>
+      q.eq("userId", userId).eq("threadId", threadId).gt("expiresAt", now),
+    )
+    .first();
+}
+
+async function getAnyActiveLease(
+  ctx: Pick<QueryCtx, "db">,
+  userId: string,
+  now: number,
+) {
+  return await ctx.db
+    .query("chatGenerationLeases")
+    .withIndex("by_userId_and_expiresAt", (q) =>
+      q.eq("userId", userId).gt("expiresAt", now),
+    )
+    .first();
+}
+
+async function getGenerationLease(
+  ctx: Pick<QueryCtx, "db">,
+  args: { userId: string; threadId: string; promptMessageId: string },
+) {
+  return await ctx.db
+    .query("chatGenerationLeases")
+    .withIndex("by_userId_and_threadId_and_promptMessageId", (q) =>
+      q
+        .eq("userId", args.userId)
+        .eq("threadId", args.threadId)
+        .eq("promptMessageId", args.promptMessageId),
+    )
+    .unique();
+}
+
+const generationLeaseMigrationBatchSize = 64;
+
+async function getGenerationLeaseMigration(
+  ctx: Pick<QueryCtx, "db">,
+  userId: string,
+) {
+  return await ctx.db
+    .query("chatGenerationLeaseMigrations")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+}
+
+async function migrateGenerationLeaseBatch(
+  ctx: MutationCtx,
+  userId: string,
+): Promise<boolean> {
+  const migration = await getGenerationLeaseMigration(ctx, userId);
+  if (migration?.state === "complete") return true;
+
+  const page = await ctx.db
+    .query("userThreads")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .paginate({
+      cursor: migration?.cursor ?? null,
+      numItems: generationLeaseMigrationBatchSize,
+    });
+  const now = Date.now();
+  for (const thread of page.page) {
+    for (const generation of thread.activeGenerations ?? []) {
+      if (generation.expiresAt <= now) continue;
+      const existingLease = await getGenerationLease(ctx, {
+        userId,
+        threadId: thread.threadId,
+        promptMessageId: generation.promptMessageId,
+      });
+      if (!existingLease) {
+        await ctx.db.insert("chatGenerationLeases", {
+          userId,
+          threadId: thread.threadId,
+          promptMessageId: generation.promptMessageId,
+          state: generation.state,
+          createdAt: generation.createdAt,
+          expiresAt: generation.expiresAt,
+        });
+      }
+    }
+  }
+
+  const state = page.isDone ? "complete" : "running";
+  const migrationPatch = {
+    state,
+    cursor: page.isDone ? undefined : page.continueCursor,
+    updatedAt: now,
+  } as const;
+  if (migration) {
+    await ctx.db.patch(migration._id, migrationPatch);
+  } else {
+    await ctx.db.insert("chatGenerationLeaseMigrations", {
+      userId,
+      ...migrationPatch,
+    });
+  }
+
+  if (!page.isDone) {
+    await ctx.scheduler.runAfter(
+      0,
+      internalApi.chat.continueGenerationLeaseMigrationInternal,
+      { userId },
+    );
+  }
+  return page.isDone;
+}
+
+function throwMigrationPending(): never {
+  throw new ConvexError({
+    code: "CHAT_ADMISSION_SYNCING",
+    surface: "chat",
+    reason: "syncing",
+    message: "Studi is preparing your lessons. Please try again in a moment.",
+  });
+}
+
+async function getProAccessForUser(
+  ctx: Pick<QueryCtx, "db">,
+  userId: string,
+  now: number,
+): Promise<boolean> {
+  const profile = await ctx.db
+    .query("billingProfiles")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+  return hasActiveProAccess(profile, now);
+}
+
+async function assertGenerationAdmission(
+  ctx: MutationCtx,
+  args: { userId: string; threadId: string; planKey: "free_onboarding" | "intro" | "pro" },
+) {
+  if (!(await migrateGenerationLeaseBatch(ctx, args.userId))) {
+    throwMigrationPending();
+  }
+  const now = Date.now();
+  const sameThreadLease = await getActiveLeaseForThread(
+    ctx,
+    args.userId,
+    args.threadId,
+    now,
+  );
+  const blockingLease =
+    sameThreadLease ??
+    (args.planKey === "pro"
+      ? undefined
+      : await getAnyActiveLease(ctx, args.userId, now));
+  if (!blockingLease) return;
+
+  const sameThreadActive = blockingLease.threadId === args.threadId;
+  const blockingThread = await ctx.db
+    .query("userThreads")
+    .withIndex("by_userId_and_threadId", (q) =>
+      q.eq("userId", args.userId).eq("threadId", blockingLease.threadId),
+    )
+    .unique();
+
+  throw new ConvexError({
+    code: "CHAT_GENERATION_ACTIVE",
+    surface: "chat",
+    planKey: args.planKey,
+    reason: sameThreadActive ? "same_thread_active" : "another_thread_active",
+    activeThreadId: blockingLease.threadId,
+    activeThreadTitle: blockingThread?.title,
+    message: sameThreadActive
+      ? "Studi is still responding in this lesson. Wait for it to finish or stop the response."
+      : "Finish your active lesson before starting another one. You can return to it now, or upgrade to Pro for concurrent lessons.",
+    upgradeTarget: "pro",
+  });
+}
 
 const generationStateValidator = v.union(
   v.literal("queued"),
@@ -267,6 +482,140 @@ export const listThreads = query({
   },
 });
 
+export const getChatAdmissionState = query({
+  args: {
+    threadId: v.optional(v.string()),
+  },
+  returns: chatAdmissionStateValidator,
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { canSend: false, reason: null, activeThread: null };
+    }
+
+    const migration = await getGenerationLeaseMigration(ctx, identity.subject);
+    if (migration?.state !== "complete") {
+      return {
+        canSend: false,
+        reason: "syncing" as const,
+        activeThread: null,
+      };
+    }
+
+    const now = Date.now();
+    const [sameThreadLease, proAccess] = await Promise.all([
+      args.threadId
+        ? getActiveLeaseForThread(ctx, identity.subject, args.threadId, now)
+        : Promise.resolve(null),
+      getProAccessForUser(ctx, identity.subject, now),
+    ]);
+    const blockingLease =
+      sameThreadLease ??
+      (!proAccess ? await getAnyActiveLease(ctx, identity.subject, now) : null);
+
+    if (!blockingLease) {
+      return { canSend: true, reason: null, activeThread: null };
+    }
+
+    const blockingThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q
+          .eq("userId", identity.subject)
+          .eq("threadId", blockingLease.threadId),
+      )
+      .unique();
+
+    const reason: "same_thread_active" | "another_thread_active" = sameThreadLease
+      ? "same_thread_active"
+      : "another_thread_active";
+    return {
+      canSend: false,
+      reason,
+      activeThread: {
+        threadId: blockingLease.threadId,
+        title: blockingThread?.title,
+      },
+    };
+  },
+});
+
+export const assertCanStartNewThread = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+    if (!(await migrateGenerationLeaseBatch(ctx, identity.subject))) {
+      throwMigrationPending();
+    }
+    const now = Date.now();
+    if (await getProAccessForUser(ctx, identity.subject, now)) return null;
+    const blockingLease = await getAnyActiveLease(ctx, identity.subject, now);
+    if (!blockingLease) return null;
+    const blockingThread = await ctx.db
+      .query("userThreads")
+      .withIndex("by_userId_and_threadId", (q) =>
+        q
+          .eq("userId", identity.subject)
+          .eq("threadId", blockingLease.threadId),
+      )
+      .unique();
+    throw new ConvexError({
+      code: "CHAT_GENERATION_ACTIVE",
+      surface: "chat",
+      reason: "another_thread_active",
+      activeThreadId: blockingLease.threadId,
+      activeThreadTitle: blockingThread?.title,
+      message:
+        "Finish your active lesson before starting another one. You can return to it now, or upgrade to Pro for concurrent lessons.",
+      upgradeTarget: "pro",
+    });
+  },
+});
+
+export const ensureGenerationLeaseMigration = mutation({
+  args: {},
+  returns: v.object({ complete: v.boolean() }),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+    return {
+      complete: await migrateGenerationLeaseBatch(ctx, identity.subject),
+    };
+  },
+});
+
+export const continueGenerationLeaseMigrationInternal = internalMutation({
+  args: { userId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await migrateGenerationLeaseBatch(ctx, args.userId);
+    return null;
+  },
+});
+
+// Internal-only deterministic hook for the post-preflight race regression.
+export const insertGenerationLeaseForRaceTestInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    threadId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    await ctx.db.insert("chatGenerationLeases", {
+      userId: args.userId,
+      threadId: args.threadId,
+      promptMessageId: `race_${now}`,
+      state: "running",
+      createdAt: now,
+      expiresAt: now + assistantGenerationLeaseMs,
+    });
+    return null;
+  },
+});
+
 export const backfillThreadActivityForCurrentUser = mutation({
   args: {
     limit: v.optional(v.number()),
@@ -282,6 +631,7 @@ export const backfillThreadActivityForCurrentUser = mutation({
     }
 
     const maxItems = Math.max(1, Math.min(args.limit ?? 200, 1000));
+    await migrateGenerationLeaseBatch(ctx, identity.subject);
     const threads = await ctx.db
       .query("userThreads")
       .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
@@ -469,6 +819,16 @@ export const sendMessage = mutation({
       },
     );
 
+    // Convex's serializable transaction/OCC semantics make this indexed read
+    // conflict with a concurrent lease insert, so one racing mutation retries
+    // and observes the winner. Request receipts stay ahead of admission so a
+    // safe retry never competes with its own generation.
+    await assertGenerationAdmission(ctx, {
+      userId: identity.subject,
+      threadId: args.threadId,
+      planKey: billingSnapshot.planKey,
+    });
+
     const attachments = await ctx.runQuery(internal.chat.resolveAttachments, {
       userId: identity.subject,
       attachmentIds,
@@ -522,6 +882,15 @@ export const sendMessage = mutation({
       promptMessageId: messageId,
       order: promptMessage.order,
       createdAt: now,
+    });
+
+    await ctx.db.insert("chatGenerationLeases", {
+      userId: identity.subject,
+      threadId: args.threadId,
+      promptMessageId: messageId,
+      state: "queued",
+      createdAt: now,
+      expiresAt: now + assistantGenerationLeaseMs,
     });
 
     await ctx.db.patch(ownedThread._id, {
@@ -630,7 +999,17 @@ export const cancelGeneration = mutation({
         cancelRequestedAt: Date.now(),
       })),
     });
-
+    const activeLeases = (
+      await Promise.all(
+        activeGenerations.map((generation) =>
+          getGenerationLease(ctx, {
+            userId: identity.subject,
+            threadId: args.threadId,
+            promptMessageId: generation.promptMessageId,
+          }),
+        ),
+      )
+    ).filter((lease) => lease !== null);
     for (const stream of activeStreams) {
       try {
         await abortStream(ctx, components.agent, {
@@ -640,6 +1019,9 @@ export const cancelGeneration = mutation({
       } catch (error) {
         console.error("Failed to abort persisted assistant stream", error);
       }
+    }
+    for (const lease of activeLeases) {
+      await ctx.db.delete(lease._id);
     }
     return { stopped: true };
   },
@@ -676,6 +1058,10 @@ export const beginAssistantGenerationInternal = internalMutation({
     await ctx.db.patch(ownedThread._id, {
       activeGenerations,
     });
+    const lease = await getGenerationLease(ctx, args);
+    if (lease) {
+      await ctx.db.patch(lease._id, { state: "running" });
+    }
     return true;
   },
 });
@@ -715,6 +1101,10 @@ export const completeAssistantGenerationInternal = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const lease = await getGenerationLease(ctx, args);
+    if (lease) {
+      await ctx.db.delete(lease._id);
+    }
     const ownedThread = await ctx.db
       .query("userThreads")
       .withIndex("by_userId_and_threadId", (q) =>
@@ -746,6 +1136,10 @@ export const expireAssistantGenerationInternal = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const lease = await getGenerationLease(ctx, args);
+    if (lease && lease.expiresAt <= Date.now()) {
+      await ctx.db.delete(lease._id);
+    }
     const ownedThread = await ctx.db
       .query("userThreads")
       .withIndex("by_userId_and_threadId", (q) =>
@@ -1090,6 +1484,28 @@ export const saveAssistantCancellationMessageInternal = internalMutation({
 const codeSparkSessionsPerDeleteBatch = 4;
 const codeSparkRowsPerDeleteBatch = 64;
 const chatRequestReceiptsPerDeleteBatch = 64;
+const chatGenerationLeasesPerDeleteBatch = 16;
+
+async function deleteChatGenerationLeaseBatch(
+  ctx: MutationCtx,
+  args: { userId: string; threadId: string },
+) {
+  const leases = await ctx.db
+    .query("chatGenerationLeases")
+    .withIndex("by_userId_and_threadId_and_expiresAt", (q) =>
+      q.eq("userId", args.userId).eq("threadId", args.threadId),
+    )
+    .take(chatGenerationLeasesPerDeleteBatch);
+  for (const lease of leases) await ctx.db.delete(lease._id);
+  return Boolean(
+    await ctx.db
+      .query("chatGenerationLeases")
+      .withIndex("by_userId_and_threadId_and_expiresAt", (q) =>
+        q.eq("userId", args.userId).eq("threadId", args.threadId),
+      )
+      .first(),
+  );
+}
 
 async function deleteChatRequestReceiptBatch(
   ctx: MutationCtx,
@@ -1190,7 +1606,8 @@ export const continueDeleteThreadCodeSparksInternal = internalMutation({
   handler: async (ctx, args) => {
     const hasMoreCodeSparkData = await deleteCodeSparkThreadBatch(ctx, args);
     const hasMoreRequestReceipts = await deleteChatRequestReceiptBatch(ctx, args);
-    if (hasMoreCodeSparkData || hasMoreRequestReceipts) {
+    const hasMoreGenerationLeases = await deleteChatGenerationLeaseBatch(ctx, args);
+    if (hasMoreCodeSparkData || hasMoreRequestReceipts || hasMoreGenerationLeases) {
       await ctx.scheduler.runAfter(
         0,
         internalApi.chat.continueDeleteThreadCodeSparksInternal,
@@ -1221,8 +1638,9 @@ export const deleteThreadRecordInternal = internalMutation({
 
     const hasMoreCodeSparkData = await deleteCodeSparkThreadBatch(ctx, args);
     const hasMoreRequestReceipts = await deleteChatRequestReceiptBatch(ctx, args);
+    const hasMoreGenerationLeases = await deleteChatGenerationLeaseBatch(ctx, args);
     await ctx.db.delete(thread._id);
-    if (hasMoreCodeSparkData || hasMoreRequestReceipts) {
+    if (hasMoreCodeSparkData || hasMoreRequestReceipts || hasMoreGenerationLeases) {
       await ctx.scheduler.runAfter(
         0,
         internalApi.chat.continueDeleteThreadCodeSparksInternal,

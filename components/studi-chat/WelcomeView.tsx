@@ -4,7 +4,10 @@ import type { ClipboardEvent, FormEvent, RefObject } from "react";
 import { useUser } from "@clerk/nextjs";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Composer } from "@/components/studi-chat/Composer";
-import type { PendingAttachment } from "@/components/studi-chat/types";
+import type {
+  ChatAdmissionBlock,
+  PendingAttachment,
+} from "@/components/studi-chat/types";
 
 const chips = [
   {
@@ -49,6 +52,9 @@ export function WelcomeView({
   onUpload,
   onRemoveAttachment,
   onSuggestionClick,
+  admissionBlock,
+  onReturnToActiveThread,
+  isAdmissionLoading = false,
 }: {
   pendingAttachments: PendingAttachment[];
   input: string;
@@ -61,6 +67,9 @@ export function WelcomeView({
   onUpload: (files: FileList) => Promise<void>;
   onRemoveAttachment: (attachmentId: Id<"attachments">) => void;
   onSuggestionClick: (prompt: string) => void;
+  admissionBlock?: ChatAdmissionBlock | null;
+  onReturnToActiveThread?: (threadId: string) => void;
+  isAdmissionLoading?: boolean;
 }) {
   const { user } = useUser();
   const firstName = user?.firstName ?? "there";
@@ -96,6 +105,9 @@ export function WelcomeView({
             onUpload={onUpload}
             onRemoveAttachment={onRemoveAttachment}
             variant="welcome"
+            admissionBlock={admissionBlock}
+            onReturnToActiveThread={onReturnToActiveThread}
+            isAdmissionLoading={isAdmissionLoading}
           />
         </div>
 

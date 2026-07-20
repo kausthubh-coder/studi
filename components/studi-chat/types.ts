@@ -20,3 +20,11 @@ export type ExpandedSpark = {
   threadId: string | null;
   sparkInstanceId: string;
 };
+
+export type ChatAdmissionBlock = {
+  reason: "same_thread_active" | "another_thread_active";
+  activeThread: {
+    threadId: string;
+    title?: string;
+  };
+};
