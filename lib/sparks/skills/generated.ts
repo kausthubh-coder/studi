@@ -15,37 +15,37 @@ export const sparkSkillMetadataById: Readonly<Record<SparkType, SparkSkillMetada
   "scene": {
     "name": "Spark Scene",
     "description": "Create a safe file-based micro-interactive learning visualization.",
-    "whenToUse": "Use when the learner would understand better with an interactive visual demo instead of text alone.",
+    "whenToUse": "Use during discovery — before naming the rule — when the learner should predict, manipulate, or compare something visually instead of reading an explanation.",
     "promptPath": "sparks/skills/scene.md"
   },
   "quiz": {
     "name": "Quiz",
     "description": "Create a structured quiz artifact with multiple questions, instant feedback, and scoring.",
-    "whenToUse": "Use when the learner should check understanding with short questions and immediate correctness feedback.",
+    "whenToUse": "Use after the learner has had an aha — to verify they really got it — not to introduce new material.",
     "promptPath": "sparks/skills/quiz.md"
   },
   "flash_card": {
     "name": "Flash Card",
     "description": "Create a structured flash-card artifact for active recall and quick self-testing.",
-    "whenToUse": "Use when the learner should memorize definitions, terms, formulas, or paired concepts through repeated recall.",
+    "whenToUse": "Use after a concept is understood — for active recall of terms and relationships they already figured out — not for first exposure.",
     "promptPath": "sparks/skills/flash-card.md"
   },
   "desmos_graph": {
     "name": "Desmos Graph",
     "description": "Create an interactive Desmos graph with equations, points, and data tables for math exploration.",
-    "whenToUse": "Use when the learner needs to visualize equations, compare multiple functions, inspect points, or manipulate table-driven data.",
+    "whenToUse": "Use during discovery when seeing a graph helps the learner notice a pattern (slope, intersection, area, rate of change) before you name the rule.",
     "promptPath": "sparks/skills/desmos-graph.md"
   },
   "code": {
     "name": "Code Spark",
     "description": "Create a tiny editable code workspace that can run provider-backed TypeScript or Python commands.",
-    "whenToUse": "Use when the learner needs to edit a small file, run code, inspect output, and make one focused repair inside chat.",
+    "whenToUse": "Use when the concept is best learned by predicting output, running code, observing results, and making one small repair — not by reading a solution.",
     "promptPath": "sparks/skills/code.md"
   },
   "test": {
     "name": "Test Spark",
     "description": "Create a tiny code challenge with visible checks only.",
-    "whenToUse": "Use when the learner should repair code by making tests fail, reading feedback, and iterating until visible checks pass.",
+    "whenToUse": "Use when the learner should discover a coding pattern by reading failing checks, hypothesizing a fix, and iterating — after they have a prediction, not before.",
     "promptPath": "sparks/skills/test.md"
   }
 }

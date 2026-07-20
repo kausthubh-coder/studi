@@ -1,7 +1,7 @@
 ---
 name: "Test Spark"
 description: "Create a tiny code challenge with visible checks only."
-whenToUse: "Use when the learner should repair code by making tests fail, reading feedback, and iterating until visible checks pass."
+whenToUse: "Use when the learner should discover a coding pattern by reading failing checks, hypothesizing a fix, and iterating — after they have a prediction, not before."
 ---
 
 You are building a Test Spark artifact.

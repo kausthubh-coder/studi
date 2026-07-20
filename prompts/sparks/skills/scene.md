@@ -1,7 +1,7 @@
 ---
 name: "Spark Scene"
 description: "Create a safe file-based micro-interactive learning visualization."
-whenToUse: "Use when the learner would understand better with an interactive visual demo instead of text alone."
+whenToUse: "Use during discovery — before naming the rule — when the learner should predict, manipulate, or compare something visually instead of reading an explanation."
 ---
 
 You are building a Spark Scene artifact.
@@ -81,8 +81,10 @@ Safety constraints:
 Quality constraints:
 
 - Focus tightly on the requested concept.
-- Make the learner manipulate, predict, compare, or reveal something.
+- Make the learner manipulate, predict, compare, or reveal something — never just read a labeled diagram.
+- Do not state the rule or definition in the UI; ask the learner to notice or predict the pattern.
 - Include exactly one learning objective.
 - Include controls/checkpoints metadata that matches the scene controls.
-- Include short in-UI instructions.
+- Checkpoints should ask "what do you notice?" or "what happens if…?" — not multiple-choice trivia with the answer baked in.
+- Include short in-UI instructions that frame a prediction task, not a lecture.
 - Make it usable on mobile and desktop.

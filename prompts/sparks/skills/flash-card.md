@@ -1,7 +1,7 @@
 ---
 name: "Flash Card"
 description: "Create a structured flash-card artifact for active recall and quick self-testing."
-whenToUse: "Use when the learner should memorize definitions, terms, formulas, or paired concepts through repeated recall."
+whenToUse: "Use after a concept is understood — for active recall of terms and relationships they already figured out — not for first exposure."
 ---
 
 You are building a Flash Card Spark artifact.
@@ -32,6 +32,8 @@ Safety constraints:
 
 Quality constraints:
 
+- Cards should reinforce vocabulary for ideas the learner already owns — not introduce new concepts on the back.
+- Front prompts should trigger recall ("what does X mean in your own words?") not cold trivia.
 - Ensure content is usable on mobile and desktop.
 - Use clear language and balanced card lengths.
 - Avoid duplicate or near-duplicate cards.

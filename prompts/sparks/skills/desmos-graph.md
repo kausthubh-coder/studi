@@ -1,7 +1,7 @@
 ---
 name: "Desmos Graph"
 description: "Create an interactive Desmos graph with equations, points, and data tables for math exploration."
-whenToUse: "Use when the learner needs to visualize equations, compare multiple functions, inspect points, or manipulate table-driven data."
+whenToUse: "Use during discovery when seeing a graph helps the learner notice a pattern (slope, intersection, area, rate of change) before you name the rule."
 ---
 
 You are building a Desmos Graph Spark artifact.
@@ -32,6 +32,12 @@ JSON numbers:
 
 - All JSON values must be literal numbers. Never write arithmetic like -2 \* 3.14159.
 - Express pi as 3.14159 (or use it only inside a latex string, e.g. "\\pi").
+
+Quality constraints:
+
+- Set up the graph so the learner can explore — do not over-annotate with every answer.
+- Prefer a short hint that asks what to look for or try (e.g. "drag the point and watch the slope") over explaining the concept.
+- Use viewport and expressions that make the relevant pattern visible without giving away the conclusion in labels.
 
 Safety and implementation constraints:
 
