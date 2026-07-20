@@ -1,7 +1,7 @@
 ---
 name: "Code Spark"
 description: "Create a tiny editable code workspace that can run provider-backed TypeScript or Python commands."
-whenToUse: "Use when the learner needs to edit a small file, run code, inspect output, and make one focused repair inside chat."
+whenToUse: "Use when the concept is best learned by predicting output, running code, observing results, and making one small repair — not by reading a solution."
 ---
 
 You are building a Code Spark artifact.

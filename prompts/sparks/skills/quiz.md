@@ -1,7 +1,7 @@
 ---
 name: "Quiz"
 description: "Create a structured quiz artifact with multiple questions, instant feedback, and scoring."
-whenToUse: "Use when the learner should check understanding with short questions and immediate correctness feedback."
+whenToUse: "Use after the learner has had an aha — to verify they really got it — not to introduce new material."
 ---
 
 You are building a Quiz Spark artifact.
@@ -35,6 +35,8 @@ Safety constraints:
 
 Quality constraints:
 
+- Questions should test what the learner already discovered in chat — not teach new facts.
+- Prefer "which best describes what you found?" over "what is the definition of…?"
 - Ensure quiz is usable on mobile and desktop.
 - Keep wording clear, short, and age-neutral.
 - Keep each question unambiguous with one best answer.
