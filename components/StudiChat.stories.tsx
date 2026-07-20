@@ -89,6 +89,11 @@ const baseStudiParameters = {
   convex: {
     queries: {
       "chat:listThreads": storyThreads,
+      "chat:getChatAdmissionState": {
+        canSend: true,
+        reason: null,
+        activeThread: null,
+      },
       "billing:getViewerBillingState": freePreviewBilling,
     },
     actions: {
@@ -170,6 +175,55 @@ export const Welcome: Story = {
     await expect(
       canvas.getByPlaceholderText("What would you like to learn?"),
     ).toBeEnabled();
+  },
+};
+
+export const WelcomeBlockedByActiveLesson: Story = {
+  parameters: {
+    studi: {
+      ...baseStudiParameters,
+      convex: {
+        ...baseStudiParameters.convex,
+        queries: {
+          ...baseStudiParameters.convex.queries,
+          "chat:getChatAdmissionState": {
+            canSend: false,
+            reason: "another_thread_active",
+            activeThread: {
+              threadId: "thread_derivatives",
+              title: "Understanding derivatives",
+            },
+          },
+        },
+      },
+    },
+  },
+  play: async ({ canvas }) => {
+    await waitFor(async () => {
+      await expect(
+        canvas.getByText(/finish your active lesson before starting another one/i),
+      ).toBeVisible();
+      await expect(canvas.getByRole("button", { name: /return to/i })).toBeVisible();
+      await expect(canvas.getByRole("link", { name: /view pro/i })).toBeVisible();
+    });
+  },
+};
+
+export const ProWelcomeIgnoresCachedStreamingThread: Story = {
+  parameters: {
+    studi: {
+      ...baseStudiParameters,
+      agent: {
+        results: [...derivativeConversation, tutorStreamingReasoning],
+        status: "Exhausted",
+      },
+    },
+  },
+  play: async ({ canvas }) => {
+    const field = canvas.getByPlaceholderText("What would you like to learn?");
+    await fillComposer(field, "Start a concurrent Pro lesson");
+    await expect(canvas.getByRole("button", { name: "Send message" })).toBeEnabled();
+    await expect(canvas.queryByText(/working on your next step/i)).not.toBeInTheDocument();
   },
 };
 

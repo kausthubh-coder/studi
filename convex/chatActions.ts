@@ -6,6 +6,7 @@ import type { FunctionReference } from "convex/server";
 import { NoOutputGeneratedError, type ModelMessage } from "ai";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { api, components, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { activeModelProfile } from "../lib/model-config";
 import { sanitizeStudiModelMessages } from "../lib/agent-message-sanitizer";
 import {
@@ -127,6 +128,26 @@ export function createAssistantGenerationFailureError(): Error {
   );
 }
 
+export function createChatAdmissionSyncingError(): Error {
+  return new Error(
+    "Studi is preparing your lessons. Please try again in a moment.",
+  );
+}
+
+async function ensureCommittedGenerationLeaseMigration(
+  ctx: ActionCtx,
+): Promise<void> {
+  const migration = await ctx.runMutation(
+    api.chat.ensureGenerationLeaseMigration,
+    {},
+  );
+  if (!migration.complete) {
+    // The outer action throws only after the mutation above has committed its
+    // cursor, leases, and scheduled continuation.
+    throw createChatAdmissionSyncingError();
+  }
+}
+
 export function shouldRetryAssistantGeneration(
   error: unknown,
   cancellationRequested: boolean,
@@ -187,7 +208,25 @@ export const sendFirstMessage = action({
     threadId: v.string(),
   }),
   handler: async (ctx, args) => {
+    return await sendFirstMessageWithCleanup(ctx, args);
+  },
+});
+
+async function sendFirstMessageWithCleanup(
+  ctx: ActionCtx,
+  args: {
+    prompt?: string;
+    attachmentIds?: Array<Id<"attachments">>;
+    requestId: string;
+  },
+  afterShellCreated?: (userId: string) => Promise<void>,
+): Promise<{ threadId: string }> {
     const userId = await requireAuthenticatedUserId(ctx);
+    await ensureCommittedGenerationLeaseMigration(ctx);
+    // Avoid creating either thread shell for the common blocked case. The
+    // send mutation repeats admission atomically and the catch below cleans up
+    // if another tab wins the race after this preflight.
+    await ctx.runMutation(api.chat.assertCanStartNewThread, {});
     const { getStudiAgent } = await import("./agent");
 
     const { threadId } = await getStudiAgent().createThread(ctx, { userId });
@@ -198,14 +237,59 @@ export const sendFirstMessage = action({
       lastMessageAt: Date.now(),
     });
 
-    await ctx.runMutation(api.chat.sendMessage, {
-      threadId,
-      prompt: args.prompt,
-      attachmentIds: args.attachmentIds,
-      requestId: args.requestId,
-    });
+    try {
+      await afterShellCreated?.(userId);
+      await ctx.runMutation(api.chat.sendMessage, {
+        threadId,
+        prompt: args.prompt,
+        attachmentIds: args.attachmentIds,
+        requestId: args.requestId,
+      });
+    } catch (error) {
+      // Admission and billing happen in the message mutation. If either rejects,
+      // remove the just-created shell so the learner never accumulates empty
+      // threads from a blocked welcome-composer send.
+      try {
+        await ctx.runAction(components.agent.threads.deleteAllForThreadIdSync, {
+          threadId,
+        });
+        await ctx.runMutation(internal.chat.deleteThreadRecordInternal, {
+          userId,
+          threadId,
+        });
+      } catch (cleanupError) {
+        console.error("Failed to clean up rejected first-message thread", cleanupError);
+      }
+      throw error;
+    }
 
     return { threadId };
+}
+
+export const sendFirstMessageWithRaceTestInternal = internalAction({
+  args: {
+    prompt: v.string(),
+    requestId: v.string(),
+    competingThreadId: v.string(),
+  },
+  returns: v.object({ threadId: v.string() }),
+  handler: async (ctx, args) => {
+    return await sendFirstMessageWithCleanup(ctx, args, async (userId) => {
+      await ctx.runMutation(
+        internal.chat.insertGenerationLeaseForRaceTestInternal,
+        {
+          userId,
+          threadId: args.competingThreadId,
+        },
+      );
+      // convex-test cannot interleave two public action transactions at this
+      // exact boundary. The internal-only hook inserts the competing lease,
+      // then deterministically injects the same admission rejection so the
+      // production cleanup catch is exercised after both shells exist.
+      throw new Error(
+        "Finish your active lesson before starting another one. You can return to it now, or upgrade to Pro for concurrent lessons.",
+      );
+    });
   },
 });
 
@@ -218,6 +302,8 @@ export const sendMessage: ReturnType<typeof action> = action({
   },
   returns: queuedSendResultValidator,
   handler: async (ctx, args) => {
+    await requireAuthenticatedUserId(ctx);
+    await ensureCommittedGenerationLeaseMigration(ctx);
     return await ctx.runMutation(api.chat.sendMessage, {
       threadId: args.threadId,
       prompt: args.prompt,

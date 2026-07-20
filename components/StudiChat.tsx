@@ -24,6 +24,7 @@ import {
 import { ThreadSidebar } from "@/components/studi-chat/ThreadSidebar";
 import { WelcomeView } from "@/components/studi-chat/WelcomeView";
 import type {
+  ChatAdmissionBlock,
   ExpandedSpark,
   PendingAttachment,
   ThreadSummary,
@@ -84,6 +85,9 @@ export default function StudiChat() {
   const billingState = useQuery(api.billing.getViewerBillingState);
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const chatAdmission = useQuery(api.chat.getChatAdmissionState, {
+    threadId: selectedThreadId ?? undefined,
+  });
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const [threadDeleteError, setThreadDeleteError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
@@ -156,14 +160,26 @@ export default function StudiChat() {
     () => deriveAgentUiState(uiMessages.results),
     [uiMessages.results],
   );
-  const hasActiveAgentWork = currentAgentState.phase !== "idle";
   const isOnWelcome = selectedThreadId === null;
+  const hasActiveAgentWork = !isOnWelcome && currentAgentState.phase !== "idle";
   const isComposerBusy = isSending || isUploading;
+  const isAdmissionLoading =
+    chatAdmission === undefined || chatAdmission.reason === "syncing";
+  const admissionBlock: ChatAdmissionBlock | null =
+    chatAdmission?.canSend === false &&
+    chatAdmission.reason !== null &&
+    chatAdmission.activeThread !== null
+      ? {
+          reason: chatAdmission.reason,
+          activeThread: chatAdmission.activeThread,
+        }
+      : null;
 
   const canSend =
     !isSending &&
     !isUploading &&
     !hasActiveAgentWork &&
+    chatAdmission?.canSend === true &&
     !billingState?.lockedSurfaces.chat &&
     (input.trim().length > 0 || pendingAttachments.length > 0);
 
@@ -453,7 +469,7 @@ export default function StudiChat() {
   const upgradeBannerReason = billingState?.lockedSurfaces.chat
     ? billingState.upgradeReason ?? null
     : null;
-  const billingBanner = composerError ?? upgradeBannerReason;
+  const billingBanner = upgradeBannerReason;
   const paywallSurface = billingState?.lockedSurfaces.chat ? "chat" : null;
 
   return (
@@ -495,7 +511,7 @@ export default function StudiChat() {
       />
 
       <main className="relative flex min-w-0 flex-1 overflow-hidden">
-        {threadDeleteError || billingBanner ? (
+        {threadDeleteError || composerError || billingBanner ? (
           <div
             className={`absolute left-1/2 z-20 w-full max-w-xl -translate-x-1/2 px-4 ${
               isMobile ? "top-14" : "top-3"
@@ -504,6 +520,11 @@ export default function StudiChat() {
             {threadDeleteError ? (
               <div className="rounded-2xl border border-red-200 bg-red-50/95 px-4 py-3 text-sm text-red-900 shadow-sm backdrop-blur">
                 {threadDeleteError}
+              </div>
+            ) : null}
+            {composerError ? (
+              <div role="alert" className="mt-2 rounded-2xl border border-red-200 bg-red-50/95 px-4 py-3 text-sm text-red-900 shadow-sm backdrop-blur">
+                {composerError}
               </div>
             ) : null}
             {billingBanner ? (
@@ -535,6 +556,9 @@ export default function StudiChat() {
             onUpload={uploadFiles}
             onRemoveAttachment={removeAttachment}
             onSuggestionClick={handleSuggestionClick}
+            admissionBlock={admissionBlock}
+            onReturnToActiveThread={handleSelectThread}
+            isAdmissionLoading={isAdmissionLoading}
           />
         ) : (
           <div
@@ -600,6 +624,9 @@ export default function StudiChat() {
                 isStoppingGeneration={isStoppingGeneration}
                 stopGenerationError={stopGenerationError}
                 onStopGeneration={() => void handleStopGeneration()}
+                admissionBlock={admissionBlock}
+                onReturnToActiveThread={handleSelectThread}
+                isAdmissionLoading={isAdmissionLoading}
               />
             </div>
 

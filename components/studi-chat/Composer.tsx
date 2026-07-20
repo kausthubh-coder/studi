@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { ClipboardEvent, FormEvent, RefObject } from "react";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -7,7 +8,10 @@ import {
   IconPlus,
   IconX,
 } from "@/components/studi-chat/icons";
-import type { PendingAttachment } from "@/components/studi-chat/types";
+import type {
+  ChatAdmissionBlock,
+  PendingAttachment,
+} from "@/components/studi-chat/types";
 import type { AgentUiState } from "@/components/studi-chat/MessageRenderer";
 
 export function Composer({
@@ -26,6 +30,9 @@ export function Composer({
   onStopGeneration,
   agentPhase = "idle",
   variant = "chat",
+  admissionBlock = null,
+  onReturnToActiveThread,
+  isAdmissionLoading = false,
 }: {
   pendingAttachments: PendingAttachment[];
   input: string;
@@ -42,6 +49,9 @@ export function Composer({
   onStopGeneration?: () => void;
   agentPhase?: AgentUiState["phase"];
   variant?: "chat" | "welcome";
+  admissionBlock?: ChatAdmissionBlock | null;
+  onReturnToActiveThread?: (threadId: string) => void;
+  isAdmissionLoading?: boolean;
 }) {
   const isWelcome = variant === "welcome";
 
@@ -204,8 +214,66 @@ export function Composer({
     </form>
   );
 
+  const admissionNotice = admissionBlock ? (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mb-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-amber-950 shadow-sm"
+    >
+      <span className="min-w-0 text-xs leading-relaxed">
+        <strong className="block text-sm">
+          {admissionBlock.reason === "same_thread_active"
+            ? "Studi is still responding in this lesson."
+            : "Finish your active lesson before starting another one."}
+        </strong>
+        {admissionBlock.reason === "same_thread_active"
+          ? "Wait for it to finish or stop the response above."
+          : "Your current plan includes one active lesson at a time. Pro can run lessons concurrently."}
+      </span>
+      {admissionBlock.reason === "another_thread_active" ? (
+        <span className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {onReturnToActiveThread ? (
+            <button
+              type="button"
+              onClick={() =>
+                onReturnToActiveThread(admissionBlock.activeThread.threadId)
+              }
+              className="min-h-11 shrink-0 rounded-full border border-amber-300 bg-white/70 px-4 text-xs font-semibold text-amber-950 transition hover:bg-white"
+              aria-label={`Return to ${admissionBlock.activeThread.title ?? "active lesson"}`}
+            >
+              Return
+            </button>
+          ) : null}
+          <Link
+            href="/pricing?entry_point=chat_concurrency&plan=pro"
+            className="flex min-h-11 items-center rounded-full border border-amber-300 bg-amber-100/80 px-4 text-xs font-semibold text-amber-950 transition hover:bg-amber-100"
+          >
+            View Pro
+          </Link>
+        </span>
+      ) : null}
+    </div>
+  ) : null;
+
+  const admissionLoadingNotice = isAdmissionLoading ? (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mb-2 flex items-center gap-2 rounded-2xl border border-border-faint bg-bg-alt px-4 py-3 text-xs text-fg-muted"
+    >
+      <span className="status-loader-ring shrink-0" aria-hidden />
+      Checking lesson availability…
+    </div>
+  ) : null;
+
   if (isWelcome) {
-    return composerCard;
+    return (
+      <>
+        {admissionNotice}
+        {admissionLoadingNotice}
+        {composerCard}
+      </>
+    );
   }
 
   const progressLabel =
@@ -250,6 +318,8 @@ export function Composer({
         </div>
       ) : null}
       <div className="mx-auto" style={{ maxWidth: "var(--column-max)" }}>
+        {agentPhase === "idle" ? admissionNotice : null}
+        {agentPhase === "idle" ? admissionLoadingNotice : null}
         {composerCard}
         <p className="mt-2 text-center font-heading text-[10px] italic text-fg-faint">
           Studi may make mistakes — verify important information

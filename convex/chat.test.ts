@@ -31,6 +31,378 @@ afterEach(() => {
 });
 
 describe("chat Convex auth and ownership", () => {
+  it("fails closed until every legacy thread batch is migrated", async () => {
+    const t = testConvex();
+    const now = Date.now();
+    for (let index = 0; index < 70; index += 1) {
+      await t.mutation(internal.chat.createThreadRecord, {
+        userId: "legacy_user",
+        threadId: `legacy_thread_${index}`,
+        title: `Legacy ${index}`,
+        lastMessageAt: index,
+      });
+    }
+    await t.run(async (ctx) => {
+      const lastThread = await ctx.db
+        .query("userThreads")
+        .withIndex("by_userId_and_threadId", (q) =>
+          q.eq("userId", "legacy_user").eq("threadId", "legacy_thread_69"),
+        )
+        .unique();
+      if (!lastThread) throw new Error("Legacy thread missing");
+      await ctx.db.patch(lastThread._id, {
+        activeGenerations: [
+          {
+            promptMessageId: "legacy_active_prompt",
+            order: 1,
+            state: "running",
+            createdAt: now,
+            expiresAt: now + 60_000,
+          },
+        ],
+      });
+    });
+    const authed = t.withIdentity({ subject: "legacy_user" });
+
+    await expect(
+      authed.query(api.chat.getChatAdmissionState, {
+        threadId: "legacy_thread_0",
+      }),
+    ).resolves.toEqual({ canSend: false, reason: "syncing", activeThread: null });
+    await expect(
+      authed.mutation(api.chat.ensureGenerationLeaseMigration, {}),
+    ).resolves.toEqual({ complete: false });
+    await expect(
+      authed.query(api.chat.getChatAdmissionState, {
+        threadId: "legacy_thread_0",
+      }),
+    ).resolves.toEqual({ canSend: false, reason: "syncing", activeThread: null });
+
+    await expect(
+      authed.mutation(api.chat.ensureGenerationLeaseMigration, {}),
+    ).resolves.toEqual({ complete: true });
+    await expect(
+      authed.query(api.chat.getChatAdmissionState, {
+        threadId: "legacy_thread_0",
+      }),
+    ).resolves.toMatchObject({
+      canSend: false,
+      reason: "another_thread_active",
+      activeThread: { threadId: "legacy_thread_69" },
+    });
+    const leases = await t.run(async (ctx) =>
+      ctx.db.query("chatGenerationLeases").collect(),
+    );
+    expect(leases.map((lease) => lease.promptMessageId)).toContain(
+      "legacy_active_prompt",
+    );
+  });
+
+  it("cancel removes every migrated legacy lease, including more than one batch", async () => {
+    const t = testConvex();
+    const thread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Legacy overlap",
+    });
+    await t.mutation(internal.chat.createThreadRecord, {
+      userId: "user_a",
+      threadId: thread._id,
+      title: "Legacy overlap",
+      lastMessageAt: 1,
+    });
+    await t.run(async (ctx) => {
+      const appThread = await ctx.db
+        .query("userThreads")
+        .withIndex("by_userId_and_threadId", (q) =>
+          q.eq("userId", "user_a").eq("threadId", thread._id),
+        )
+        .unique();
+      if (!appThread) throw new Error("Thread missing");
+      const now = Date.now();
+      const generations = Array.from({ length: 20 }, (_, index) => ({
+        promptMessageId: `legacy_prompt_${index}`,
+        order: index,
+        state: "running" as const,
+        createdAt: now,
+        expiresAt: now + 60_000,
+      }));
+      await ctx.db.patch(appThread._id, { activeGenerations: generations });
+      for (const generation of generations) {
+        await ctx.db.insert("chatGenerationLeases", {
+          userId: "user_a",
+          threadId: thread._id,
+          promptMessageId: generation.promptMessageId,
+          state: generation.state,
+          createdAt: generation.createdAt,
+          expiresAt: generation.expiresAt,
+        });
+      }
+      await ctx.db.insert("chatGenerationLeaseMigrations", {
+        userId: "user_a",
+        state: "complete",
+        updatedAt: now,
+      });
+    });
+
+    await expect(
+      t.withIdentity({ subject: "user_a" }).mutation(api.chat.cancelGeneration, {
+        threadId: thread._id,
+      }),
+    ).resolves.toEqual({ stopped: true });
+    const remaining = await t.run(async (ctx) =>
+      ctx.db.query("chatGenerationLeases").collect(),
+    );
+    expect(remaining).toEqual([]);
+  });
+
+  it("expiry deletes an orphan lease even when legacy control is missing", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-20T12:00:00.000Z"));
+    const t = testConvex();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("chatGenerationLeases", {
+        userId: "user_a",
+        threadId: "missing_thread",
+        promptMessageId: "orphan_prompt",
+        state: "running",
+        createdAt: Date.now() - 120_000,
+        expiresAt: Date.now() - 60_000,
+      });
+    });
+    await t.mutation(internalTestApi.chat.expireAssistantGenerationInternal, {
+      userId: "user_a",
+      threadId: "missing_thread",
+      promptMessageId: "orphan_prompt",
+    });
+    const remaining = await t.run(async (ctx) =>
+      ctx.db.query("chatGenerationLeases").collect(),
+    );
+    expect(remaining).toEqual([]);
+  });
+
+  it("blocks Starter cross-thread generations and exposes the active thread", async () => {
+    const t = testConvex();
+    await t.mutation(internal.billing.syncBillingProfileInternal, {
+      userId: "user_a",
+      planKey: "intro",
+      status: "active",
+    });
+    const firstThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Algebra",
+    });
+    const secondThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Geometry",
+    });
+    for (const [threadId, title] of [
+      [firstThread._id, "Algebra"],
+      [secondThread._id, "Geometry"],
+    ] as const) {
+      await t.mutation(internal.chat.createThreadRecord, {
+        userId: "user_a",
+        threadId,
+        title,
+        lastMessageAt: 1,
+      });
+    }
+
+    const authed = t.withIdentity({ subject: "user_a" });
+    await authed.mutation(api.chat.sendMessage, {
+      threadId: firstThread._id,
+      prompt: "Explain slope",
+      requestId: "request_a",
+    });
+
+    await expect(
+      authed.mutation(api.chat.sendMessage, {
+        threadId: secondThread._id,
+        prompt: "Explain angles",
+        requestId: "request_b",
+      }),
+    ).rejects.toThrow("Finish your active lesson before starting another one");
+
+    await expect(
+      authed.query(api.chat.getChatAdmissionState, {
+        threadId: secondThread._id,
+      }),
+    ).resolves.toMatchObject({
+      canSend: false,
+      reason: "another_thread_active",
+      activeThread: {
+        threadId: firstThread._id,
+        title: "Algebra",
+      },
+    });
+  });
+
+  it.each(["intro", "pro"] as const)(
+    "rejects same-thread overlap for the %s plan without breaking dedupe",
+    async (planKey) => {
+      const t = testConvex();
+      await t.mutation(internal.billing.syncBillingProfileInternal, {
+        userId: "user_a",
+        planKey,
+        status: "active",
+      });
+      const thread = await t.mutation(components.agent.threads.createThread, {
+        userId: "user_a",
+        title: "Calculus",
+      });
+      await t.mutation(internal.chat.createThreadRecord, {
+        userId: "user_a",
+        threadId: thread._id,
+        title: "Calculus",
+        lastMessageAt: 1,
+      });
+      const authed = t.withIdentity({ subject: "user_a" });
+      const first = await authed.mutation(api.chat.sendMessage, {
+        threadId: thread._id,
+        prompt: "Explain slope",
+        requestId: "request_same",
+      });
+      await expect(
+        authed.mutation(api.chat.sendMessage, {
+          threadId: thread._id,
+          prompt: "Overlap",
+          requestId: "request_overlap",
+        }),
+      ).rejects.toThrow("Studi is still responding in this lesson");
+      await expect(
+        authed.mutation(api.chat.sendMessage, {
+          threadId: thread._id,
+          prompt: "Retry payload",
+          requestId: "request_same",
+        }),
+      ).resolves.toEqual({
+        promptMessageId: first.promptMessageId,
+        deduped: true,
+      });
+    },
+  );
+
+  it("atomically admits only one Starter send under cross-thread contention", async () => {
+    const t = testConvex();
+    await t.mutation(internal.billing.syncBillingProfileInternal, {
+      userId: "user_a",
+      planKey: "intro",
+      status: "active",
+    });
+    const threads = await Promise.all(
+      ["First", "Second"].map(async (title) => {
+        const thread = await t.mutation(components.agent.threads.createThread, {
+          userId: "user_a",
+          title,
+        });
+        await t.mutation(internal.chat.createThreadRecord, {
+          userId: "user_a",
+          threadId: thread._id,
+          title,
+          lastMessageAt: 1,
+        });
+        return thread;
+      }),
+    );
+    const authed = t.withIdentity({ subject: "user_a" });
+    const results = await Promise.allSettled(
+      threads.map((thread, index) =>
+        authed.mutation(api.chat.sendMessage, {
+          threadId: thread._id,
+          prompt: `Prompt ${index}`,
+          requestId: `request_race_${index}`,
+        }),
+      ),
+    );
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+  });
+
+  it("allows active Pro learners to generate across threads", async () => {
+    const t = testConvex();
+    await t.mutation(internal.billing.syncBillingProfileInternal, {
+      userId: "user_a",
+      planKey: "pro",
+      status: "active",
+    });
+    const firstThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "First",
+    });
+    const secondThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Second",
+    });
+    for (const threadId of [firstThread._id, secondThread._id]) {
+      await t.mutation(internal.chat.createThreadRecord, {
+        userId: "user_a",
+        threadId,
+        title: "Owned",
+        lastMessageAt: 1,
+      });
+    }
+
+    const authed = t.withIdentity({ subject: "user_a" });
+    await authed.mutation(api.chat.sendMessage, {
+      threadId: firstThread._id,
+      prompt: "Explain slope",
+      requestId: "request_a",
+    });
+    await expect(
+      authed.mutation(api.chat.sendMessage, {
+        threadId: secondThread._id,
+        prompt: "Explain angles",
+        requestId: "request_b",
+      }),
+    ).resolves.toMatchObject({ deduped: false });
+  });
+
+  it("reactively releases chat admission when a generation completes", async () => {
+    const t = testConvex();
+    const firstThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "First",
+    });
+    const secondThread = await t.mutation(components.agent.threads.createThread, {
+      userId: "user_a",
+      title: "Second",
+    });
+    for (const threadId of [firstThread._id, secondThread._id]) {
+      await t.mutation(internal.chat.createThreadRecord, {
+        userId: "user_a",
+        threadId,
+        title: "Owned",
+        lastMessageAt: 1,
+      });
+    }
+    const authed = t.withIdentity({ subject: "user_a" });
+    const sent = await authed.mutation(api.chat.sendMessage, {
+      threadId: firstThread._id,
+      prompt: "Explain slope",
+      requestId: "request_a",
+    });
+    await expect(
+      authed.query(api.chat.getChatAdmissionState, {
+        threadId: secondThread._id,
+      }),
+    ).resolves.toMatchObject({ canSend: false });
+
+    await t.mutation(internalTestApi.chat.completeAssistantGenerationInternal, {
+      userId: "user_a",
+      threadId: firstThread._id,
+      promptMessageId: sent.promptMessageId,
+    });
+
+    await expect(
+      authed.query(api.chat.getChatAdmissionState, {
+        threadId: secondThread._id,
+      }),
+    ).resolves.toEqual({
+      canSend: true,
+      reason: null,
+      activeThread: null,
+    });
+  });
+
   it("does not expose threads to unauthenticated users", async () => {
     const t = testConvex();
 
@@ -239,26 +611,10 @@ describe("chat Convex auth and ownership", () => {
       stepOrder: promptMessage.stepOrder,
       format: "UIMessageChunk",
     });
-    const laterSent = await t.withIdentity({ subject: "user_a" }).mutation(api.chat.sendMessage, {
-      threadId: ownedThread._id,
-      prompt: "Now show a second example",
-      requestId: "request_cancel_later",
-    });
-    const [laterPromptMessage] = await t.query(components.agent.messages.getMessagesByIds, {
-      messageIds: [laterSent.promptMessageId],
-    });
-    if (!laterPromptMessage) throw new Error("Later prompt was not saved");
-    const laterActiveStreamId = await t.mutation(components.agent.streams.create, {
-      threadId: ownedThread._id,
-      userId: "user_a",
-      order: laterPromptMessage.order,
-      stepOrder: laterPromptMessage.stepOrder,
-      format: "UIMessageChunk",
-    });
     const unrelatedStreamId = await t.mutation(components.agent.streams.create, {
       threadId: ownedThread._id,
       userId: "user_a",
-      order: laterPromptMessage.order + 1,
+      order: promptMessage.order + 1,
       stepOrder: 0,
       format: "UIMessageChunk",
     });
@@ -274,15 +630,17 @@ describe("chat Convex auth and ownership", () => {
         threadId: ownedThread._id,
       }),
     ).resolves.toEqual({ stopped: true });
+    await expect(
+      t.withIdentity({ subject: "user_a" }).query(api.chat.getChatAdmissionState, {
+        threadId: ownedThread._id,
+      }),
+    ).resolves.toMatchObject({ canSend: true });
 
     const streams = await t.query(components.agent.streams.list, {
       threadId: ownedThread._id,
       statuses: ["streaming", "aborted"],
     });
     expect(streams.find((stream) => stream.streamId === activeStreamId)?.status).toBe("aborted");
-    expect(streams.find((stream) => stream.streamId === laterActiveStreamId)?.status).toBe(
-      "aborted",
-    );
     expect(streams.find((stream) => stream.streamId === unrelatedStreamId)?.status).toBe(
       "streaming",
     );
@@ -302,27 +660,10 @@ describe("chat Convex auth and ownership", () => {
       threadId: ownedThread._id,
       promptMessageId: sent.promptMessageId,
     });
-    await expect(
-      t.mutation(internalTestApi.chat.beginAssistantGenerationInternal, {
-        userId: "user_a",
-        threadId: ownedThread._id,
-        promptMessageId: laterSent.promptMessageId,
-      }),
-    ).resolves.toBe(false);
     await t.mutation(internalTestApi.chat.completeAssistantGenerationInternal, {
       userId: "user_a",
       threadId: ownedThread._id,
       promptMessageId: sent.promptMessageId,
-    });
-    await expect(
-      t.query(internalTestApi.chat.getGenerationControlInternal, {
-        userId: "user_a",
-        threadId: ownedThread._id,
-        promptMessageId: laterSent.promptMessageId,
-      }),
-    ).resolves.toMatchObject({
-      order: laterPromptMessage.order,
-      state: "cancel_requested",
     });
     const messages = await t.query(components.agent.messages.listMessagesByThreadId, {
       threadId: ownedThread._id,
@@ -386,6 +727,11 @@ describe("chat Convex auth and ownership", () => {
       threadId: ownedThread._id,
       prompt: "Explain slope",
       requestId: "request_partial_cancel",
+    });
+    await t.mutation(internalTestApi.chat.completeAssistantGenerationInternal, {
+      userId: "user_a",
+      threadId: ownedThread._id,
+      promptMessageId: canceledTurn.promptMessageId,
     });
     const laterTurn = await authed.mutation(api.chat.sendMessage, {
       threadId: ownedThread._id,
@@ -503,6 +849,11 @@ describe("chat Convex auth and ownership", () => {
         promptMessageId: sent.promptMessageId,
       }),
     ).resolves.toBeNull();
+    await expect(
+      t.withIdentity({ subject: "user_a" }).query(api.chat.getChatAdmissionState, {
+        threadId: ownedThread._id,
+      }),
+    ).resolves.toMatchObject({ canSend: true });
     const streams = await t.query(components.agent.streams.list, {
       threadId: ownedThread._id,
       statuses: ["streaming", "aborted"],
@@ -573,6 +924,11 @@ describe("chat Convex auth and ownership", () => {
       prompt: "Explain slope",
       requestId: "request_a",
     });
+    await t.mutation(internalTestApi.chat.completeAssistantGenerationInternal, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      promptMessageId: first.promptMessageId,
+    });
     const second = await authed.mutation(api.chat.sendMessage, {
       threadId: agentThread._id,
       prompt: "Explain slope",
@@ -618,6 +974,11 @@ describe("chat Convex auth and ownership", () => {
       threadId: agentThread._id,
       prompt: "Explain slope",
       requestId: "request_a",
+    });
+    await t.mutation(internalTestApi.chat.completeAssistantGenerationInternal, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      promptMessageId: first.promptMessageId,
     });
     // Simulate the final request written before the receipt table shipped.
     await t.run(async (ctx) => {
@@ -770,7 +1131,7 @@ describe("chat Convex auth and ownership", () => {
     expect(second.promptMessageId).not.toBe(first.promptMessageId);
   });
 
-  it("queues distinct follow-up action sends in the same thread", async () => {
+  it("rejects a distinct follow-up action while the same thread is active", async () => {
     vi.useFakeTimers();
     const t = testConvex();
     const agentThread = await t.mutation(components.agent.threads.createThread, {
@@ -791,15 +1152,15 @@ describe("chat Convex auth and ownership", () => {
       prompt: "Explain slope",
       requestId: "request_a",
     });
-    const second = await authed.action(api.chatActions.sendMessage, {
-      threadId: agentThread._id,
-      prompt: "Give me a second example",
-      requestId: "request_b",
-    });
+    await expect(
+      authed.action(api.chatActions.sendMessage, {
+        threadId: agentThread._id,
+        prompt: "Give me a second example",
+        requestId: "request_b",
+      }),
+    ).rejects.toThrow("Studi is still responding in this lesson");
 
     expect(first.deduped).toBe(false);
-    expect(second.deduped).toBe(false);
-    expect(second.promptMessageId).not.toBe(first.promptMessageId);
 
     const listed = await t.query(components.agent.messages.listMessagesByThreadId, {
       threadId: agentThread._id,
@@ -812,11 +1173,10 @@ describe("chat Convex auth and ownership", () => {
     });
     expect(listed.page.map((message) => message.text)).toEqual([
       "Explain slope",
-      "Give me a second example",
     ]);
 
     const billing = await authed.query(api.billing.getViewerBillingState, {});
-    expect(billing.usage.lifetimeFreePromptCount).toBe(2);
+    expect(billing.usage.lifetimeFreePromptCount).toBe(1);
   });
 
   it("dedupes chat action retries with the same request id without double billing", async () => {
@@ -889,6 +1249,11 @@ describe("chat Convex auth and ownership", () => {
       threadId: agentThread._id,
       prompt: "Explain slope",
       requestId: "request_a",
+    });
+    await t.mutation(internalTestApi.chat.completeAssistantGenerationInternal, {
+      userId: "user_a",
+      threadId: agentThread._id,
+      promptMessageId: sent.promptMessageId,
     });
     const laterSent = await authed.mutation(api.chat.sendMessage, {
       threadId: agentThread._id,
