@@ -41,7 +41,7 @@ export const defaultFreeModelAnthropicBaseURL =
   "https://api-cc.freemodel.dev/v1";
 
 const defaultFreeModelAnthropicModel = "claude-opus-4-8";
-const defaultOpenRouterModel = "anthropic/claude-opus-4.8";
+const defaultOpenRouterModel = "anthropic/claude-opus-5";
 
 export const openRouterReasoningProviderOptions: OpenRouterProviderOptions = {
   openrouter: {
@@ -53,13 +53,13 @@ export const openRouterReasoningProviderOptions: OpenRouterProviderOptions = {
 
 const defaultTextModelRoute: TextModelRoute = {
   primary: {
-    provider: "freemodel_anthropic",
-    model: defaultFreeModelAnthropicModel,
-  },
-  fallback: {
     provider: "openrouter",
     model: defaultOpenRouterModel,
     providerOptions: openRouterReasoningProviderOptions,
+  },
+  fallback: {
+    provider: "freemodel_anthropic",
+    model: defaultFreeModelAnthropicModel,
   },
 };
 
