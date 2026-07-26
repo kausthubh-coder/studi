@@ -16,8 +16,15 @@ async function getGlobalHeaders() {
 }
 
 describe("public response security headers", () => {
-  it("allows only the loopback hostname used by local browser tests in non-production", () => {
-    expect(nextConfig.allowedDevOrigins).toEqual(["127.0.0.1"]);
+  it("allows only the loopback hostname and the tailnet preview host in non-production", () => {
+    // 127.0.0.1 is used by local browser tests; the tailnet hostname lets
+    // dev-server previews (e.g. via Tailscale) hydrate when opened from
+    // another device. Both are dev-only — see next.config.ts's isProduction
+    // guard.
+    expect(nextConfig.allowedDevOrigins).toEqual([
+      "127.0.0.1",
+      "t3code-vps.taile36082.ts.net",
+    ]);
   });
 
   it("denies framing and common content-sniffing/browser-policy risks", async () => {

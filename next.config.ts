@@ -132,8 +132,10 @@ const nextConfig: NextConfig = {
     ? {}
     : {
         // Playwright and the documented browser runbook use 127.0.0.1 while
-        // Next advertises localhost. Keep this exception dev-only.
-        allowedDevOrigins: ["127.0.0.1"],
+        // Next advertises localhost. The tailnet hostname lets dev-server
+        // previews (e.g. via Tailscale) hydrate when opened from another
+        // device. Keep this exception dev-only.
+        allowedDevOrigins: ["127.0.0.1", "t3code-vps.taile36082.ts.net"],
       }),
   headers() {
     return [

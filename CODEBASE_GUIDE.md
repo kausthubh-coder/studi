@@ -119,9 +119,10 @@ maps to a table here: `userThreads` (chat ownership), `attachments`,
    `DesmosGraphScene.tsx` (third-party embed).
 
 **Step 4 — Real-time rendering.** Read `components/studi-chat/MessageRenderer.tsx`.
-`deriveAgentUiState` / `deriveAssistantActivity` turn streaming message "parts"
-into the thinking/tool/spark UI. Big file — read the derive functions first, then
-`ArticleMessage`.
+`buildActivitySteps` turns streaming message "parts" into curated activity steps,
+and `deriveAgentUiState` reduces them to the current phase. Then read
+`components/studi-chat/OrbitalActivity.tsx` to see how those steps become the
+collapsible activity UI before continuing to `ArticleMessage`.
 
 **Step 5 — Pick one supporting subsystem** depending on interest: voice
 (`convex/voiceActions.ts` + `components/voice/useVoiceSession.ts`) or billing

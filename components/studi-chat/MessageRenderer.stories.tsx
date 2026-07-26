@@ -180,11 +180,11 @@ export const ReasoningStreaming: Story = {
     ),
   },
   play: async ({ canvas }) => {
-    const toggle = canvas.getByRole("button", { name: /working/i });
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(canvas.getAllByText(/secant-line observation/i)).toHaveLength(
-      2,
-    );
+    const toggle = canvas.getByRole("button", { name: /studi's steps/i });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(
+      canvas.queryByText(/secant-line observation/i),
+    ).not.toBeInTheDocument();
   },
 };
 
@@ -214,13 +214,14 @@ export const CompletedToolDetails: Story = {
     ),
   },
   play: async ({ canvas, userEvent }) => {
-    const toggle = canvas.getByRole("button", { name: /drafted response/i });
+    const toggle = canvas.getByRole("button", { name: /studi's steps/i });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(toggle);
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(canvas.getByText("Looked into it")).toBeInTheDocument();
     await expect(
-      canvas.getByText("Found the secant-line sketch."),
-    ).toBeInTheDocument();
+      canvas.queryByText("Found the secant-line sketch."),
+    ).not.toBeInTheDocument();
   },
 };
 
@@ -245,10 +246,13 @@ export const SparkBuilding: Story = {
     ),
   },
   play: async ({ canvas }) => {
-    await expect(canvas.getByText("Building spark")).toBeInTheDocument();
     await expect(
-      canvas.getByText(/draggable secant-line scene/i),
+      canvas.getByText("Building an interactive Spark"),
     ).toBeInTheDocument();
+    await expect(canvas.getByTestId("orbital-scene")).toBeInTheDocument();
+    await expect(
+      canvas.queryByText(/draggable secant-line scene/i),
+    ).not.toBeInTheDocument();
   },
 };
 

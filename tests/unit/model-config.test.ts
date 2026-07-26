@@ -21,7 +21,7 @@ describe("model config", () => {
     expect(hasConfiguredTextModelProvider({})).toBe(false);
   });
 
-  it("uses FreeModel Anthropic Opus 4.8 with OpenRouter Opus 4.8 fallback for every active model role", () => {
+  it("uses OpenRouter Opus 5 with FreeModel Anthropic Opus 4.8 fallback for every active model role", () => {
     for (const profile of listModelProfiles()) {
       const config = getModelConfig(profile);
       const routes = [
@@ -34,19 +34,19 @@ describe("model config", () => {
 
       for (const route of routes) {
         expect(route.primary).toEqual({
-          provider: "freemodel_anthropic",
-          model: "claude-opus-4-8",
+          provider: "openrouter",
+          model: "anthropic/claude-opus-5",
+          providerOptions: openRouterReasoningProviderOptions,
         });
         expect(route.fallback).toEqual({
-          provider: "openrouter",
-          model: "anthropic/claude-opus-4.8",
-          providerOptions: openRouterReasoningProviderOptions,
+          provider: "freemodel_anthropic",
+          model: "claude-opus-4-8",
         });
       }
     }
   });
 
-  it("orders configured model attempts with OpenRouter as fallback", () => {
+  it("orders configured model attempts with OpenRouter Opus 5 first", () => {
     const route = getModelConfig("fast").studiAgent;
 
     expect(
@@ -60,6 +60,11 @@ describe("model config", () => {
       getConfiguredModelEndpointAttempts(route, {
         OPENROUTER_API_KEY: "openrouter-key",
       }),
+    ).toEqual([route.primary]);
+    expect(
+      getConfiguredModelEndpointAttempts(route, {
+        FREEMODEL_API_KEY: "freemodel-key",
+      }),
     ).toEqual([route.fallback]);
   });
 
@@ -69,6 +74,14 @@ describe("model config", () => {
     expect(
       getConfiguredChatModelAttempts(route, {
         OPENROUTER_API_KEY: "openrouter-key",
+      }),
+    ).toEqual([
+      { endpoint: route.primary, role: "primary" },
+      { endpoint: route.primary, role: "fallback" },
+    ]);
+    expect(
+      getConfiguredChatModelAttempts(route, {
+        FREEMODEL_API_KEY: "freemodel-key",
       }),
     ).toEqual([
       { endpoint: route.fallback, role: "primary" },

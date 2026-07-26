@@ -145,18 +145,23 @@ export const ChatFollowUp: Story = {
   },
 };
 
-export const Busy: Story = {
+export const ActiveResponse: Story = {
   args: {
     input: "Give me a hint about the chain rule.",
-    isComposerBusy: true,
+    agentPhase: "reasoning",
+    onStopGeneration: fn(),
+    variant: "chat",
   },
-  play: async ({ canvas }) => {
-    const sendButton = canvas.getByRole("button", { name: "Send message" });
+  play: async ({ args, canvas, userEvent }) => {
+    const stopButton = canvas.getByRole("button", { name: "Stop response" });
 
-    await expect(sendButton).toBeDisabled();
+    await expect(canvas.getByRole("status")).toBeInTheDocument();
     await expect(
-      sendButton.querySelector(".status-loader-ring"),
-    ).toBeInTheDocument();
+      canvas.getByText("Studi is working on your next step."),
+    ).toBeVisible();
+    await userEvent.click(stopButton);
+    await expect(args.onStopGeneration).toHaveBeenCalledTimes(1);
+    await expect(args.onSubmit).not.toHaveBeenCalled();
   },
 };
 
