@@ -266,13 +266,14 @@ export function Composer({
     <div
       role="status"
       aria-live="polite"
-      className="mb-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-amber-950 shadow-sm"
+      className="mx-auto mb-2 flex flex-wrap items-center justify-between gap-3 px-3"
+      style={{ maxWidth: "var(--column-max)" }}
     >
-      <span className="min-w-0 text-xs leading-relaxed">
-        <strong className="block text-sm">
+      <span className="min-w-0 text-xs italic leading-relaxed text-fg-muted">
+        <strong className="not-italic font-semibold text-fg">
           {admissionBlock.reason === "same_thread_active"
-            ? "Studi is still responding in this lesson."
-            : "Finish your active lesson before starting another one."}
+            ? "Studi is still responding in this lesson. "
+            : "Finish your active lesson before starting another one. "}
         </strong>
         {admissionBlock.reason === "same_thread_active"
           ? "Wait for it to finish or stop the response above."
@@ -286,7 +287,7 @@ export function Composer({
               onClick={() =>
                 onReturnToActiveThread(admissionBlock.activeThread.threadId)
               }
-              className="min-h-11 shrink-0 rounded-full border border-amber-300 bg-white/70 px-4 text-xs font-semibold text-amber-950 transition hover:bg-white"
+              className="min-h-11 shrink-0 rounded-full border border-border-warm bg-bg-card px-4 text-xs font-semibold text-fg transition hover:bg-bg-alt"
               aria-label={`Return to ${admissionBlock.activeThread.title ?? "active lesson"}`}
             >
               Return
@@ -294,7 +295,7 @@ export function Composer({
           ) : null}
           <Link
             href="/pricing?entry_point=chat_concurrency&plan=pro"
-            className="flex min-h-11 items-center rounded-full border border-amber-300 bg-amber-100/80 px-4 text-xs font-semibold text-amber-950 transition hover:bg-amber-100"
+            className="flex min-h-11 items-center rounded-full border border-border-warm bg-accent3-dim px-4 text-xs font-semibold text-fg transition hover:brightness-95"
           >
             View Pro
           </Link>
@@ -304,14 +305,14 @@ export function Composer({
   ) : null;
 
   const admissionLoadingNotice = isAdmissionLoading ? (
-    <div
+    <p
       role="status"
       aria-live="polite"
-      className="mb-2 flex items-center gap-2 rounded-2xl border border-border-faint bg-bg-alt px-4 py-3 text-xs text-fg-muted"
+      className="mx-auto mb-2 px-3 text-xs italic text-fg-muted"
+      style={{ maxWidth: "var(--column-max)" }}
     >
-      <span className="status-loader-ring shrink-0" aria-hidden />
       Checking lesson availability…
-    </div>
+    </p>
   ) : null;
 
   if (isWelcome) {
