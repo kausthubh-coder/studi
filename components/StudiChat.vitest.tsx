@@ -302,10 +302,10 @@ describe("StudiChat follow-up sending", () => {
       /working on your next step/i,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      /stay visible above the composer/i,
+      "Studi is working on your next step.",
     );
     expect(
-      screen.getByRole("button", { name: /stop response generation/i }),
+      screen.getByRole("button", { name: "Stop response" }),
     ).toBeVisible();
   });
 
@@ -334,7 +334,7 @@ describe("StudiChat follow-up sending", () => {
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /stop response generation/i,
+        name: "Stop response",
       }),
     );
 

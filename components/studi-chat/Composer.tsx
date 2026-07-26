@@ -14,6 +14,22 @@ import type {
 } from "@/components/studi-chat/types";
 import type { AgentUiState } from "@/components/studi-chat/MessageRenderer";
 
+function IconStop({ className }: { className?: string }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+      data-testid="composer-stop-icon"
+    >
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
 export function Composer({
   pendingAttachments,
   input,
@@ -54,6 +70,7 @@ export function Composer({
   isAdmissionLoading?: boolean;
 }) {
   const isWelcome = variant === "welcome";
+  const hasActiveGeneration = agentPhase !== "idle";
 
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
@@ -191,12 +208,28 @@ export function Composer({
           />
 
           <button
-            type="submit"
-            disabled={!canSend}
-            className="composer-send-btn"
-            aria-label="Send message"
+            type={hasActiveGeneration ? "button" : "submit"}
+            disabled={
+              hasActiveGeneration ? isStoppingGeneration : !canSend
+            }
+            onClick={
+              hasActiveGeneration
+                ? (event) => {
+                    event.preventDefault();
+                    onStopGeneration?.();
+                  }
+                : undefined
+            }
+            className="composer-send-btn relative"
+            aria-label={
+              hasActiveGeneration
+                ? isStoppingGeneration
+                  ? "Stopping response"
+                  : "Stop response"
+                : "Send message"
+            }
           >
-            {isComposerBusy ? (
+            {isStoppingGeneration || (!hasActiveGeneration && isComposerBusy) ? (
               <span
                 className="status-loader-ring"
                 style={{
@@ -206,7 +239,22 @@ export function Composer({
                 aria-hidden
               />
             ) : (
-              <IconArrow />
+              <span className="relative grid h-4 w-4 place-items-center">
+                <IconArrow
+                  className={`absolute transition-all duration-200 ${
+                    hasActiveGeneration
+                      ? "scale-75 opacity-0"
+                      : "scale-100 opacity-100"
+                  }`}
+                />
+                <IconStop
+                  className={`absolute transition-all duration-200 ${
+                    hasActiveGeneration
+                      ? "scale-100 opacity-100"
+                      : "scale-75 opacity-0"
+                  }`}
+                />
+              </span>
             )}
           </button>
         </div>
@@ -286,36 +334,23 @@ export function Composer({
   return (
     <div className="composer-footer" data-testid="chat-composer">
       {agentPhase !== "idle" ? (
-        <div
+        <p
           role="status"
           aria-live="polite"
-          className="agent-progress-notice mx-auto mb-2 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-amber-950 shadow-sm"
+          className="mx-auto mb-2 px-3 text-xs italic text-fg-muted"
           style={{ maxWidth: "var(--column-max)" }}
         >
-          <span className="status-loader-ring mt-0.5 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1 text-xs leading-relaxed">
-            <strong className="block text-sm">{progressLabel}</strong>
-            New responses and build progress will stay visible above the
-            composer.
-            {stopGenerationError ? (
-              <span
-                role="alert"
-                className="mt-1 block font-semibold text-red-700"
-              >
-                {stopGenerationError}
-              </span>
-            ) : null}
-          </span>
-          <button
-            type="button"
-            aria-label="Stop response generation"
-            disabled={isStoppingGeneration}
-            onClick={onStopGeneration}
-            className="min-h-11 shrink-0 rounded-full border border-amber-300 bg-white/70 px-4 text-xs font-semibold text-amber-950 transition hover:bg-white disabled:cursor-wait disabled:opacity-60"
-          >
-            {isStoppingGeneration ? "Stopping…" : "Stop"}
-          </button>
-        </div>
+          {isStoppingGeneration ? "Stopping…" : progressLabel}
+        </p>
+      ) : null}
+      {agentPhase !== "idle" && stopGenerationError ? (
+        <p
+          role="alert"
+          className="mx-auto mb-2 px-3 text-xs font-semibold text-red-700"
+          style={{ maxWidth: "var(--column-max)" }}
+        >
+          {stopGenerationError}
+        </p>
       ) : null}
       <div className="mx-auto" style={{ maxWidth: "var(--column-max)" }}>
         {agentPhase === "idle" ? admissionNotice : null}

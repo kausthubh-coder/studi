@@ -26,11 +26,82 @@ function renderComposer(
 }
 
 describe("Composer", () => {
-  it("disables send until the caller allows submission", () => {
+  it("shows the idle send control without an activity status", () => {
     renderComposer();
 
     expect(screen.getByLabelText("Send message")).toBeDisabled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("Ask a follow-up...")).toBeInTheDocument();
+  });
+
+  it("morphs to Stop and announces active generation", () => {
+    renderComposer({ agentPhase: "spark" });
+
+    expect(screen.queryByLabelText("Send message")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Stop response")).toBeEnabled();
+    expect(screen.getByTestId("composer-stop-icon")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Studi is building your interactive Spark",
+    );
+  });
+
+  it("stops active generation without submitting the form", () => {
+    const onSubmit = vi.fn((event) => event.preventDefault());
+    const onStopGeneration = vi.fn();
+    renderComposer({
+      agentPhase: "reasoning",
+      canSend: true,
+      onSubmit,
+      onStopGeneration,
+    });
+
+    fireEvent.click(screen.getByLabelText("Stop response"));
+
+    expect(onStopGeneration).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps local composer work as a non-cancellable spinner", () => {
+    const onStopGeneration = vi.fn();
+    renderComposer({
+      agentPhase: "idle",
+      isComposerBusy: true,
+      onStopGeneration,
+    });
+
+    const sendButton = screen.getByLabelText("Send message");
+    expect(sendButton).toBeDisabled();
+    expect(sendButton.querySelector(".status-loader-ring")).toBeInTheDocument();
+    expect(screen.queryByTestId("composer-stop-icon")).not.toBeInTheDocument();
+    fireEvent.click(sendButton);
+    expect(onStopGeneration).not.toHaveBeenCalled();
+  });
+
+  it("prevents duplicate stop requests while stopping", () => {
+    const onStopGeneration = vi.fn();
+    renderComposer({
+      agentPhase: "tool",
+      isStoppingGeneration: true,
+      onStopGeneration,
+    });
+
+    const stopButton = screen.getByLabelText("Stopping response");
+    expect(stopButton).toBeDisabled();
+    expect(stopButton.querySelector(".status-loader-ring")).toBeInTheDocument();
+    fireEvent.click(stopButton);
+    expect(onStopGeneration).not.toHaveBeenCalled();
+  });
+
+  it("renders stop failures inline as an alert", () => {
+    renderComposer({
+      agentPhase: "reasoning",
+      stopGenerationError: "Could not stop the response.",
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not stop the response.",
+    );
   });
 
   it("renders attachment previews and removes selected attachments", () => {

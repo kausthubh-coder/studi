@@ -1,5 +1,5 @@
 import type { UIMessage } from "@convex-dev/agent/react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
@@ -12,40 +12,24 @@ import {
   type CreateSparkToolResult,
   type SparkArtifact,
 } from "@/lib/sparks/contracts";
-import { IconChevronDown, IconPaperclip } from "@/components/studi-chat/icons";
-import { FlickeringGrid } from "@/components/studi-chat/FlickeringGrid";
+import { IconPaperclip } from "@/components/studi-chat/icons";
+import { OrbitalActivity } from "@/components/studi-chat/OrbitalActivity";
 
 type ChatMessagePart = NonNullable<UIMessage["parts"]>[number];
-
-type ToolPartState =
-  | "input-streaming"
-  | "input-available"
-  | "output-available"
-  | "output-error";
 
 export type AgentUiState = {
   phase: "idle" | "reasoning" | "tool" | "spark";
 };
 
-type ActivityStepStatus = "active" | "complete" | "error";
+export type ActivityStepKind = "reasoning" | "tool" | "spark";
+export type ActivityStepStatus = "active" | "complete" | "error";
 
-type ActivityStep = {
+export type ActivityStep = {
   id: string;
+  kind: ActivityStepKind;
   label: string;
   detail?: string;
   status: ActivityStepStatus;
-  summary: string;
-};
-
-type AssistantActivity = {
-  hasActivity: boolean;
-  /** True when the only activity is a single create_spark call with no reasoning.
-   *  In this case we hide the CoT panel — the SparkBuildingCard covers the UX. */
-  isTrivial: boolean;
-  isStreaming: boolean;
-  summary: string;
-  steps: ActivityStep[];
-  reasoningText: string;
 };
 
 type AssistantTextSegments = {
@@ -55,28 +39,6 @@ type AssistantTextSegments = {
 };
 
 /* ── Helpers ──────────────────────────────────────────────── */
-
-function humanizeToolName(name: string): string {
-  return name
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function toSentenceCase(text: string): string {
-  if (!text) {
-    return text;
-  }
-  return `${text[0].toUpperCase()}${text.slice(1)}`;
-}
-
-function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return `${text.slice(0, maxLength - 1).trimEnd()}...`;
-}
 
 function joinTextParts(
   parts: Array<Extract<ChatMessagePart, { type: "text" }>>,
@@ -152,82 +114,76 @@ function mapToolStateToStatus(state: string | undefined): ActivityStepStatus {
   return "complete";
 }
 
-function getToolInputDetail(input: unknown): string | undefined {
-  if (!input || typeof input !== "object") {
-    return undefined;
+const KNOWN_TOOL_KIND: Record<
+  string,
+  {
+    kind: ActivityStepKind;
+    active: string;
+    complete: string;
+    error: string;
   }
+> = {
+  create_spark: {
+    kind: "spark",
+    active: "Building an interactive Spark",
+    complete: "Built a Spark",
+    error: "Spark failed to build",
+  },
+};
 
-  const candidate = input as Record<string, unknown>;
-  const keys = [
-    "query",
-    "context",
-    "summary",
-    "title",
-    "path",
-    "url",
-    "prompt",
-  ];
-  for (const key of keys) {
-    const value = candidate[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return truncate(value.trim(), 120);
-    }
-  }
+const FALLBACK_TOOL_KIND = {
+  kind: "tool" as const,
+  active: "Looking into it",
+  complete: "Looked into it",
+  error: "Ran into a problem",
+};
 
-  return undefined;
+function resolveToolKind(toolName: string) {
+  return KNOWN_TOOL_KIND[toolName] ?? FALLBACK_TOOL_KIND;
 }
 
-function deriveAssistantActivity(
+export function buildActivitySteps(
   message: UIMessage,
   introText?: string,
-): AssistantActivity {
+): ActivityStep[] {
   const parts = message.parts ?? [];
   const steps: ActivityStep[] = [];
-  const summaryParts: string[] = [];
-
-  // Collect reasoning text
   const reasoningParts = parts.filter(
     (part): part is Extract<ChatMessagePart, { type: "reasoning" }> =>
       part.type === "reasoning",
   );
 
-  const reasoningText = reasoningParts
-    .map((part) => part.text)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+  if (introText?.trim() && (reasoningParts.length > 0 || parts.some(getToolName))) {
+    steps.push({
+      id: `${message.key}-intro`,
+      kind: "reasoning",
+      label: message.status === "streaming" ? "Drafting a response" : "Drafted a response",
+      status: message.status === "streaming" ? "active" : "complete",
+    });
+  }
 
   if (reasoningParts.length > 0) {
-    const isReasoningStreaming = reasoningParts.some(
-      (part) => part.state === "streaming",
-    );
-
+    const isActive = reasoningParts.some((part) => part.state === "streaming");
     steps.push({
       id: `${message.key}-reasoning`,
-      label: isReasoningStreaming ? "Thinking" : "Reasoned through response",
-      detail: reasoningText ? truncate(reasoningText, 180) : undefined,
-      status: isReasoningStreaming ? "active" : "complete",
-      summary: isReasoningStreaming ? "Thinking" : "Reasoned",
+      kind: "reasoning",
+      label: isActive ? "Thinking it through" : "Thought it through",
+      status: isActive ? "active" : "complete",
     });
-    summaryParts.push(isReasoningStreaming ? "Thinking" : "Reasoned");
   }
 
   const seenToolCallIds = new Set<string>();
-  const seenToolNames = new Set<string>();
   for (const [index, part] of parts.entries()) {
     const toolName = getToolName(part);
     if (!toolName) {
       continue;
     }
-    seenToolNames.add(toolName);
 
     const toolPart = part as {
       toolCallId?: unknown;
       state?: string;
-      input?: unknown;
-      errorText?: unknown;
+      output?: unknown;
     };
-
     const callId =
       typeof toolPart.toolCallId === "string"
         ? toolPart.toolCallId
@@ -238,191 +194,32 @@ function deriveAssistantActivity(
     seenToolCallIds.add(callId);
 
     let status = mapToolStateToStatus(toolPart.state);
-    const readableToolName = humanizeToolName(toolName);
-    let detail =
-      toolName === "create_spark"
-        ? getSparkBuildContext(toolPart.input)
-        : getToolInputDetail(toolPart.input);
-
-    if (toolName === "create_spark") {
-      const sparkResult = extractCreateSparkToolResult(
-        (toolPart as { output?: unknown }).output,
-      );
-
-      if (toolPart.state === "output-error") {
-        status = "error";
-      } else if (toolPart.state === "output-available") {
-        if (!sparkResult) {
-          const outputText = getToolOutputText(
-            (toolPart as { output?: unknown }).output,
-          )?.trim();
-          if (outputText && /^spark created/i.test(outputText)) {
-            status = "complete";
-            detail = outputText;
-          } else {
-            status = "error";
-            detail = "Spark returned an unexpected output shape.";
-          }
-        } else if (sparkResult.status === "failed") {
-          status = "error";
-          detail = sparkResult.error;
-        } else {
-          status = "complete";
-          detail = sparkResult.workerSummary;
-        }
-      }
+    if (toolName === "create_spark" && toolPart.state === "output-available") {
+      status =
+        classifySparkOutcome(toolPart.output) === "success"
+          ? "complete"
+          : "error";
     }
-
-    if (toolName !== "create_spark" && toolPart.state === "output-available") {
-      const structured = getStructuredToolOutput(
-        (toolPart as { output?: unknown }).output,
-      );
-
-      if (structured?.status === "failed") {
-        status = "error";
-      }
-
-      if (status === "error") {
-        detail =
-          structured?.errorMessage ??
-          structured?.summary ??
-          getToolOutputText((toolPart as { output?: unknown }).output) ??
-          detail;
-      } else {
-        detail =
-          structured?.summary ??
-          getToolOutputText((toolPart as { output?: unknown }).output) ??
-          detail;
-      }
-    }
-
-    const label =
-      toolName === "create_spark"
-        ? status === "active"
-          ? "Creating spark"
-          : status === "error"
-            ? "Spark failed"
-            : "Created spark"
-        : status === "active"
-          ? `Calling ${readableToolName}`
-          : status === "error"
-            ? `${toSentenceCase(readableToolName)} failed`
-            : `Called ${readableToolName}`;
-
-    const summary =
-      toolName === "create_spark"
-        ? status === "active"
-          ? "Creating spark"
-          : status === "error"
-            ? "Spark failed"
-            : "Created spark"
-        : status === "active"
-          ? `Calling ${readableToolName}`
-          : status === "error"
-            ? "Tool failed"
-            : `Used ${readableToolName}`;
-
+    const vocabulary = resolveToolKind(toolName);
     steps.push({
       id: `${message.key}-tool-${callId}`,
-      label,
-      detail:
-        status === "error" && typeof toolPart.errorText === "string"
-          ? truncate(toolPart.errorText, 120)
-          : detail
-            ? truncate(detail, 160)
-            : undefined,
+      kind: vocabulary.kind,
+      label: vocabulary[status],
       status,
-      summary,
     });
-    summaryParts.push(summary);
   }
 
-  const fileParts = parts.filter((part) => part.type === "file");
-  if (fileParts.length > 0) {
+  const fileCount = parts.filter((part) => part.type === "file").length;
+  if (fileCount > 0) {
     steps.push({
       id: `${message.key}-files`,
-      label: fileParts.length > 1 ? "Presented files" : "Presented file",
+      kind: "tool",
+      label: fileCount > 1 ? "Shared files" : "Shared a file",
       status: "complete",
-      summary: fileParts.length > 1 ? "Presented files" : "Presented file",
-    });
-    summaryParts.push(
-      fileParts.length > 1 ? "Presented files" : "Presented file",
-    );
-  }
-
-  const isStreaming =
-    message.status === "streaming" ||
-    steps.some((step) => step.status === "active");
-
-  if (introText && introText.trim().length > 0 && steps.length > 0) {
-    steps.unshift({
-      id: `${message.key}-intro`,
-      label: isStreaming ? "Drafting response" : "Initial response",
-      detail: truncate(introText, 180),
-      status: isStreaming ? "active" : "complete",
-      summary: isStreaming ? "Drafting response" : "Drafted response",
-    });
-    summaryParts.unshift(
-      isStreaming ? "Drafting response" : "Drafted response",
-    );
-  }
-
-  if (!isStreaming && steps.length > 0) {
-    const hasErrors = steps.some((step) => step.status === "error");
-    steps.push({
-      id: `${message.key}-done`,
-      label: hasErrors ? "Finished with issues" : "Done",
-      status: hasErrors ? "error" : "complete",
-      summary: hasErrors ? "Finished with issues" : "Done",
     });
   }
 
-  const dedupedSummary = Array.from(new Set(summaryParts));
-  const baseSummary =
-    dedupedSummary.length > 0
-      ? dedupedSummary.slice(0, 3).join(", ")
-      : isStreaming
-        ? "Working"
-        : "Show steps";
-  const summary =
-    isStreaming && baseSummary !== "Working"
-      ? `Working — ${baseSummary}`
-      : baseSummary;
-
-  // A trivial activity is a single create_spark call with no reasoning.
-  // We skip the CoT panel for these — the SparkBuildingCard handles the UX.
-  const isTrivial =
-    reasoningText.trim().length === 0 &&
-    seenToolCallIds.size === 1 &&
-    seenToolNames.size === 1 &&
-    seenToolNames.has("create_spark");
-
-  return {
-    hasActivity: steps.length > 0,
-    isTrivial,
-    isStreaming,
-    summary,
-    steps,
-    reasoningText,
-  };
-}
-
-function getToolPartState(part: ChatMessagePart): ToolPartState | null {
-  const state = (part as { state?: unknown }).state;
-  if (
-    state === "input-streaming" ||
-    state === "input-available" ||
-    state === "output-available" ||
-    state === "output-error"
-  ) {
-    return state;
-  }
-  return null;
-}
-
-function isToolPartInProgress(part: ChatMessagePart): boolean {
-  const state = getToolPartState(part);
-  return state === "input-streaming" || state === "input-available";
+  return steps;
 }
 
 function getToolName(part: ChatMessagePart): string | null {
@@ -434,29 +231,6 @@ function getToolName(part: ChatMessagePart): string | null {
     return part.type.slice("tool-".length);
   }
   return null;
-}
-
-function getSparkBuildContext(input: unknown): string | undefined {
-  if (!input || typeof input !== "object") {
-    return undefined;
-  }
-
-  const candidate = input as {
-    context?: unknown;
-    summary?: unknown;
-    title?: unknown;
-  };
-  if (typeof candidate.context === "string" && candidate.context.trim()) {
-    return candidate.context.trim();
-  }
-  if (typeof candidate.summary === "string" && candidate.summary.trim()) {
-    return candidate.summary.trim();
-  }
-  if (typeof candidate.title === "string" && candidate.title.trim()) {
-    return candidate.title.trim();
-  }
-
-  return undefined;
 }
 
 function getSparkId(input: unknown): string | undefined {
@@ -496,57 +270,6 @@ function getToolOutputText(output: unknown): string | undefined {
   return undefined;
 }
 
-function getStructuredToolOutput(output: unknown): {
-  status?: string;
-  summary?: string;
-  errorMessage?: string;
-} | null {
-  if (!output || typeof output !== "object") {
-    return null;
-  }
-
-  const root = output as {
-    status?: unknown;
-    summary?: unknown;
-    error?: unknown;
-    value?: unknown;
-    output?: unknown;
-  };
-
-  const nested =
-    root.value && typeof root.value === "object"
-      ? (root.value as Record<string, unknown>)
-      : root.output && typeof root.output === "object"
-        ? (root.output as Record<string, unknown>)
-        : null;
-
-  const base: Record<string, unknown> =
-    nested ?? (root as Record<string, unknown>);
-  const errorRecord =
-    base.error && typeof base.error === "object"
-      ? (base.error as Record<string, unknown>)
-      : null;
-
-  const status = typeof base.status === "string" ? base.status : undefined;
-  const summary = typeof base.summary === "string" ? base.summary : undefined;
-  const errorMessage =
-    typeof errorRecord?.message === "string"
-      ? errorRecord.message
-      : typeof base.error === "string"
-        ? base.error
-        : undefined;
-
-  if (!status && !summary && !errorMessage) {
-    return null;
-  }
-
-  return {
-    status,
-    summary,
-    errorMessage,
-  };
-}
-
 function classifySparkFailure(error: string): string {
   const normalized = error.toLowerCase();
   if (normalized.includes("timed out")) {
@@ -563,43 +286,6 @@ function classifySparkFailure(error: string): string {
   }
   return "error";
 }
-
-/* ── Spark building animation ────────────────────────────── */
-
-const SparkBuildingCard = memo(function SparkBuildingCard({
-  context,
-}: {
-  context?: string;
-}) {
-  return (
-    <div className="spark-building-card my-4 not-prose">
-      <FlickeringGrid
-        className="spark-building-grid"
-        squareSize={6}
-        gridGap={10}
-        maxOpacity={0.45}
-        flickerChance={0.55}
-        color="rgb(232, 160, 48)"
-      />
-      <div className="spark-building-content">
-        <p
-          className="text-sm font-semibold text-fg"
-          style={{ fontFamily: "var(--font-jakarta)" }}
-        >
-          Building spark
-        </p>
-        {context && (
-          <p
-            className="mt-1 text-xs text-fg-muted"
-            style={{ fontFamily: "var(--font-jakarta)" }}
-          >
-            {truncate(context, 95)}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-});
 
 /* ── Spark failure card ──────────────────────────────────── */
 
@@ -732,6 +418,23 @@ function extractCreateSparkToolResult(
   return null;
 }
 
+function classifySparkOutcome(
+  output: unknown,
+): "success" | "failed" | "unknown" {
+  const sparkResult = extractCreateSparkToolResult(output);
+  if (sparkResult?.status === "success") {
+    return "success";
+  }
+  if (sparkResult?.status === "failed") {
+    return "failed";
+  }
+
+  const outputText = getToolOutputText(output)?.trim();
+  return outputText && /^spark created/i.test(outputText)
+    ? "success"
+    : "unknown";
+}
+
 /* ── Agent UI state ──────────────────────────────────────── */
 
 export function deriveAgentUiState(messages: UIMessage[]): AgentUiState {
@@ -744,27 +447,23 @@ export function deriveAgentUiState(messages: UIMessage[]): AgentUiState {
       continue;
     }
 
-    const parts = message.parts ?? [];
-
-    const sparkPart = parts.find(
-      (part) =>
-        getToolName(part) === "create_spark" && isToolPartInProgress(part),
-    );
-    if (sparkPart) {
+    const steps = buildActivitySteps(message);
+    if (
+      steps.some((step) => step.kind === "spark" && step.status === "active")
+    ) {
       return { phase: "spark" };
     }
 
-    const reasoningPart = parts.find(
+    const reasoningPart = (message.parts ?? []).find(
       (part) => part.type === "reasoning" && part.state === "streaming",
     );
     if (reasoningPart) {
       return { phase: "reasoning" };
     }
 
-    const toolPart = parts.find(
-      (part) => Boolean(getToolName(part)) && isToolPartInProgress(part),
-    );
-    if (toolPart) {
+    if (
+      steps.some((step) => step.kind === "tool" && step.status === "active")
+    ) {
       return { phase: "tool" };
     }
 
@@ -775,109 +474,6 @@ export function deriveAgentUiState(messages: UIMessage[]): AgentUiState {
 
   return { phase: "idle" };
 }
-
-/* ── Activity panel — redesigned chain-of-thought ────────── */
-
-const AssistantActivityPanel = memo(function AssistantActivityPanel({
-  message,
-  activity,
-}: {
-  message: UIMessage;
-  activity: AssistantActivity;
-}) {
-  const [isCollapsed, setIsCollapsed] = useState(!activity.isStreaming);
-  const wasStreamingRef = useRef(activity.isStreaming);
-
-  useEffect(() => {
-    const wasStreaming = wasStreamingRef.current;
-    wasStreamingRef.current = activity.isStreaming;
-
-    if (!activity.hasActivity) {
-      return;
-    }
-
-    if (!wasStreaming && activity.isStreaming) {
-      const openTimer = setTimeout(() => {
-        setIsCollapsed(false);
-      }, 0);
-      return () => {
-        clearTimeout(openTimer);
-      };
-    }
-
-    if (wasStreaming && !activity.isStreaming) {
-      const closeTimer = setTimeout(() => {
-        setIsCollapsed(true);
-      }, 850);
-      return () => {
-        clearTimeout(closeTimer);
-      };
-    }
-  }, [activity.hasActivity, activity.isStreaming]);
-
-  if (!activity.hasActivity || activity.isTrivial) {
-    return null;
-  }
-
-  const isOpen = !isCollapsed;
-  const stepsId = `${message.key}-assistant-steps`;
-  const stepCount = activity.steps.length;
-
-  return (
-    <div
-      className="thinking-card not-prose"
-      data-streaming={activity.isStreaming}
-    >
-      {/* Teal-tinted header strip */}
-      <button
-        type="button"
-        className="thinking-toggle"
-        onClick={() => setIsCollapsed((prev) => !prev)}
-        aria-expanded={isOpen}
-        aria-controls={stepsId}
-      >
-        <span className="thinking-toggle-dot" aria-hidden />
-        <span className="thinking-toggle-label">{activity.summary}</span>
-        {stepCount > 0 && (
-          <span className="thinking-step-count">
-            {stepCount} {stepCount === 1 ? "step" : "steps"}
-          </span>
-        )}
-        <IconChevronDown
-          className={`thinking-toggle-chevron${isOpen ? " is-open" : ""}`}
-        />
-      </button>
-
-      <div
-        id={stepsId}
-        className="thinking-body"
-        data-state={isOpen ? "open" : "closed"}
-      >
-        {/* Reasoning text — teal left border */}
-        {activity.reasoningText && (
-          <div className="reasoning-block">{activity.reasoningText}</div>
-        )}
-
-        {/* Steps timeline with solid filled dots */}
-        {activity.steps.map((step) => (
-          <div
-            key={step.id}
-            className="thinking-step"
-            data-status={step.status}
-          >
-            <span className="thinking-step-dot" aria-hidden />
-            <div>
-              <p className="thinking-step-label">{step.label}</p>
-              {step.detail && (
-                <p className="thinking-step-detail">{step.detail}</p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-});
 
 /* ── Assistant parts renderer ────────────────────────────── */
 
@@ -901,9 +497,13 @@ function AssistantParts({
     () => splitAssistantTextSegments(parts),
     [parts],
   );
-  const activity = useMemo(
-    () => deriveAssistantActivity(message, textSegments.introText),
+  const activitySteps = useMemo(
+    () => buildActivitySteps(message, textSegments.introText),
     [message, textSegments.introText],
+  );
+  const activityPhase = useMemo(
+    () => deriveAgentUiState([message]).phase,
+    [message],
   );
 
   const shouldShowIntroText =
@@ -917,27 +517,6 @@ function AssistantParts({
   const finalText = textSegments.hasToolBoundary
     ? textSegments.finalText
     : textSegments.finalText;
-
-  // Spark building cards (in-progress create_spark tools)
-  const sparkBuildingCards = parts
-    .map((part, partIndex) => {
-      const toolName = getToolName(part);
-      if (toolName !== "create_spark") return null;
-      const toolState = part as { state?: string; input?: unknown };
-      if (
-        toolState.state !== "input-streaming" &&
-        toolState.state !== "input-available"
-      )
-        return null;
-      const context = getSparkBuildContext(toolState.input);
-      return (
-        <SparkBuildingCard
-          key={`${message.key}-spark-building-${partIndex}`}
-          context={context}
-        />
-      );
-    })
-    .filter((card): card is React.JSX.Element => card !== null);
 
   const sparkArtifacts = parts
     .map((part, partIndex) => {
@@ -1010,13 +589,8 @@ function AssistantParts({
         return null;
       }
 
-      const sparkResult = extractCreateSparkToolResult(toolState);
-      if (!sparkResult) {
-        const outputText = getToolOutputText(toolState.output)?.trim();
-        if (outputText && /^spark created/i.test(outputText)) {
-          return null;
-        }
-
+      const sparkOutcome = classifySparkOutcome(toolState.output);
+      if (sparkOutcome === "unknown") {
         return (
           <SparkFailureCard
             key={`${message.key}-spark-fail-${partIndex}`}
@@ -1026,7 +600,12 @@ function AssistantParts({
         );
       }
 
-      if (sparkResult.status === "failed") {
+      if (sparkOutcome === "failed") {
+        const sparkResult = extractCreateSparkToolResult(toolState.output);
+        if (!sparkResult || sparkResult.status !== "failed") {
+          return null;
+        }
+
         return (
           <SparkFailureCard
             key={`${message.key}-spark-fail-${partIndex}`}
@@ -1099,8 +678,13 @@ function AssistantParts({
           {textSegments.introText}
         </ReactMarkdown>
       ) : null}
-      <AssistantActivityPanel message={message} activity={activity} />
-      {sparkBuildingCards}
+      <OrbitalActivity
+        messageKey={message.key}
+        phase={activityPhase}
+        steps={activitySteps}
+        isStreaming={message.status === "streaming"}
+        finalText={finalText}
+      />
       {/* Intended sequence: show Spark output first, then post-tool guidance text. */}
       {sparkFailures}
       {sparkArtifacts}
